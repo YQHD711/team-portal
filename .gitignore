@@ -3,12 +3,12 @@ web/node_modules/
 web/.next/
 
 # Build
-src/TeamPortal/bin/
-src/TeamPortal/obj/
+**/bin/
+**/obj/
 src/TeamPortal/publish/
 
 # Python
-ai-service/__pycache__/
+**/__pycache__/
 ai-service/.venv/
 
 # Data (mounted at runtime)
@@ -22,6 +22,9 @@ data/flightlogs/
 .idea/
 *.suo
 *.user
+
+# Code intelligence
+.codegraph/
 
 # OS
 .DS_Store
