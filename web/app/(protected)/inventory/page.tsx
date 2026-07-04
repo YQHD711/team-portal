@@ -107,13 +107,37 @@ export default function InventoryPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-          <div className="overflow-x-auto">
+        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-border bg-surface">
+          {/* Mobile cards */}
+          <div className="sm:hidden divide-y divide-border">
+            {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="p-3"><div className="h-16 shimmer rounded-lg" /></div>) :
+             items.length === 0 ? <div className="p-8 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2" />暂无零件</div> :
+             items.map(item => (
+              <div key={item.id} className={`p-3 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="font-medium text-sm">{item.name}</div>
+                    <div className="text-xs text-muted">{item.category} · {item.location || "—"}</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4 text-muted" /></button>
+                    <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>{statusOpts.find(s => s.value === item.status)?.label || item.status}</span>
+                  <span className={`text-lg font-bold ${item.quantity === 0 ? "text-red-500" : item.quantity < LOW_THRESHOLD ? "text-amber-500" : ""}`}>{item.quantity}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950"><th className="px-4 py-3 text-left font-medium text-zinc-500">名称</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden sm:table-cell">分类</th><th className="px-4 py-3 text-right font-medium text-zinc-500">数量</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden md:table-cell">位置</th><th className="px-4 py-3 text-left font-medium text-zinc-500">状态</th><th className="px-4 py-3 text-right font-medium text-zinc-500">操作</th></tr></thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 6 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" /></td>)}</tr>) :
-                 items.length === 0 ? <tr><td colSpan={6} className="px-4 py-12 text-center"><Package className="h-8 w-8 mx-auto mb-2 text-zinc-300" /><span className="text-zinc-500">暂无零件，点击"添加零件"开始</span></td></tr> :
+              <thead><tr className="border-b border-border bg-slate-50 dark:bg-slate-900"><th className="px-4 py-3 text-left font-medium text-muted">名称</th><th className="px-4 py-3 text-left font-medium text-muted hidden sm:table-cell">分类</th><th className="px-4 py-3 text-right font-medium text-muted">数量</th><th className="px-4 py-3 text-left font-medium text-muted hidden md:table-cell">位置</th><th className="px-4 py-3 text-left font-medium text-muted">状态</th><th className="px-4 py-3 text-right font-medium text-muted">操作</th></tr></thead>
+              <tbody className="divide-y divide-border">
+                {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 6 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 shimmer rounded" /></td>)}</tr>) :
+                 items.length === 0 ? <tr><td colSpan={6} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
                  items.map(item => (
                   <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
                     <td className="px-4 py-3"><span className="font-medium">{item.name}</span><span className="block text-xs text-zinc-400 sm:hidden">{item.category}</span></td>

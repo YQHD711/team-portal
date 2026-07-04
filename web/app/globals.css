@@ -96,3 +96,27 @@ main { animation: fadeIn 0.3s ease-out; }
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .hide-on-mobile { display: none !important; }
+  .full-on-mobile { width: 100% !important; }
+  main { padding: 12px !important; }
+}
+
+/* Responsive table wrapper */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch-friendly buttons */
+@media (max-width: 768px) {
+  button, a.btn, .clickable {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* prevent iOS zoom */
+  }
+}
