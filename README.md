@@ -50,6 +50,32 @@ team-portal/
 - 新功能必须有测试
 - 详见 [Agent 开发指南](docs/AGENT_GUIDE.md)
 
+## 生产部署
+
+```bash
+# 1. 克隆并配置
+git clone <repo-url> /opt/team-portal
+cd /opt/team-portal
+cp .env.example .env
+# 编辑 .env — 修改密钥和 API Key
+
+# 2. 启动服务
+make deploy    # docker compose up -d --build
+
+# 3. 验证
+make health    # 检查三端是否正常
+
+# 4. HTTPS（可选）
+# 参考 deploy/nginx.conf 配置 Nginx 反向代理
+# 使用 certbot 获取免费 SSL 证书：
+#   certbot --nginx -d team.yourdomain.com
+
+# 5. 数据备份
+# 每日自动备份:
+#   crontab -e
+#   0 3 * * * /opt/team-portal/deploy/backup.sh
+```
+
 ## License
 
 MIT

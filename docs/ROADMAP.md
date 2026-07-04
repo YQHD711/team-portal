@@ -116,15 +116,16 @@
 
 ---
 
-## Phase 6: 部署上线（预计 0.5 天）
+## Phase 6: 部署上线 ✅ (2026-07-04)
 
-- [ ] 服务器 Docker 安装 (如未装)
-- [ ] `git clone` + `docker compose up -d`
-- [ ] Nginx 反向代理 + HTTPS
-- [ ] 数据目录备份 cron
-- [ ] 健康检查: `make health`
+- [x] 服务器 Docker 安装 (如未装)
+- [x] `git clone` + `docker compose up -d`
+- [x] Nginx 反向代理 + HTTPS (deploy/nginx.conf)
+- [x] 数据目录备份 cron (deploy/backup.sh)
+- [x] 健康检查: `make health`
+- [x] .env.example 环境变量模板
 
-**验证:** https://team.yourdomain.com 可访问
+**验证:** https://team.yourdomain.com 可访问 ✅
 
 ---
 
