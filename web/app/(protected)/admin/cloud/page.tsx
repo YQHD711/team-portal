@@ -21,10 +21,10 @@ export default function CloudPage() {
 
   const fetch = () => {
     setLoading(true);
-    Promise.all([
-      api.get<Quota>("/api/admin/baidu/quota").then(setQuota).catch(() => setAuthed(false)),
-      api.get<BaiduFile[]>("/api/admin/baidu/files").then(setFiles).catch(() => setAuthed(false)),
-    ]).finally(() => setLoading(false));
+    let anySuccess = false;
+    api.get<Quota>("/api/admin/baidu/quota").then(d => { setQuota(d); anySuccess = true; }).catch(() => {});
+    api.get<BaiduFile[]>("/api/admin/baidu/files").then(d => { setFiles(d); anySuccess = true; }).catch(() => {});
+    setTimeout(() => { if (!anySuccess && !loading) setAuthed(false); setLoading(false); }, 1000);
   };
 
   useEffect(() => { fetch(); }, []);
@@ -58,7 +58,12 @@ export default function CloudPage() {
   };
 
   const handleDownload = async (path: string) => {
-    const data = await api.get<{ url: string }>(`/api/admin/baidu/download?path=${encodeURIComponent(path)}`);
+    const token = localStorage.getItem("token");
+    const res = await window.fetch(`/api/admin/baidu/download?path=${encodeURIComponent(path)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) { alert("下载失败"); return; }
+    const data = await res.json();
     window.open(data.url, "_blank");
   };
 
