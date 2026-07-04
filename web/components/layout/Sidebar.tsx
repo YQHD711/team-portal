@@ -16,6 +16,7 @@ const mainNav = [
   { href: "/", label: "仪表盘", icon: LayoutDashboard },
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/inventory", label: "零件库存", icon: Package },
+  { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
   { href: "/flightlog", label: "飞行日志", icon: BarChart3 },
 ];
 
@@ -24,7 +25,6 @@ const adminNav = [
   { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/knowledge", label: "资料管理", icon: FileText },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
-  { href: "/wiki", label: "Wiki 导入", icon: GitBranch },
 ];
 
 export function Sidebar() {
