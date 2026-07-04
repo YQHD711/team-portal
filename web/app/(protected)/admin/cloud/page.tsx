@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { Cloud, Upload, Download, Trash2, RefreshCw, HardDrive, Folder, File, Loader2 } from "lucide-react";
+import { Cloud, Upload, Download, Trash2, RefreshCw, HardDrive, Folder, File, Loader2, Key, ExternalLink } from "lucide-react";
 
 interface Quota { total: number; used: number; free: number; }
 interface BaiduFile { path: string; name: string; size: number; isDir: boolean; modified: number; }
@@ -13,17 +13,35 @@ export default function CloudPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [authed, setAuthed] = useState(true);
+  const [authUrl, setAuthUrl] = useState("");
+  const [authCode, setAuthCode] = useState("");
+  const [authMsg, setAuthMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetch = () => {
     setLoading(true);
     Promise.all([
-      api.get<Quota>("/api/admin/baidu/quota").then(setQuota).catch(() => {}),
-      api.get<BaiduFile[]>("/api/admin/baidu/files").then(setFiles).catch(() => {}),
+      api.get<Quota>("/api/admin/baidu/quota").then(setQuota).catch(() => setAuthed(false)),
+      api.get<BaiduFile[]>("/api/admin/baidu/files").then(setFiles).catch(() => setAuthed(false)),
     ]).finally(() => setLoading(false));
   };
 
   useEffect(() => { fetch(); }, []);
+
+  const getAuthUrl = async () => {
+    const data = await api.get<{ url: string }>("/api/admin/baidu/auth-url");
+    setAuthUrl(data.url);
+  };
+
+  const submitCode = async () => {
+    try {
+      const data = await api.post<{ message: string }>("/api/admin/baidu/auth-code", { code: authCode });
+      setAuthMsg("✅ " + data.message);
+      setAuthed(true);
+      fetch();
+    } catch { setAuthMsg("❌ 授权码无效"); }
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -63,6 +81,28 @@ export default function CloudPage() {
       </div>
 
       {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{msg}</div>}
+
+      {/* Auth section */}
+      {!authed && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 space-y-4">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-semibold"><Key className="h-5 w-5" />需要一次性授权</div>
+          <p className="text-sm text-amber-700 dark:text-amber-300">百度网盘需要您手动授权后才能使用。只需操作一次，之后自动续期。</p>
+          {!authUrl ? (
+            <button onClick={getAuthUrl} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">获取授权链接</button>
+          ) : (
+            <div className="space-y-3">
+              <a href={authUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                打开授权页面 <ExternalLink className="h-3 w-3" />
+              </a>
+              <div className="flex gap-2">
+                <input value={authCode} onChange={e => setAuthCode(e.target.value)} placeholder="粘贴授权码" className="flex-1 rounded-lg border px-3 py-2 text-sm" />
+                <button onClick={submitCode} className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-600">确认</button>
+              </div>
+              {authMsg && <div className="text-sm">{authMsg}</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quota */}
       {quota && (

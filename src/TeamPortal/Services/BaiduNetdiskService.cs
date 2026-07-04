@@ -19,7 +19,9 @@ public class BaiduNetdiskService
     private DateTime _tokenExpiry = DateTime.MinValue;
 
     private const string OAuthUrl = "https://openapi.baidu.com/oauth/2.0/token";
-    private const string ApiBase = "https://pan.baidu.com/rest/2.0";
+    private const string AuthUrl = "https://openapi.baidu.com/oauth/2.0/authorize";
+    private const string ApiBase = "https://pan.baidu.com/rest/2.0/xpan";
+    private static readonly string _tokenFile = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "baidu-token.json");
 
     public BaiduNetdiskService(HttpClient http, IConfiguration config, LogService log)
     {
@@ -33,34 +35,89 @@ public class BaiduNetdiskService
 
     public bool IsConfigured => !string.IsNullOrEmpty(_appKey) && !string.IsNullOrEmpty(_secretKey);
 
+    /// <summary>
+    /// Get the Baidu OAuth authorization URL. Admin must visit this once to grant access.
+    /// </summary>
+    public string GetAuthUrl()
+    {
+        var redirectUri = "oob"; // Out-of-band — shows code on screen
+        return $"{AuthUrl}?response_type=code&client_id={_appKey}&redirect_uri={redirectUri}&scope=basic,netdisk&display=page";
+    }
+
+    /// <summary>
+    /// Exchange authorization code for tokens. Stores refresh token for future use.
+    /// </summary>
+    public async Task<string> ExchangeCode(string code)
+    {
+        var url = $"{OAuthUrl}?grant_type=authorization_code&code={code}&client_id={_appKey}&client_secret={_secretKey}&redirect_uri=oob";
+        var resp = await _http.GetAsync(url);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        if (!body.TrimStart().StartsWith('{'))
+            throw new InvalidOperationException($"授权失败: {body[..Math.Min(200, body.Length)]}");
+
+        using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("error", out var err))
+            throw new InvalidOperationException($"授权错误: {err.GetString()}");
+
+        _accessToken = doc.RootElement.GetProperty("access_token").GetString()!;
+        var refreshToken = doc.RootElement.GetProperty("refresh_token").GetString()!;
+        var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
+        _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn - 300);
+
+        // Store refresh token
+        File.WriteAllText(_tokenFile, JsonSerializer.Serialize(new { refresh_token = refreshToken }));
+        _log.Info("baidu", "Netdisk authorized successfully, refresh token stored");
+        return "授权成功！网盘功能已可用";
+    }
+
     private async Task<string> GetAccessToken()
     {
         if (!string.IsNullOrEmpty(_accessToken) && DateTime.UtcNow < _tokenExpiry)
             return _accessToken;
 
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        // Try refresh token first (from stored file)
+        if (File.Exists(_tokenFile))
         {
-            ["grant_type"] = "client_credentials",
-            ["client_id"] = _appKey,
-            ["client_secret"] = _secretKey,
-        });
-
-        var resp = await _http.PostAsync(OAuthUrl, content);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        if (!resp.IsSuccessStatusCode)
-        {
-            _log.Error("baidu", $"OAuth failed: {body[..Math.Min(body.Length, 200)]}");
-            throw new InvalidOperationException("百度网盘授权失败");
+            try
+            {
+                var stored = JsonSerializer.Deserialize<StoredToken>(File.ReadAllText(_tokenFile));
+                if (stored?.refresh_token != null)
+                {
+                    var url = $"{OAuthUrl}?grant_type=refresh_token&refresh_token={stored.refresh_token}&client_id={_appKey}&client_secret={_secretKey}";
+                    var r = await _http.GetAsync(url);
+                    var b = await r.Content.ReadAsStringAsync();
+                    if (b.TrimStart().StartsWith('{'))
+                    {
+                        using var d = JsonDocument.Parse(b);
+                        if (!d.RootElement.TryGetProperty("error", out _))
+                        {
+                            _accessToken = d.RootElement.GetProperty("access_token").GetString()!;
+                            var exp = d.RootElement.GetProperty("expires_in").GetInt32();
+                            _tokenExpiry = DateTime.UtcNow.AddSeconds(exp - 300);
+                            if (d.RootElement.TryGetProperty("refresh_token", out var rt))
+                                File.WriteAllText(_tokenFile, JsonSerializer.Serialize(new StoredToken { refresh_token = rt.GetString()! }));
+                            return _accessToken;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { _log.Warn("baidu", $"Refresh token failed: {ex.Message}"); }
         }
 
+        // Fallback: client credentials (limited scope)
+        var curl = $"{OAuthUrl}?grant_type=client_credentials&client_id={_appKey}&client_secret={_secretKey}";
+        var resp = await _http.GetAsync(curl);
+        var body = await resp.Content.ReadAsStringAsync();
+        if (!body.TrimStart().StartsWith('{')) throw new InvalidOperationException("百度网盘未授权，请先完成一次性授权");
         using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("error", out var err)) throw new InvalidOperationException($"授权错误: {err.GetString()}");
         _accessToken = doc.RootElement.GetProperty("access_token").GetString()!;
-        var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
-        _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn - 300); // 5 min buffer
-        _log.Info("baidu", "Netdisk OAuth token obtained");
+        _tokenExpiry = DateTime.UtcNow.AddSeconds(doc.RootElement.GetProperty("expires_in").GetInt32() - 300);
         return _accessToken;
     }
+
+    private class StoredToken { public string refresh_token { get; set; } = ""; }
 
     /// <summary>
     /// Upload a file to Baidu Netdisk. Returns the cloud file path.

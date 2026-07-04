@@ -8,6 +8,20 @@ public static class BaiduEndpoints
     {
         var baidu = app.MapGroup("/api/admin/baidu").RequireAuthorization();
 
+        // Get authorization URL
+        baidu.MapGet("/auth-url", (BaiduNetdiskService svc) =>
+        {
+            var url = svc.GetAuthUrl();
+            return Results.Ok(new { url, message = "在浏览器中打开此链接，登录百度账号并授权，然后将返回的授权码粘贴到下方" });
+        });
+
+        // Exchange authorization code
+        baidu.MapPost("/auth-code", async (AuthCodeRequest req, BaiduNetdiskService svc) =>
+        {
+            var result = await svc.ExchangeCode(req.Code);
+            return Results.Ok(new { success = true, message = result });
+        });
+
         baidu.MapGet("/quota", async (BaiduNetdiskService svc) =>
         {
             if (!svc.IsConfigured) return Results.Problem("百度网盘未配置", statusCode: 400);
@@ -53,3 +67,5 @@ public static class BaiduEndpoints
         });
     }
 }
+
+public record AuthCodeRequest(string Code);
