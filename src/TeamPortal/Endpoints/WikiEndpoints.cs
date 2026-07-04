@@ -13,12 +13,12 @@ public static class WikiEndpoints
 
         wiki.MapPost("/submit-git", async (GitSubmitRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
         {
+            var (role, dept) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
             if (string.IsNullOrWhiteSpace(req.Url) || string.IsNullOrWhiteSpace(req.ProjectName))
                 return Results.Problem("URL and project name required", statusCode: 400);
 
-            var (role, dept) = await GetUserCtx(user, db);
             var targetFolder = req.TargetFolder ?? dept ?? "公共";
-
             if (!knowledge.CanAccess(targetFolder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 
@@ -29,13 +29,13 @@ public static class WikiEndpoints
 
         wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
         {
+            var (role, dept) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
             if (file is null || file.Length == 0) return Results.Problem("File required", statusCode: 400);
             if (file.Length > 100 * 1024 * 1024) return Results.Problem("Max 100MB", statusCode: 400);
             if (string.IsNullOrWhiteSpace(projectName)) return Results.Problem("Project name required", statusCode: 400);
 
-            var (role, dept) = await GetUserCtx(user, db);
             var folder = targetFolder ?? dept ?? "公共";
-
             if (!knowledge.CanAccess(folder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 

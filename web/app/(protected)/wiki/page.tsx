@@ -17,11 +17,19 @@ export default function WikiPage() {
   const [targetFolder, setTargetFolder] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [role, setRole] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchTasks = () => api.get<TaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
 
-  useEffect(() => { fetchTasks(); const t = setInterval(fetchTasks, 5000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    fetchTasks();
+    api.get<{ role: string }>("/api/admin/me").then(u => setRole(u.role)).catch(() => {});
+    const t = setInterval(fetchTasks, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const canSubmit = role === "admin" || role === "部长";
 
   const submitGit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +104,8 @@ export default function WikiPage() {
         ))}
       </div>
 
-      {/* Form */}
+      {/* Form — only admin/部长 */}
+      {canSubmit ? (
       <form onSubmit={tab === "git" ? submitGit : submitZip} className="space-y-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
         <div>
           <label className="block text-sm font-medium mb-1">项目名称 *</label>
@@ -134,6 +143,12 @@ export default function WikiPage() {
 
         {message && <div className={`text-sm p-2.5 rounded-lg ${message.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{message}</div>}
       </form>
+      ) : (
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center text-zinc-500">
+          仅管理员和部长可以提交 Wiki 导入任务<br />
+          生成的文档可在<a href="/knowledge" className="text-sky-500 hover:underline">知识库</a>中查看
+        </div>
+      )}
 
       {/* Task list */}
       <div>
