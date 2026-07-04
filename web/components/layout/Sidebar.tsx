@@ -62,7 +62,7 @@ export function Sidebar() {
             </div>
             <div>
               <div className="font-bold text-base leading-tight">雏鹰之翼</div>
-              <div className="text-[10px] text-white/60 leading-tight">航模队管理系统</div>
+              <div className="text-[10px] text-white/60 leading-tight">队员协作平台</div>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden absolute right-2 top-3 p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10">
@@ -123,7 +123,7 @@ export function Sidebar() {
         <div className="px-4 py-3 border-t border-white/5">
           <div className="flex items-center gap-2 text-[10px] text-slate-600">
             <Sparkles className="h-3 w-3" />
-            <span>雏鹰之翼航模队 © 2026</span>
+            <span>雏鹰之翼 © 2026 · 内部系统</span>
           </div>
         </div>
       </aside>

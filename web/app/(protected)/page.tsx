@@ -38,8 +38,8 @@ export default function Home() {
               <Bird className="h-7 w-7" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">雏鹰之翼航模队</h1>
-              <p className="text-blue-200/80 text-sm mt-1">智能管理与运营平台</p>
+              <h1 className="text-2xl sm:text-3xl font-bold">雏鹰之翼 · 航模队</h1>
+              <p className="text-blue-200/80 text-sm mt-1">队员协作平台 — 知识共享 · 库存追踪 · 飞行分析</p>
             </div>
           </div>
           <div className="flex gap-4">

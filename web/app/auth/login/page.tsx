@@ -37,7 +37,7 @@ export default function LoginPage() {
             </div>
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">雏鹰之翼</h1>
-          <p className="text-sm text-muted mt-1">航模队智能管理系统</p>
+          <p className="text-sm text-muted mt-1">队员协作 · 知识共享 · 飞行分析</p>
         </div>
 
         {/* Card */}
