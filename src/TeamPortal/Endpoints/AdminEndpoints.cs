@@ -56,9 +56,9 @@ public static class AdminEndpoints
         });
 
         // ── Knowledge file management ──
-        admin.MapPost("/knowledge/write", (string path, string content, KnowledgeService svc) =>
+        admin.MapPost("/knowledge/write", (KnowledgeWriteReq req, KnowledgeService svc) =>
         {
-            try { svc.WriteFile(path, content); return Results.Ok(new { success = true }); }
+            try { svc.WriteFile(req.Path, req.Content ?? ""); return Results.Ok(new { success = true }); }
             catch (Exception e) { return Results.Problem(e.Message, statusCode: 400); }
         });
 
@@ -74,3 +74,4 @@ public record CreateUserReq(string Username, string Password, string? Role, int?
 public record UpdateUserReq(string? Role, int? DepartmentId, string? Password);
 public record CreateDeptReq(string Name, string? Description);
 public record UpdateDeptReq(string Name, string? Description);
+public record KnowledgeWriteReq(string Path, string? Content);

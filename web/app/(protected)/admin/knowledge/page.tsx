@@ -34,7 +34,7 @@ export default function KnowledgeAdminPage() {
     if (!selected) return;
     setSaving(true);
     try {
-      await api.post(`/api/admin/knowledge/write?path=${encodeURIComponent(selected)}`, content);
+      await api.post("/api/admin/knowledge/write", { path: selected, content });
       setOriginal(content); setDirty(false);
     } catch { alert("保存失败"); }
     finally { setSaving(false); }
@@ -44,7 +44,7 @@ export default function KnowledgeAdminPage() {
     if (!newName.trim()) return;
     const path = showNew === "folder" ? newName + "/.gitkeep" : newName + ".md";
     try {
-      await api.post(`/api/admin/knowledge/write?path=${encodeURIComponent(path)}`, showNew === "folder" ? "" : "# " + newName + "\n\n");
+      await api.post("/api/admin/knowledge/write", { path, content: showNew === "folder" ? "" : "# " + newName + "\n\n" });
       setShowNew(null); setNewName(""); fetchTree();
     } catch { alert("创建失败"); }
   };
