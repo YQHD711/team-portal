@@ -13,9 +13,9 @@ interface WikiOptions {
 }
 
 const defaults: WikiOptions = {
-  catalogModel: "deepseek-v4-pro", contentModel: "deepseek-v4-pro", maxOutputTokens: 8192,
+  catalogModel: "deepseek-v4-pro", contentModel: "deepseek-v4-pro", maxOutputTokens: 32768,
   parallelCount: 3, maxRetryAttempts: 2, retryDelayMs: 2000,
-  directoryTreeMaxDepth: 3, readmeMaxLength: 10000,
+  directoryTreeMaxDepth: -1, readmeMaxLength: 10000,
   documentGenerationTimeoutMinutes: 5, temperature: 1.0, topP: 1.0,
   thinkingMode: "thinking", documentLanguage: "zh-CN",
 };
@@ -42,11 +42,11 @@ export default function WikiSettingsPage() {
         <div className="grid grid-cols-2 gap-4">
           <div><label className="block text-sm font-medium mb-1">目录生成模型</label><select value={opts.catalogModel} onChange={e => update("catalogModel", e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500"><option value="deepseek-v4-pro">V4 Pro (推荐)</option><option value="deepseek-v4-flash">V4 Flash (省钱)</option></select></div>
           <div><label className="block text-sm font-medium mb-1">文档生成模型</label><select value={opts.contentModel} onChange={e => update("contentModel", e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500"><option value="deepseek-v4-pro">V4 Pro (推荐)</option><option value="deepseek-v4-flash">V4 Flash (省钱)</option></select></div>
-          <div><label className="block text-sm font-medium mb-1">最大 Token 数</label><input type="number" value={opts.maxOutputTokens} onChange={e => update("maxOutputTokens", Number(e.target.value))} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
+          <div><label className="block text-sm font-medium mb-1">最大 Token 数</label><input type="number" value={opts.maxOutputTokens} onChange={e => update("maxOutputTokens", Number(e.target.value))} min={1024} max={131072} step={1024} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">并行数</label><input type="number" value={opts.parallelCount} onChange={e => update("parallelCount", Number(e.target.value))} min={1} max={10} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">重试次数</label><input type="number" value={opts.maxRetryAttempts} onChange={e => update("maxRetryAttempts", Number(e.target.value))} min={0} max={5} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">重试延迟 (ms)</label><input type="number" value={opts.retryDelayMs} onChange={e => update("retryDelayMs", Number(e.target.value))} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
-          <div><label className="block text-sm font-medium mb-1">目录树深度</label><input type="number" value={opts.directoryTreeMaxDepth} onChange={e => update("directoryTreeMaxDepth", Number(e.target.value))} min={1} max={5} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
+          <div><label className="block text-sm font-medium mb-1">目录树深度 (-1=AI自动)</label><input type="number" value={opts.directoryTreeMaxDepth} onChange={e => update("directoryTreeMaxDepth", Number(e.target.value))} min={-1} max={10} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">README 最大长度</label><input type="number" value={opts.readmeMaxLength} onChange={e => update("readmeMaxLength", Number(e.target.value))} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">文档超时 (分钟)</label><input type="number" value={opts.documentGenerationTimeoutMinutes} onChange={e => update("documentGenerationTimeoutMinutes", Number(e.target.value))} min={1} max={30} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>
           <div><label className="block text-sm font-medium mb-1">Temperature (DeepSeek 推荐 1.0)</label><input type="number" value={opts.temperature} onChange={e => update("temperature", Number(e.target.value))} min={0} max={2} step={0.1} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" /></div>

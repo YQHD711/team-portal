@@ -13,7 +13,7 @@ public class WikiGeneratorOptions
     public string ContentModel { get; set; } = "deepseek-v4-pro";
 
     /// <summary>Maximum output tokens. DeepSeek supports up to 131,072. Cap to control cost.</summary>
-    public int MaxOutputTokens { get; set; } = 8192;
+    public int MaxOutputTokens { get; set; } = 32768;
 
     /// <summary>Number of parallel document generation tasks. 3-5 recommended.</summary>
     public int ParallelCount { get; set; } = 3;
@@ -25,7 +25,7 @@ public class WikiGeneratorOptions
     public int RetryDelayMs { get; set; } = 2000;
 
     /// <summary>Max depth for directory tree generation.</summary>
-    public int DirectoryTreeMaxDepth { get; set; } = 3;
+    public int DirectoryTreeMaxDepth { get; set; } = -1; // -1 = auto (let AI decide)
 
     /// <summary>Max char length for README content (truncated if longer).</summary>
     public int ReadmeMaxLength { get; set; } = 10000;

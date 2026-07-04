@@ -179,7 +179,7 @@ public class WikiGeneratorService
 
     private void BuildTreeRecursive(string dir, string prefix, StringBuilder sb, int depth, int maxDepth)
     {
-        if (depth > maxDepth) return;
+        if (maxDepth >= 0 && depth > maxDepth) return; // -1 = unlimited
         try
         {
             foreach (var subDir in Directory.GetDirectories(dir).OrderBy(Path.GetFileName))
