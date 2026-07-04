@@ -5,14 +5,9 @@ import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { TreeView } from "@/components/knowledge/TreeView";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
-import { ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, BookOpen, Pencil, Save, X } from "lucide-react";
 
-interface TreeNode {
-  name: string;
-  type: "folder" | "file";
-  path?: string;
-  children?: TreeNode[];
-}
+interface TreeNode { name: string; type: "folder" | "file"; path?: string; children?: TreeNode[]; }
 
 export default function KnowledgePage() {
   const params = useParams();
@@ -23,6 +18,13 @@ export default function KnowledgePage() {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { api.get<{role:string}>("/api/admin/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
+  const canEdit = role === "admin" || role === "部长";
 
   useEffect(() => {
     api.get<TreeNode[]>("/api/knowledge/tree").then(setTree).catch(() => setTree([]));
@@ -70,7 +72,32 @@ export default function KnowledgePage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 max-w-3xl">
-          {loading ? (
+          {filePath && canEdit && !editing && !loading && content && (
+            <div className="flex justify-end mb-2">
+              <button onClick={() => { setEditing(true); setEditContent(content); }} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500">
+                <Pencil className="h-3 w-3" /> 编辑
+              </button>
+            </div>
+          )}
+
+          {editing ? (
+            <div className="space-y-3">
+              <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
+                className="w-full h-[50vh] p-4 font-mono text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none" />
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  setSaving(true);
+                  try { await api.post("/api/admin/knowledge/write", { path: filePath + ".md", content: editContent }); setContent(editContent); setEditing(false); }
+                  catch { alert("保存失败"); }
+                  finally { setSaving(false); }
+                }} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-600">
+                  <Save className="h-4 w-4" />{saving?"保存中...":"保存"}
+                </button>
+                <button onClick={() => setEditing(false)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm"><X className="h-4 w-4" />取消</button>
+              </div>
+            </div>
+          ) : (
+            loading ? (
             <div className="animate-pulse space-y-4">
               <div className="h-6 bg-zinc-200 dark:bg-zinc-800 rounded w-1/3" />
               <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
@@ -86,7 +113,7 @@ export default function KnowledgePage() {
               <p className="text-zinc-500 dark:text-zinc-400">请从左侧目录选择文档</p>
               <p className="text-xs text-zinc-400 mt-1">将 .md 文件放入 data/knowledge/ 目录</p>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>
