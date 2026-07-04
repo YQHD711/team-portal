@@ -12,11 +12,11 @@ public class AuthService
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
+    private readonly LogService _log;
 
-    public AuthService(AppDbContext db, IConfiguration config)
+    public AuthService(AppDbContext db, IConfiguration config, LogService log)
     {
-        _db = db;
-        _config = config;
+        _db = db; _config = config; _log = log;
     }
 
     public async Task<User?> Register(string username, string password, string role = "member")
@@ -40,8 +40,11 @@ public class AuthService
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
         if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        {
+            _log.Warn("auth", $"Login failed: {username}", null, username);
             return null;
-
+        }
+        _log.Info("auth", $"User logged in: {username}", $"{{\"role\":\"{user.Role}\"}}", username);
         return GenerateToken(user);
     }
 

@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<WikiTask> WikiTasks => Set<WikiTask>();
+    public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
