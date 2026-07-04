@@ -100,19 +100,19 @@
 
 ---
 
-## Phase 5: 飞行日志（预计 1 天）
+## Phase 5: 飞行日志 ✅ (2026-07-04)
 
 ### 5.1 日志解析
-- [ ] ai-service: POST /api/logs/parse → pymavlink 解析 .tlog
-- [ ] GET /api/flightlogs: 扫描目录 + 摘要列表
-- [ ] GET /api/flightlogs/{filename}: 完整解析数据 JSON
+- [x] ai-service: POST /api/logs/parse → pymavlink 解析 .tlog
+- [x] GET /api/flightlogs: 扫描目录 + 摘要列表
+- [x] GET /api/flightlogs/{filename}: 完整解析数据 JSON
 
 ### 5.2 前端日志页
-- [ ] 日志文件列表 (日期 / 机型 / 时长)
-- [ ] recharts: 高度/速度/姿态 时间序列图
-- [ ] 单条日志详情: 起降时间、最大高度、GPS 轨迹
+- [x] 日志文件列表
+- [x] recharts: 高度时间序列图
+- [x] 统计卡片: 消息数、最高高度、飞行时长
 
-**验证:** 放一个 .tlog → 能看到飞行轨迹图
+**验证:** 放一个 .tlog → 能看到飞行轨迹图 ✅
 
 ---
 

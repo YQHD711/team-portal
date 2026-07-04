@@ -35,6 +35,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddHttpClient<AiProxyService>();
+builder.Services.AddHttpClient<FlightLogService>();
 
 builder.Services.AddOpenApi();
 
@@ -63,5 +64,6 @@ app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapInventoryEndpoints();
 app.MapAiEndpoints();
+app.MapFlightLogEndpoints();
 
 app.Run();
