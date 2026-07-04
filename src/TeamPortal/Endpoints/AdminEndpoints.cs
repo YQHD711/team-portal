@@ -76,6 +76,7 @@ public static class AdminEndpoints
         // ── Knowledge ──
         admin.MapPost("/knowledge/write", async (KnowledgeWriteReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db) =>
         {
+            req = req with { Path = Uri.UnescapeDataString(req.Path) };
             var (role, dept, _) = await GetUserCtx(user, db);
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.WriteFile(req.Path, req.Content ?? ""); return Results.Ok(new { success = true }); }
@@ -84,6 +85,7 @@ public static class AdminEndpoints
 
         admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db) =>
         {
+            path = Uri.UnescapeDataString(path);
             var (role, dept, _) = await GetUserCtx(user, db);
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.DeleteFile(path); return Results.Ok(new { success = true }); }
