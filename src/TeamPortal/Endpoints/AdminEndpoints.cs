@@ -90,6 +90,22 @@ public static class AdminEndpoints
             catch (Exception e) { return Results.Problem(e.Message, statusCode: 400); }
         });
 
+        // ── Document upload ──
+        admin.MapPost("/documents/upload", async (IFormFile file, string? folder, ClaimsPrincipal user, DocumentService docSvc, AppDbContext db) =>
+        {
+            if (file is null || file.Length == 0) return Results.Problem("No file provided", statusCode: 400);
+            if (file.Length > 50 * 1024 * 1024) return Results.Problem("File too large (max 50MB)", statusCode: 400);
+            var (role, dept, _) = await GetUserCtx(user, db);
+            var targetFolder = folder ?? "公共";
+            try
+            {
+                var path = await docSvc.UploadAndProcess(file, targetFolder, role, dept);
+                return Results.Ok(new { success = true, path });
+            }
+            catch (UnauthorizedAccessException) { return Results.Problem("Access denied", statusCode: 403); }
+            catch (Exception e) { return Results.Problem(e.Message, statusCode: 500); }
+        }).DisableAntiforgery();
+
         // ── User info (for sidebar) ──
         admin.MapGet("/me", async (ClaimsPrincipal user, AppDbContext db) =>
         {

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
-import { FileText, Plus, Trash2, Save, FolderPlus, X } from "lucide-react";
+import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, File, Loader2 } from "lucide-react";
+import { getToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 interface TreeNode { name: string; type: "folder" | "file"; path?: string; children?: TreeNode[]; }
@@ -13,9 +14,13 @@ export default function KnowledgeAdminPage() {
   const [content, setContent] = useState("");
   const [original, setOriginal] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [showNew, setShowNew] = useState<"file" | "folder" | null>(null);
+  const [showNew, setShowNew] = useState<"file" | "folder" | "upload" | null>(null);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFolder, setUploadFolder] = useState("公共");
+  const [uploadMsg, setUploadMsg] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchTree = useCallback(() => {
     api.get<TreeNode[]>("/api/knowledge/tree").then(setTree);
@@ -58,6 +63,39 @@ export default function KnowledgeAdminPage() {
     } catch { alert("删除失败"); }
   };
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setUploadMsg("");
+
+    try {
+      const token = getToken();
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const API_BASE = "";
+      const res = await fetch(`${API_BASE}/api/admin/documents/upload?folder=${encodeURIComponent(uploadFolder)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(err.detail || "Upload failed");
+      }
+
+      const data = await res.json();
+      setUploadMsg(`✅ 上传成功: ${data.path}`);
+      setShowNew(null); fetchTree();
+    } catch (err) {
+      setUploadMsg(`❌ ${err instanceof Error ? err.message : "上传失败"}`);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   const renderTree = (nodes: TreeNode[], level = 0) => (
     <ul className={level === 0 ? "space-y-0.5" : "ml-4 space-y-0.5"}>
       {nodes.map(n => (
@@ -86,6 +124,7 @@ export default function KnowledgeAdminPage() {
         <div className="flex gap-2">
           <button onClick={() => { setShowNew("file"); setNewName(""); }} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Plus className="h-4 w-4" />新建文档</button>
           <button onClick={() => { setShowNew("folder"); setNewName(""); }} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><FolderPlus className="h-4 w-4" />新建目录</button>
+          <button onClick={() => { setShowNew("upload"); setUploadMsg(""); }} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600 transition-colors shadow-sm"><Upload className="h-4 w-4" />上传文件</button>
         </div>
       </div>
 
@@ -120,8 +159,41 @@ export default function KnowledgeAdminPage() {
         </div>
       </div>
 
+      {/* Upload modal */}
+      {showNew === "upload" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">上传文件</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button></div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">目标文件夹</label>
+                <select value={uploadFolder} onChange={e => setUploadFolder(e.target.value)} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm">
+                  <option value="公共">公共知识库</option>
+                  {tree.filter(n => n.name !== "公共知识库").map(n => <option key={n.path} value={n.path}>{n.name}</option>)}
+                </select>
+              </div>
+
+              <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-600 rounded-xl p-8 text-center hover:border-sky-400 transition-colors cursor-pointer" onClick={() => fileRef.current?.click()}>
+                {uploading ? (
+                  <div className="flex flex-col items-center gap-2"><Loader2 className="h-8 w-8 animate-spin text-sky-500" /><span className="text-sm text-zinc-500">正在处理...</span></div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="h-8 w-8 text-zinc-400" />
+                    <span className="text-sm text-zinc-500">点击选择文件</span>
+                    <span className="text-xs text-zinc-400">支持 PDF、DOCX、MD、TXT（最大50MB）</span>
+                  </div>
+                )}
+                <input ref={fileRef} type="file" accept=".pdf,.docx,.md,.txt" onChange={handleUpload} className="hidden" />
+              </div>
+
+              {uploadMsg && <div className={`text-sm p-2 rounded-lg ${uploadMsg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{uploadMsg}</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New item modal */}
-      {showNew && (
+      {showNew && showNew !== "upload" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{showNew === "file" ? "新建文档" : "新建目录"}</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button></div>

@@ -46,6 +46,7 @@ builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddHttpClient<AiProxyService>();
 builder.Services.AddHttpClient<FlightLogService>();
+builder.Services.AddHttpClient<DocumentService>();
 
 builder.Services.AddOpenApi();
 
