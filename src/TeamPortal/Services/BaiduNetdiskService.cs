@@ -200,7 +200,9 @@ public class BaiduNetdiskService
         var body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
         var list = doc.RootElement.GetProperty("list")[0];
-        return list.GetProperty("dlink").GetString()!;
+        var dlink = list.GetProperty("dlink").GetString()!;
+        // Baidu requires access_token appended to download URL
+        return $"{dlink}&access_token={token}";
     }
 
     /// <summary>

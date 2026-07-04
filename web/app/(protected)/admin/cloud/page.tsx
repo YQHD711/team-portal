@@ -12,6 +12,7 @@ export default function CloudPage() {
   const [files, setFiles] = useState<BaiduFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [currentDir, setCurrentDir] = useState("/");
   const [msg, setMsg] = useState("");
   const [authed, setAuthed] = useState(true);
   const [authUrl, setAuthUrl] = useState("");
@@ -19,13 +20,18 @@ export default function CloudPage() {
   const [authMsg, setAuthMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const fetchDir = (dir: string) => {
+    setLoading(true); setCurrentDir(dir);
+    api.get<BaiduFile[]>(`/api/admin/baidu/files?dir=${encodeURIComponent(dir)}`).then(setFiles).catch(() => setAuthed(false)).finally(() => setLoading(false));
+  };
+
   const fetch = () => {
     setLoading(true);
-    let anySuccess = false;
-    api.get<Quota>("/api/admin/baidu/quota").then(d => { setQuota(d); anySuccess = true; }).catch(() => {});
-    api.get<BaiduFile[]>("/api/admin/baidu/files").then(d => { setFiles(d); anySuccess = true; }).catch(() => {});
-    setTimeout(() => { if (!anySuccess && !loading) setAuthed(false); setLoading(false); }, 1000);
+    api.get<Quota>("/api/admin/baidu/quota").then(setQuota).catch(() => {});
+    fetchDir("/");
   };
+
+  const handleFolderClick = (f: BaiduFile) => { if (f.isDir) fetchDir(f.path); };
 
   useEffect(() => { fetch(); }, []);
 
@@ -49,10 +55,10 @@ export default function CloudPage() {
     const formData = new FormData(); formData.append("file", file);
     try {
       const token = localStorage.getItem("token");
-      const res = await window.fetch("/api/admin/baidu/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
+      const res = await window.fetch(`/api/admin/baidu/upload?remoteDir=${encodeURIComponent(currentDir)}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
       if (!res.ok) throw new Error("Upload failed");
       setMsg(`✅ ${file.name} 上传成功`);
-      fetch();
+      fetchDir(currentDir);
     } catch { setMsg("❌ 上传失败"); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
@@ -130,19 +136,30 @@ export default function CloudPage() {
           <button onClick={fetch} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"><RefreshCw className="h-4 w-4 text-muted" /></button>
         </div>
         <div className="divide-y divide-border">
+          {/* Breadcrumb */}
+          <div className="px-4 py-2 border-b border-border flex items-center gap-1 text-sm">
+            <button onClick={() => fetchDir("/")} className="text-blue-500 hover:underline">根目录</button>
+            {currentDir !== "/" && currentDir.split("/").filter(Boolean).map((part, i, arr) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className="text-muted">/</span>
+                <button onClick={() => fetchDir("/" + arr.slice(0, i + 1).join("/"))} className="text-blue-500 hover:underline truncate max-w-[120px]">{part}</button>
+              </span>
+            ))}
+          </div>
+
           {loading ? <div className="p-8 text-center text-muted"><Loader2 className="h-5 w-5 mx-auto animate-spin" /></div> :
            files.length === 0 ? <div className="p-8 text-center text-muted"><Cloud className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无文件</div> :
            files.map(f => (
-            <div key={f.path} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            <div key={f.path} onClick={() => handleFolderClick(f)} className={`flex items-center gap-3 px-4 py-3 transition-colors ${f.isDir ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
               {f.isDir ? <Folder className="h-5 w-5 text-amber-500 shrink-0" /> : <File className="h-5 w-5 text-blue-500 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{f.name}</div>
-                <div className="text-xs text-muted">{formatSize(f.size)} · {new Date(f.modified * 1000).toLocaleString("zh-CN")}</div>
+                <div className="text-xs text-muted">{formatSize(f.size)}{f.isDir ? "" : ` · ${new Date(f.modified * 1000).toLocaleString("zh-CN")}`}</div>
               </div>
               {!f.isDir && (
-                <div className="flex gap-1">
+                <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                   <button onClick={() => handleDownload(f.path)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500"><Download className="h-4 w-4" /></button>
-                  <button onClick={() => handleDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => { if (confirm("删除？")) handleDelete(f.path); }} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500"><Trash2 className="h-4 w-4" /></button>
                 </div>
               )}
             </div>
