@@ -55,7 +55,7 @@ function TreeNodeItem({ node, level }: { node: TreeNode; level: number }) {
   return (
     <li>
       <Link
-        href={node.path ? `/knowledge/${node.path.replace(".md", "")}` : "#"}
+        href={node.path ? `/knowledge/${node.path.replace(".md", "").split("/").map(s => encodeURIComponent(s)).join("/")}` : "#"}
         className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
       >
         <span className="w-4 shrink-0" />
