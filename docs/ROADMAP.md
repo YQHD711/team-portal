@@ -6,24 +6,24 @@
 
 ## Phase 0: 环境搭建（预计 0.5 天）
 
-### 0.1 脚手架初始化
-- [ ] `web/`: `npx create-next-app@latest . --typescript --tailwind --app --src-dir=false`
-- [ ] `src/TeamPortal/`: `dotnet new webapi --use-minimal-apis`
-- [ ] `ai-service/`: 手动建 `main.py` + `requirements.txt`
-- [ ] `docker-compose.yml`: 3 容器编排
-- [ ] `Makefile`: build / test / dev / deploy
-- [ ] `.github/workflows/ci.yml`: 自动测试流水线
-- [ ] `README.md`: 项目说明 + 快速开始
+### 0.1 脚手架初始化 ✅ (2026-07-04)
+- [x] `web/`: `npx create-next-app@latest . --typescript --tailwind --app --src-dir=false`
+- [x] `src/TeamPortal/`: `dotnet new webapi --use-minimal-apis`
+- [x] `ai-service/`: 手动建 `main.py` + `requirements.txt`
+- [x] `docker-compose.yml`: 3 容器编排
+- [x] `Makefile`: build / test / dev / deploy
+- [x] `.github/workflows/ci.yml`: 自动测试流水线
+- [x] `README.md`: 项目说明 + 快速开始
 
-**验证:** `make build` 三端编译通过
+**验证:** `make build` 三端编译通过 ✅
 
-### 0.2 组件库 + 主题
-- [ ] Radix UI 组件安装 + Tailwind CSS 配置
-- [ ] 全局布局: 侧边栏导航 + 顶栏
-- [ ] 暗色/亮色主题切换
-- [ ] 响应式适配
+### 0.2 组件库 + 主题 ✅ (2026-07-04)
+- [x] Radix UI 组件安装 + Tailwind CSS 配置
+- [x] 全局布局: 侧边栏导航 + 顶栏
+- [x] 暗色/亮色主题切换
+- [x] 响应式适配
 
-**验证:** `npm run dev` 能看到带导航的空白首页
+**验证:** `npm run dev` 能看到带导航的空白首页 ✅
 
 ---
 
