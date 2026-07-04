@@ -43,6 +43,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<AdminService>();
 builder.Services.AddHttpClient<AiProxyService>();
 builder.Services.AddHttpClient<FlightLogService>();
 
@@ -75,5 +76,6 @@ app.MapKnowledgeEndpoints();
 app.MapInventoryEndpoints();
 app.MapAiEndpoints();
 app.MapFlightLogEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();

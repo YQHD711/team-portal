@@ -60,6 +60,23 @@ public class KnowledgeService
         return nodes;
     }
 
+    public void WriteFile(string relativePath, string content)
+    {
+        var fullPath = ResolvePath(relativePath);
+        if (fullPath is null) throw new InvalidOperationException("Invalid path");
+        var dir = Path.GetDirectoryName(fullPath);
+        if (dir is not null) Directory.CreateDirectory(dir);
+        File.WriteAllText(fullPath, content);
+    }
+
+    public void DeleteFile(string relativePath)
+    {
+        var fullPath = ResolvePath(relativePath);
+        if (fullPath is null || !File.Exists(fullPath))
+            throw new InvalidOperationException("File not found");
+        File.Delete(fullPath);
+    }
+
     private string? ResolvePath(string relativePath)
     {
         var fullPath = Path.GetFullPath(Path.Combine(_basePath, relativePath));
