@@ -1,18 +1,27 @@
-# 航模队管理系统 — 架构设计文档
+# 雏鹰之翼航模队管理系统 — 架构设计文档
 
-> 创建时间: 2026-06-22 | 状态: 设计锁定，待开发
+> 创建: 2026-06-22 | 更新: 2026-07-04 | 状态: 已上线 v1.0
 
 ---
 
 ## 一、产品定位
 
-航模队管理与运营系统，独立于 OpenDeepWiki（仅共享技术栈经验，不共享代码）。
+"雏鹰之翼"航模队管理与运营系统，独立于 OpenDeepWiki（参考其文档处理模式）。
 
 **核心功能:**
 - 知识库: 队员手册、调参指南、竞赛规则（MDX 渲染 + 代码高亮 + Mermaid 流程图）
 - 零件库存: 零件索引、借用归还、用量统计
 - 飞行日志: .tlog 解析 + recharts 可视化
-- AI 助手: 问答搜索（DeepSeek API）
+- AI 助手: 问答搜索（DeepSeek API SSE 流式）
+- 管理后台: 用户/部门/资料 CRUD + 权限系统
+- 文档上传: PDF/DOCX/MD 自动提取文本入库
+
+**角色系统:**
+| 角色 | 权限范围 |
+|---|---|
+| 管理员 | 全部功能，可管理所有部门和用户 |
+| 部长 | 本部门成员管理 + 本部门知识库编辑 + 文档上传 |
+| 成员 | 查看公共 + 本部门知识库，使用功能模块 |
 
 ---
 
@@ -157,6 +166,24 @@ GET  /api/flightlogs/{filename}                        → pymavlink 解析结�
 ```
 POST /api/ai/chat     { question }                     → { answer } (SSE 流式)
 POST /api/ai/search   { query }                       → [{ source, snippet, ... }]
+```
+
+### 管理 (Admin)
+
+```
+GET    /api/admin/stats                                → 系统统计
+GET    /api/admin/users                                → 用户列表
+POST   /api/admin/users        { username, password, role, departmentId }
+PUT    /api/admin/users/{id}   { role, departmentId, password }
+DELETE /api/admin/users/{id}
+GET    /api/admin/departments                          → 部门列表
+POST   /api/admin/departments  { name, description }
+PUT    /api/admin/departments/{id}
+DELETE /api/admin/departments/{id}
+POST   /api/admin/knowledge/write  { path, content }   → 写入文档
+DELETE /api/admin/knowledge/delete?path=...             → 删除文档
+POST   /api/admin/documents/upload (multipart/form-data) → 上传文档
+GET    /api/admin/me                                   → 当前用户角色+部门
 ```
 
 ---

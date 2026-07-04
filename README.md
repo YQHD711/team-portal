@@ -1,16 +1,34 @@
-# 航模队管理与运营系统 (Team Portal)
+# 雏鹰之翼 · 航模队管理系统
 
-高校航模队知识管理、零件库存、飞行日志分析平台。
+高校航模队知识管理、零件库存、飞行日志分析、AI 助手平台。
+
+## 功能模块
+
+| 模块 | 功能 |
+|---|---|
+| 🏠 仪表盘 | 系统统计 + AI 对话面板 |
+| 📚 知识库 | 公共/部门知识库，MDX 渲染，Mermaid 流程图，代码高亮 |
+| 📦 零件库存 | 库存列表、搜索筛选、recharts 饼图、低库存告警 |
+| 📊 飞行日志 | .tlog 解析、高度时间序列图、统计摘要 |
+| 🤖 AI 助手 | DeepSeek API SSE 流式对话、RAG 知识库检索 |
+| ⚙️ 管理后台 | 用户/部门/资料 CRUD、三级角色权限、文档上传 |
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 前端 | Next.js 16 + Tailwind CSS 4 + Radix UI |
-| 后端 | ASP.NET Core 10 Minimal API |
-| AI 服务 | Python FastAPI + DeepSeek |
-| 数据库 | SQLite (EF Core) |
-| 部署 | Docker Compose |
+| 前端 | Next.js 16 + Tailwind CSS 4 + Radix UI + recharts |
+| 后端 | ASP.NET Core 10 Minimal API + EF Core SQLite + JWT |
+| AI 服务 | Python FastAPI + DeepSeek + PyPDF2 + python-docx |
+| 部署 | Docker Compose + Nginx + GitHub Actions CI |
+
+## 角色权限
+
+| 角色 | 权限 |
+|---|---|
+| 管理员 | 全部功能，管理所有部门和用户 |
+| 部长 | 本部门成员/知识库管理，文档上传 |
+| 成员 | 查看功能模块，公共+本部门知识库 |
 
 ## 快速开始
 
