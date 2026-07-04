@@ -92,12 +92,12 @@ export function ChatPanel() {
   return (
     <div className="flex flex-col rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-sky-50 to-transparent dark:from-sky-950/20">
-        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-sky-500 text-white">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border glass">
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/20">
           <Sparkles className="h-4 w-4" />
         </div>
-        <span className="font-medium text-sm">AI 助手</span>
-        <span className="text-xs text-zinc-400 ml-auto">基于知识库检索</span>
+        <span className="font-semibold text-sm">AI 助手</span>
+        <span className="text-xs text-muted ml-auto">知识库 RAG</span>
       </div>
 
       {/* Messages */}
@@ -121,10 +121,10 @@ export function ChatPanel() {
               </div>
             )}
             <div
-              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] sm:max-w-[75%] ${
+              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] sm:max-w-[75%] shadow-sm ${
                 msg.role === "user"
-                  ? "bg-sky-500 text-white rounded-br-md"
-                  : "bg-zinc-100 dark:bg-zinc-800 rounded-bl-md"
+                  ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-md"
+                  : "bg-surface border border-border rounded-bl-md"
               }`}
             >
               {msg.content ? (
@@ -155,12 +155,12 @@ export function ChatPanel() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="输入问题..."
             disabled={streaming}
-            className="flex-1 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent disabled:opacity-50"
+            className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50 transition-shadow"
           />
           <button
             type="submit"
             disabled={streaming || !input.trim()}
-            className="rounded-xl bg-sky-500 px-4 py-2.5 text-white hover:bg-sky-600 disabled:opacity-50 transition-colors shadow-sm flex items-center"
+            className="rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 px-4 py-2.5 text-white hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 transition-all shadow-lg shadow-blue-500/20 flex items-center"
           >
             {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
