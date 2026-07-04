@@ -61,6 +61,25 @@ public static class WikiEndpoints
             var task = await generator.GetTask(id);
             return task is not null ? Results.Ok(task) : Results.Problem("Not found", statusCode: 404);
         });
+
+        // Serve catalog for wiki viewer
+        wiki.MapGet("/tasks/{id}/catalog", async (string id, WikiGeneratorService generator) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            if (string.IsNullOrEmpty(task.CatalogJson)) return Results.Ok(new List<object>());
+            return Results.Content(task.CatalogJson, "application/json");
+        });
+
+        // Serve wiki document content for viewer
+        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var kbPath = $"{task.TargetFolder}/{task.ProjectName}/{path}.md".Replace("//", "/");
+            var content = knowledge.GetContent(kbPath);
+            return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Document not found", statusCode: 404);
+        });
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }

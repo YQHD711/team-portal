@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { GitBranch, Upload, Loader2, CheckCircle, XCircle, Clock, RefreshCw, FileText } from "lucide-react";
+import Link from "next/link";
+import { GitBranch, Upload, Loader2, CheckCircle, XCircle, Clock, RefreshCw, FileText, ExternalLink } from "lucide-react";
 
 interface TaskInfo {
   id: string; type: string; projectName: string; status: string;
@@ -163,7 +164,13 @@ export default function WikiPage() {
             <div key={t.id} className="p-4 flex items-center gap-3">
               {statusIcon(t.status)}
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{t.projectName}</div>
+                <div className="font-medium text-sm truncate">
+                  {t.status === "completed" ? (
+                    <Link href={`/wiki/${t.id}`} className="text-sky-600 hover:text-sky-500 hover:underline inline-flex items-center gap-1">
+                      {t.projectName} <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  ) : t.projectName}
+                </div>
                 <div className="text-xs text-zinc-500">{t.type === "git" ? "GitHub" : "ZIP"} · {statusLabel(t.status)}</div>
                 {t.errorMessage && <div className="text-xs text-red-500 mt-1">{t.errorMessage}</div>}
               </div>
