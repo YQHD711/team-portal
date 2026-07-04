@@ -27,22 +27,22 @@
 
 ---
 
-## Phase 1: 认证系统（预计 0.5 天）
+## Phase 1: 认证系统 ✅ (2026-07-04)
 
 ### 1.1 后端认证
-- [ ] User 模型 (EF Core): Id, Username, PasswordHash, Role
-- [ ] POST /api/auth/register
-- [ ] POST /api/auth/login → JWT Token
-- [ ] 中间件: JWT Bearer 验证
-- [ ] 种子数据: admin 账号
+- [x] User 模型 (EF Core): Id, Username, PasswordHash, Role
+- [x] POST /api/auth/register
+- [x] POST /api/auth/login → JWT Token
+- [x] 中间件: JWT Bearer 验证
+- [x] 种子数据: admin 账号
 
 ### 1.2 前端登录页
-- [ ] 登录/注册表单
-- [ ] Token 存储 (LocalStorage)
-- [ ] 路由守卫: 未登录跳转登录页
-- [ ] 用户下拉菜单 (退出)
+- [x] 登录/注册表单
+- [x] Token 存储 (LocalStorage)
+- [x] 路由守卫: 未登录跳转登录页
+- [x] 用户下拉菜单 (退出)
 
-**验证:** 注册 → 登录 → 看到仪表盘
+**验证:** 注册 → 登录 → 看到仪表盘 ✅
 
 ---
 
