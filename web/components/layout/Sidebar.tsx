@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, Bot, X, Bird,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch
+  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
@@ -24,6 +24,7 @@ const adminNav = [
   { href: "/admin/users", label: "用户管理", icon: Users },
   { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/knowledge", label: "资料管理", icon: FileText },
+  { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
 ];
 
