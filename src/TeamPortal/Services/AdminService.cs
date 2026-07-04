@@ -7,52 +7,65 @@ namespace TeamPortal.Services;
 public class AdminService
 {
     private readonly AppDbContext _db;
+    private readonly KnowledgeService _knowledge;
 
-    public AdminService(AppDbContext db) { _db = db; }
+    public AdminService(AppDbContext db, KnowledgeService knowledge) { _db = db; _knowledge = knowledge; }
+
+    // ── Helpers ──
+    public async Task<(string? role, string? dept)> GetUserInfo(int userId)
+    {
+        var u = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == userId);
+        return u is null ? (null, null) : (u.Role, u.Department?.Name);
+    }
 
     // ── Users ──
-    public async Task<List<object>> ListUsers()
+    public async Task<List<object>> ListUsers(string? role, string? dept)
     {
-        return await _db.Users.Include(u => u.Department).OrderBy(u => u.Id).Select(u => new
-        {
+        var query = _db.Users.Include(u => u.Department).AsQueryable();
+        if (role == "部长") query = query.Where(u => u.Department!.Name == dept || u.Id == int.Parse(GetUserIdFromDept(dept)));
+        return await query.OrderBy(u => u.Id).Select(u => new {
             u.Id, u.Username, u.Role, Department = u.Department != null ? u.Department.Name : null,
             u.DepartmentId, u.CreatedAt
         }).ToListAsync<object>();
     }
 
-    public async Task<User?> CreateUser(string username, string password, string role, int? deptId)
+    private string GetUserIdFromDept(string? dept) => "0"; // placeholder
+
+    public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username)) return null;
-        var user = new User
+        // 部长只能创建自己部门的用户
+        if (currentRole == "部长" && !string.IsNullOrEmpty(currentDept))
         {
+            var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == currentDept);
+            deptId = dept?.Id;
+        }
+        var user = new User {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = (role == "admin" || role == "部长") ? role : "member",
+            Role = (userRole == "admin" || userRole == "部长") ? userRole : "member",
             DepartmentId = deptId
         };
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-        return user;
+        _db.Users.Add(user); await _db.SaveChangesAsync(); return user;
     }
 
-    public async Task<bool> UpdateUser(int id, string? role, int? deptId, string? password)
+    public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? currentRole, string? currentDept)
     {
-        var user = await _db.Users.FindAsync(id);
+        var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
-        if (role is not null) user.Role = role;
+        if (currentRole == "部长" && user.Department?.Name != currentDept && user.Id != id) return false;
+        if (userRole is not null) user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member";
         if (deptId.HasValue) user.DepartmentId = deptId == 0 ? null : deptId;
         if (!string.IsNullOrWhiteSpace(password)) user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-        await _db.SaveChangesAsync();
-        return true;
+        await _db.SaveChangesAsync(); return true;
     }
 
-    public async Task<bool> DeleteUser(int id)
+    public async Task<bool> DeleteUser(int id, string? currentRole, string? currentDept)
     {
-        var user = await _db.Users.FindAsync(id);
+        var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null || user.Role == "admin" || user.Role == "部长") return false;
-        _db.Users.Remove(user);
-        await _db.SaveChangesAsync();
-        return true;
+        if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
+        _db.Users.Remove(user); await _db.SaveChangesAsync(); return true;
     }
 
     // ── Departments ──
@@ -61,8 +74,8 @@ public class AdminService
     public async Task<Department> CreateDepartment(string name, string description)
     {
         var dept = new Department { Name = name, Description = description };
-        _db.Departments.Add(dept);
-        await _db.SaveChangesAsync();
+        _db.Departments.Add(dept); await _db.SaveChangesAsync();
+        _knowledge.CreateDepartmentFolder(name); // auto-create knowledge folder
         return dept;
     }
 
@@ -71,8 +84,7 @@ public class AdminService
         var dept = await _db.Departments.FindAsync(id);
         if (dept is null) return false;
         dept.Name = name; dept.Description = description;
-        await _db.SaveChangesAsync();
-        return true;
+        await _db.SaveChangesAsync(); return true;
     }
 
     public async Task<bool> DeleteDepartment(int id)
@@ -80,20 +92,12 @@ public class AdminService
         var dept = await _db.Departments.FindAsync(id);
         if (dept is null) return false;
         await _db.Users.Where(u => u.DepartmentId == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.DepartmentId, (int?)null));
-        _db.Departments.Remove(dept);
-        await _db.SaveChangesAsync();
-        return true;
+        _db.Departments.Remove(dept); await _db.SaveChangesAsync(); return true;
     }
 
     // ── Stats ──
-    public async Task<object> GetStats()
-    {
-        return new
-        {
-            userCount = await _db.Users.CountAsync(),
-            inventoryCount = await _db.InventoryItems.CountAsync(),
-            inventoryTotal = await _db.InventoryItems.SumAsync(i => i.Quantity),
-            departmentCount = await _db.Departments.CountAsync(),
-        };
-    }
+    public async Task<object> GetStats() => new {
+        userCount = await _db.Users.CountAsync(), inventoryCount = await _db.InventoryItems.CountAsync(),
+        inventoryTotal = await _db.InventoryItems.SumAsync(i => i.Quantity), departmentCount = await _db.Departments.CountAsync()
+    };
 }
