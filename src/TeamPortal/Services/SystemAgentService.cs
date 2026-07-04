@@ -78,14 +78,13 @@ public class SystemAgentService
         {
             var payload = new
             {
-                model = "deepseek-v4-pro",
+                model = "deepseek-chat",
                 messages,
                 temperature = 0.7,
                 top_p = 1.0,
                 max_tokens = 4096,
                 tools = tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.Parameters ?? new { type = "object", properties = new { } } } }).ToList(),
-                tool_choice = "auto",
-                extra_body = new { thinking_mode = "thinking" }
+                tool_choice = "auto"
             };
 
             var json = JsonSerializer.Serialize(payload);
@@ -97,8 +96,11 @@ public class SystemAgentService
 
             var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return $"❌ API 错误 ({resp.StatusCode}): {body[..Math.Min(body.Length, 200)]}";
             using var doc = JsonDocument.Parse(body);
-            var choice = doc.RootElement.GetProperty("choices")[0];
+            if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                return $"❌ API 响应异常: {body[..Math.Min(body.Length, 300)]}";
+            var choice = choices[0];
             var msg = choice.GetProperty("message");
 
             if (msg.TryGetProperty("tool_calls", out var calls) && calls.GetArrayLength() > 0)
