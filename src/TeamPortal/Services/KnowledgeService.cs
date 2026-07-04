@@ -43,11 +43,12 @@ public class KnowledgeService
             {
                 Name = Path.GetFileName(subDir),
                 Type = "folder",
+                Path = Path.GetRelativePath(_basePath, subDir).Replace('\\', '/'),
                 Children = ScanDirectory(subDir),
             });
         }
 
-        foreach (var file in Directory.GetFiles(dir, "*.md").OrderBy(Path.GetFileName))
+        foreach (var file in Directory.GetFiles(dir, "*.md").Where(f => !f.EndsWith(".gitkeep")).OrderBy(Path.GetFileName))
         {
             nodes.Add(new TreeNode
             {
@@ -72,9 +73,15 @@ public class KnowledgeService
     public void DeleteFile(string relativePath)
     {
         var fullPath = ResolvePath(relativePath);
-        if (fullPath is null || !File.Exists(fullPath))
+        if (fullPath is null)
+            throw new InvalidOperationException("Invalid path");
+
+        if (Directory.Exists(fullPath))
+            Directory.Delete(fullPath, true);
+        else if (File.Exists(fullPath))
+            File.Delete(fullPath);
+        else
             throw new InvalidOperationException("File not found");
-        File.Delete(fullPath);
     }
 
     private string? ResolvePath(string relativePath)

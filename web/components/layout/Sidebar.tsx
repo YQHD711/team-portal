@@ -6,8 +6,10 @@ import {
   LayoutDashboard, BookOpen, Package, BarChart3, Bot, X, Bird,
   Users, Building2, Settings, FileText, ChevronDown
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
+import { api } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const mainNav = [
@@ -28,6 +30,14 @@ export function Sidebar() {
   const pathname = usePathname();
   const { open, setOpen } = useSidebar();
   const [adminOpen, setAdminOpen] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!getToken()) return;
+    api.get<{ role: string }>("/api/auth/me").then(u => setRole(u.role)).catch(() => setRole(null));
+  }, []);
+
+  const canManage = role === "admin" || role === "部长";
 
   return (
     <>
@@ -68,7 +78,8 @@ export function Sidebar() {
             );
           })}
 
-          {/* Admin section */}
+          {/* Admin section — only for admin/部长 */}
+          {canManage && (
           <div className="pt-3 mt-3 border-t border-zinc-200 dark:border-zinc-800">
             <button onClick={() => setAdminOpen(!adminOpen)}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium text-zinc-400 uppercase tracking-wider hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
@@ -94,6 +105,7 @@ export function Sidebar() {
               </div>
             )}
           </div>
+          )}
         </nav>
 
         <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800">

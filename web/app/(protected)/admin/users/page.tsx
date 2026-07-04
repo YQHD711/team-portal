@@ -68,8 +68,14 @@ export default function UsersPage() {
                 <tr key={u.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950">
                   <td className="px-4 py-3 font-medium">{u.username}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${u.role === "admin" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
-                      {u.role === "admin" ? <><Shield className="h-3 w-3 mr-1 inline" />管理员</> : "成员"}
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                      u.role === "admin" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" :
+                      u.role === "部长" ? "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400" :
+                      "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}>
+                      {u.role === "admin" ? <><Shield className="h-3 w-3 mr-1 inline" />管理员</> :
+                       u.role === "部长" ? <><UserCog className="h-3 w-3 mr-1 inline" />部长</> :
+                       "成员"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">{u.department || "—"}</td>
@@ -77,7 +83,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(u)} className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                      {u.role !== "admin" && <button onClick={() => handleDelete(u)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600" title="删除"><Trash2 className="h-4 w-4" /></button>}
+                      {u.role !== "admin" && u.role !== "部长" && <button onClick={() => handleDelete(u)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600" title="删除"><Trash2 className="h-4 w-4" /></button>}
                     </div>
                   </td>
                 </tr>
@@ -108,6 +114,7 @@ export default function UsersPage() {
                 <label className="block text-sm font-medium mb-1">角色</label>
                 <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
                   <option value="member">成员</option>
+                  <option value="部长">部长</option>
                   <option value="admin">管理员</option>
                 </select>
               </div>

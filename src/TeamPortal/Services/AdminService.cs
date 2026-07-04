@@ -27,7 +27,7 @@ public class AdminService
         {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = role == "admin" ? "admin" : "member",
+            Role = (role == "admin" || role == "部长") ? role : "member",
             DepartmentId = deptId
         };
         _db.Users.Add(user);
@@ -49,7 +49,7 @@ public class AdminService
     public async Task<bool> DeleteUser(int id)
     {
         var user = await _db.Users.FindAsync(id);
-        if (user is null || user.Role == "admin") return false;
+        if (user is null || user.Role == "admin" || user.Role == "部长") return false;
         _db.Users.Remove(user);
         await _db.SaveChangesAsync();
         return true;

@@ -28,7 +28,7 @@ public class AuthService
         {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = role == "admin" ? "admin" : "member",
+            Role = (role == "admin" || role == "部长") ? role : "member",
         };
 
         _db.Users.Add(user);
