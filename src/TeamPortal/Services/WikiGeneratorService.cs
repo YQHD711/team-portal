@@ -252,13 +252,16 @@ public class WikiGeneratorService
             {
                 model,
                 messages,
+                temperature = _options.Temperature,
+                top_p = _options.TopP,
                 tools = tools.Select(t => new
                 {
                     type = "function",
                     function = new { name = t.Name, description = t.Description, parameters = t.Parameters }
                 }).ToList(),
                 tool_choice = "auto",
-                max_tokens = _options.MaxOutputTokens
+                max_tokens = _options.MaxOutputTokens,
+                extra_body = new { thinking_mode = _options.ThinkingMode }
             };
 
             var json = JsonSerializer.Serialize(payload, JsonOpts);
