@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<WikiTask> WikiTasks => Set<WikiTask>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<CodeProposal> CodeProposals => Set<CodeProposal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
