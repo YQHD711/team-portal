@@ -5,6 +5,7 @@ import { Menu, Bird, Sparkles } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { UserMenu } from "./UserMenu";
+import { NotificationBell } from "./NotificationBell";
 import { useSidebar } from "./SidebarContext";
 
 const pageTitles: Record<string, string> = {
@@ -31,7 +32,8 @@ export function Topbar() {
         {title && <h1 className="text-sm font-medium text-muted hidden sm:block">{title}</h1>}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        <NotificationBell />
         <ThemeToggle />
         <UserMenu />
       </div>

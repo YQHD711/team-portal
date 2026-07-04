@@ -72,6 +72,16 @@ public class AuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    public async Task<bool> ChangePassword(int userId, string currentPassword, string newPassword)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null || !BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash)) return false;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        await _db.SaveChangesAsync();
+        _log.Info("auth", $"Password changed for user: {user.Username}");
+        return true;
+    }
+
     public async Task SeedAdmin()
     {
         if (!await _db.Users.AnyAsync(u => u.Role == "admin"))

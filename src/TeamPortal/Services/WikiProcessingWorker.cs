@@ -37,12 +37,19 @@ public class WikiProcessingWorker : BackgroundService
                 if (task != null)
                 {
                     var log = scope.ServiceProvider.GetRequiredService<LogService>();
+                    var notify = scope.ServiceProvider.GetRequiredService<NotificationService>();
                     log.Info("wiki", $"Processing wiki task: {task.ProjectName}");
                     await generator.ProcessTask(task.Id);
                     if (task.Status == "completed")
-                        log.Info("wiki", $"Wiki task completed: {task.ProjectName}", $"{{\"catalogDocs\":{task.CatalogJson?.Length ?? 0}}}");
+                    {
+                        log.Info("wiki", $"Wiki task completed: {task.ProjectName}");
+                        notify.Notify("Wiki 生成完成", $"项目 {task.ProjectName} 的文档已生成", $"/wiki/{task.Id}");
+                    }
                     else
+                    {
                         log.Error("wiki", $"Wiki task failed: {task.ProjectName}", task.ErrorMessage);
+                        notify.Notify("Wiki 生成失败", $"{task.ProjectName}: {task.ErrorMessage}");
+                    }
                 }
             }
             catch (Exception ex)

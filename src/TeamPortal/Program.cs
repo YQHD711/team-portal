@@ -50,6 +50,7 @@ builder.Services.AddHttpClient<DocumentService>();
 builder.Services.AddScoped<WikiGeneratorService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddSingleton<LogService>();
+builder.Services.AddSingleton<NotificationService>();
 
 builder.Services.AddOpenApi();
 
@@ -83,5 +84,6 @@ app.MapFlightLogEndpoints();
 app.MapAdminEndpoints();
 app.MapLogEndpoints();
 app.MapWikiEndpoints();
+app.MapNotificationEndpoints();
 
 app.Run();
