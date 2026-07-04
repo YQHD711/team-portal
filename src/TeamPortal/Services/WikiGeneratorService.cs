@@ -20,6 +20,7 @@ public class WikiGeneratorService
     private readonly IConfiguration _config;
     private readonly HttpClient _http;
     private readonly ILogger<WikiGeneratorService> _logger;
+    private WikiGeneratorOptions _options;
     private string _workspacePath = "";
     private string _projectName = "";
     private string _targetFolder = "";
@@ -38,7 +39,11 @@ public class WikiGeneratorService
     public WikiGeneratorService(AppDbContext db, KnowledgeService knowledge, IConfiguration config, HttpClient http, ILogger<WikiGeneratorService> logger)
     {
         _db = db; _knowledge = knowledge; _config = config; _http = http; _logger = logger;
+        _options = WikiSettingsStore.Load().Options;
     }
+
+    public WikiGeneratorOptions GetOptions() => _options;
+    public void UpdateOptions(WikiGeneratorOptions opts) { _options = opts; var s = new WikiSettingsStore { Options = opts }; s.Save(); }
 
     // ════════════════════════════════════════
     //  Public API
@@ -229,7 +234,7 @@ public class WikiGeneratorService
     {
         var apiKey = _config["AiService:DeepSeekKey"] ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY") ?? "";
         var baseUrl = _config["AiService:DeepSeekBaseUrl"] ?? "https://api.deepseek.com";
-        var model = "deepseek-chat";
+        var model = _options.ContentModel;
 
         var messages = new List<object>
         {
@@ -253,7 +258,7 @@ public class WikiGeneratorService
                     function = new { name = t.Name, description = t.Description, parameters = t.Parameters }
                 }).ToList(),
                 tool_choice = "auto",
-                max_tokens = 4096
+                max_tokens = _options.MaxOutputTokens
             };
 
             var json = JsonSerializer.Serialize(payload, JsonOpts);
@@ -494,7 +499,7 @@ README:
         var leaves = FlattenCatalog(items).Where(i => i.Children is null or { Count: 0 }).ToList();
         _logger.LogInformation("Generating {Count} documents for {Project}", leaves.Count, _projectName);
 
-        using var semaphore = new SemaphoreSlim(3);
+        using var semaphore = new SemaphoreSlim(_options.ParallelCount);
         var tasks = leaves.Select(async item =>
         {
             await semaphore.WaitAsync();

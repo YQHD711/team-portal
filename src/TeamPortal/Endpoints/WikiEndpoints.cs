@@ -84,6 +84,10 @@ public static class WikiEndpoints
             var content = knowledge.GetContent(kbPath);
             return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Document not found", statusCode: 404);
         });
+
+        // Wiki settings
+        wiki.MapGet("/settings", (WikiGeneratorService generator) => Results.Ok(generator.GetOptions()));
+        wiki.MapPut("/settings", (WikiGeneratorOptions opts, WikiGeneratorService generator) => { generator.UpdateOptions(opts); return Results.Ok(new { success = true }); });
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }

@@ -25,6 +25,7 @@ const adminNav = [
   { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/knowledge", label: "资料管理", icon: FileText },
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
+  { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
 ];
