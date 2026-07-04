@@ -7,7 +7,7 @@ public class KnowledgeService
     public KnowledgeService(IConfiguration config)
     {
         _basePath = config.GetValue<string>("Knowledge:BasePath")
-                    ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "data", "knowledge");
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
     }
 
     public List<TreeNode> GetTree(string? role, string? department)
