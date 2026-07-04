@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<WikiTask> WikiTasks => Set<WikiTask>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +26,12 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(u => u.DepartmentId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<WikiTask>(entity =>
+        {
+            entity.Property(t => t.ProjectName).HasMaxLength(100);
+            entity.Property(t => t.Status).HasMaxLength(20);
+        });
 
         modelBuilder.Entity<Department>(entity =>
         {

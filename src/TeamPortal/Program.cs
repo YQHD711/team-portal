@@ -47,6 +47,8 @@ builder.Services.AddScoped<AdminService>();
 builder.Services.AddHttpClient<AiProxyService>();
 builder.Services.AddHttpClient<FlightLogService>();
 builder.Services.AddHttpClient<DocumentService>();
+builder.Services.AddScoped<WikiGeneratorService>();
+builder.Services.AddHostedService<WikiProcessingWorker>();
 
 builder.Services.AddOpenApi();
 
@@ -78,5 +80,6 @@ app.MapInventoryEndpoints();
 app.MapAiEndpoints();
 app.MapFlightLogEndpoints();
 app.MapAdminEndpoints();
+app.MapWikiEndpoints();
 
 app.Run();
