@@ -46,22 +46,22 @@
 
 ---
 
-## Phase 2: 知识库（预计 1 天）
+## Phase 2: 知识库 ✅ (2026-07-04)
 
 ### 2.1 后端 API
-- [ ] GET /api/knowledge/tree: 遍历 data/knowledge/ 目录
-- [ ] GET /api/knowledge/content?path=...: 读取 .md 文件内容
-- [ ] 缓存: 目录树单次读取，文件内容按需
+- [x] GET /api/knowledge/tree: 遍历 data/knowledge/ 目录
+- [x] GET /api/knowledge/content?path=...: 读取 .md 文件内容
+- [x] 路径遍历安全防护
 
 ### 2.2 前端知识库页
-- [ ] 左侧目录树 (递归渲染)
-- [ ] 右侧 MDX 内容渲染
+- [x] 左侧目录树 (递归渲染)
+- [x] 右侧 MDX 内容渲染
   - react-markdown + remark-gfm (表格)
   - react-syntax-highlighter (代码高亮)
   - mermaid (流程图)
-- [ ] 响应式: 移动端折叠目录树
+- [x] 响应式: 可折叠目录树
 
-**验证:** 往 data/knowledge/ 放一个 .md → 页面能看到格式化渲染
+**验证:** 往 data/knowledge/ 放一个 .md → 页面能看到格式化渲染 ✅
 
 ---
 
