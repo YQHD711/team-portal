@@ -17,10 +17,11 @@ public class KnowledgeService
 
         // Public knowledge — always visible
         var publicPath = Path.Combine(_basePath, "公共");
-        if (Directory.Exists(publicPath))
-            nodes.Add(new TreeNode { Name = "公共知识库", Type = "folder", Path = "公共", Children = ScanDirectory(publicPath) });
-        else
-            nodes.Add(new TreeNode { Name = "公共知识库", Type = "folder", Path = "公共", Children = new() });
+        var publicChildren = Directory.Exists(publicPath) ? ScanDirectory(publicPath) : new List<TreeNode>();
+        // Also include root-level .md files (legacy migration)
+        foreach (var file in Directory.GetFiles(_basePath, "*.md").Where(f => !f.EndsWith(".gitkeep")))
+            publicChildren.Add(new TreeNode { Name = Path.GetFileNameWithoutExtension(file), Type = "file", Path = Path.GetFileName(file) });
+        nodes.Add(new TreeNode { Name = "公共知识库", Type = "folder", Path = "公共", Children = publicChildren });
 
         // Department knowledge
         if (role == "admin")
@@ -71,6 +72,8 @@ public class KnowledgeService
     public bool CanAccess(string relativePath, string? role, string? department)
     {
         if (role == "admin") return true;
+        // Legacy root-level files are public
+        if (!relativePath.Contains('/')) return true;
         if (relativePath.StartsWith("公共") || relativePath.StartsWith("公共/")) return true;
         if (!string.IsNullOrEmpty(department) && (relativePath == department || relativePath.StartsWith(department + "/"))) return true;
         return false;
