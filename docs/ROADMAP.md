@@ -65,22 +65,22 @@
 
 ---
 
-## Phase 3: 零件库存（预计 1 天）
+## Phase 3: 零件库存 ✅ (2026-07-04)
 
 ### 3.1 Excel 读取
-- [ ] ai-service: /api/parse/excel → openpyxl 读 Excel → JSON
-- [ ] C# InventoryService: 调 Python API 获取数据
-- [ ] GET /api/inventory: 返回零件列表
-- [ ] POST /api/inventory: 新增零件
-- [ ] PUT /api/inventory/{id}: 更新数量/位置
+- [x] ai-service: /api/parse/excel → openpyxl 读 Excel → JSON
+- [x] C# InventoryService: 调 Python API 获取数据
+- [x] GET /api/inventory: 返回零件列表
+- [x] POST /api/inventory: 新增零件
+- [x] PUT /api/inventory/{id}: 更新数量/位置
 
 ### 3.2 前端库存页
-- [ ] 搜索框 + 分类筛选
-- [ ] 表格: 名称 / 类别 / 数量 / 位置 / 状态
-- [ ] recharts: 各类别零件数量饼图
-- [ ] 数量低于阈值高亮警告
+- [x] 搜索框 + 分类筛选
+- [x] 表格: 名称 / 类别 / 数量 / 位置 / 状态
+- [x] recharts: 各类别零件数量饼图
+- [x] 数量低于阈值高亮警告
 
-**验证:** data/inventory.xlsx → API 返回 JSON → 前端展示
+**验证:** data/inventory.xlsx → API 返回 JSON → 前端展示 ✅
 
 ---
 

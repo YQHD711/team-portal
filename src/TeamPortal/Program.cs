@@ -33,6 +33,7 @@ builder.Services.AddAuthorization();
 // Services
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
+builder.Services.AddScoped<InventoryService>();
 
 builder.Services.AddOpenApi();
 
@@ -59,5 +60,6 @@ app.UseAuthorization();
 app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API" }));
 app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
+app.MapInventoryEndpoints();
 
 app.Run();
