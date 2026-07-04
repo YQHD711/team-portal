@@ -29,12 +29,13 @@ public static class AdminEndpoints
             return Results.Ok(await svc.ListUsers(role, dept));
         });
 
-        admin.MapPost("/users", async (CreateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db) =>
+        admin.MapPost("/users", async (CreateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, NotificationService notify) =>
         {
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
                 return Results.Problem("用户名和密码必填", statusCode: 400);
             var (role, dept, _) = await GetUserCtx(user, db);
             var u = await svc.CreateUser(req.Username, req.Password, req.Role ?? "member", req.DepartmentId, role, dept);
+            if (u is not null) notify.Notify("新成员加入", $"{req.Username} 加入了团队", "/admin/users");
             return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在", statusCode: 409);
         });
 

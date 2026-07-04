@@ -3,23 +3,23 @@
 import { useState, useEffect } from "react";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
-import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Clock, ExternalLink } from "lucide-react";
+import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Bell, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface Stats { userCount: number; inventoryCount: number; inventoryTotal: number; departmentCount: number; }
-interface LogEntry { id: number; level: string; category: string; message: string; createdAt: string; userName: string | null; }
+interface NotifItem { id: number; title: string; message: string; link: string | null; createdAt: string; isRead: boolean; }
 interface TaskInfo { id: string; projectName: string; status: string; createdAt: string; }
 interface InventoryItem { id: number; name: string; quantity: number; category: string; }
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [notifs, setNotifs] = useState<NotifItem[]>([]);
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
 
   useEffect(() => {
     api.get<Stats>("/api/admin/stats").then(setStats).catch(() => {});
-    api.get<LogEntry[]>("/api/admin/logs?page=1").then(setLogs).catch(() => {});
+    api.get<NotifItem[]>("/api/notifications").then(d => setNotifs(d.slice(0, 6))).catch(() => {});
     api.get<TaskInfo[]>("/api/wiki/tasks").then(d => setTasks(d.filter(t => t.status === "completed").slice(0, 3))).catch(() => {});
     api.get<InventoryItem[]>("/api/inventory").then(items => setLowStock(items.filter(i => i.quantity < 5 && i.quantity > 0))).catch(() => {});
   }, []);
@@ -76,26 +76,27 @@ export default function Home() {
             </div>
           )}
 
-          {/* Recent activity */}
+          {/* Recent notifications */}
           <div className="rounded-2xl border border-border bg-surface p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Clock className="h-4 w-4 text-muted" />
-              <h3 className="font-semibold text-sm">最近动态</h3>
-              <Link href="/admin/logs" className="ml-auto text-xs text-blue-500 hover:underline">全部日志</Link>
+              <Bell className="h-4 w-4 text-muted" />
+              <h3 className="font-semibold text-sm">团队动态</h3>
             </div>
-            <div className="space-y-2">
-              {logs.slice(0, 8).map(l => (
-                <div key={l.id} className="flex items-start gap-3 text-sm">
-                  <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${l.level === "error" ? "bg-red-500" : l.level === "warn" ? "bg-amber-500" : "bg-blue-400"}`} />
+            <div className="space-y-1.5">
+              {notifs.map(n => (
+                <div key={n.id} className="flex items-start gap-3 text-sm p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                  <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-400" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-muted text-xs mr-2">{new Date(l.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
-                    <span className="text-xs text-slate-400 dark:text-slate-500 mr-1">[{l.category}]</span>
-                    {l.message}
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{n.title}</span>
+                      <span className="text-xs text-muted shrink-0">{new Date(n.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <div className="text-xs text-muted mt-0.5">{n.message}</div>
                   </div>
-                  {l.userName && <span className="text-xs text-muted shrink-0">{l.userName}</span>}
+                  {n.link && <Link href={n.link} className="shrink-0 text-xs text-blue-500 hover:underline mt-0.5">查看</Link>}
                 </div>
               ))}
-              {logs.length === 0 && <div className="text-sm text-muted py-4 text-center">暂无活动记录</div>}
+              {notifs.length === 0 && <div className="text-sm text-muted py-6 text-center">暂无团队动态</div>}
             </div>
           </div>
         </div>
@@ -144,7 +145,7 @@ export default function Home() {
               {[
                 { href: "/knowledge", label: "知识库", icon: FileText, color: "bg-blue-500/10 text-blue-600" },
                 { href: "/inventory", label: "库存管理", icon: TrendingUp, color: "bg-amber-500/10 text-amber-600" },
-                { href: "/flightlog", label: "飞行日志", icon: Clock, color: "bg-emerald-500/10 text-emerald-600" },
+                { href: "/flightlog", label: "飞行日志", icon: TrendingUp, color: "bg-emerald-500/10 text-emerald-600" },
                 { href: "/admin/users", label: "用户管理", icon: Bird, color: "bg-purple-500/10 text-purple-600" },
               ].map(item => (
                 <Link key={item.href} href={item.href}
