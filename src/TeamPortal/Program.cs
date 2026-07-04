@@ -49,6 +49,7 @@ builder.Services.AddHttpClient<FlightLogService>();
 builder.Services.AddHttpClient<DocumentService>();
 builder.Services.AddScoped<WikiGeneratorService>();
 builder.Services.AddScoped<SystemAgentService>();
+builder.Services.AddScoped<BaiduNetdiskService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddSingleton<LogService>();
 builder.Services.AddSingleton<NotificationService>();
@@ -85,6 +86,7 @@ app.MapFlightLogEndpoints();
 app.MapAdminEndpoints();
 app.MapLogEndpoints();
 app.MapWikiEndpoints();
+app.MapBaiduEndpoints();
 app.MapNotificationEndpoints();
 app.MapSystemAgentEndpoints();
 
