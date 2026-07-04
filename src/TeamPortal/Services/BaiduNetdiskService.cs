@@ -40,34 +40,37 @@ public class BaiduNetdiskService
     /// </summary>
     public string GetAuthUrl()
     {
-        var redirectUri = "oob"; // Out-of-band — shows code on screen
-        return $"{AuthUrl}?response_type=code&client_id={_appKey}&redirect_uri={redirectUri}&scope=basic,netdisk&display=page";
+        var redirectUri = "https://openapi.baidu.com/oauth/2.0/login_success";
+        return $"{AuthUrl}?response_type=code&client_id={_appKey}&redirect_uri={Uri.EscapeDataString(redirectUri)}&scope=basic,netdisk&display=page&force_login=1";
     }
 
-    /// <summary>
-    /// Exchange authorization code for tokens. Stores refresh token for future use.
-    /// </summary>
     public async Task<string> ExchangeCode(string code)
     {
-        var url = $"{OAuthUrl}?grant_type=authorization_code&code={code}&client_id={_appKey}&client_secret={_secretKey}&redirect_uri=oob";
+        var redirectUri = "https://openapi.baidu.com/oauth/2.0/login_success";
+        var url = $"{OAuthUrl}?grant_type=authorization_code&code={code}&client_id={_appKey}&client_secret={_secretKey}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+        _log.Info("baidu", $"Exchanging code for token...");
+
         var resp = await _http.GetAsync(url);
         var body = await resp.Content.ReadAsStringAsync();
+        _log.Info("baidu", $"Exchange response: {body[..Math.Min(300, body.Length)]}");
 
         if (!body.TrimStart().StartsWith('{'))
-            throw new InvalidOperationException($"授权失败: {body[..Math.Min(200, body.Length)]}");
+            throw new InvalidOperationException($"授权失败，返回非JSON: {body[..Math.Min(200, body.Length)]}");
 
         using var doc = JsonDocument.Parse(body);
         if (doc.RootElement.TryGetProperty("error", out var err))
-            throw new InvalidOperationException($"授权错误: {err.GetString()}");
+        {
+            var desc = doc.RootElement.TryGetProperty("error_description", out var d) ? d.GetString() : "";
+            throw new InvalidOperationException($"授权错误: {err.GetString()} - {desc}");
+        }
 
         _accessToken = doc.RootElement.GetProperty("access_token").GetString()!;
         var refreshToken = doc.RootElement.GetProperty("refresh_token").GetString()!;
         var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
         _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn - 300);
 
-        // Store refresh token
         File.WriteAllText(_tokenFile, JsonSerializer.Serialize(new { refresh_token = refreshToken }));
-        _log.Info("baidu", "Netdisk authorized successfully, refresh token stored");
+        _log.Info("baidu", $"Netdisk authorized. Token expires in {expiresIn}s, refresh_token stored");
         return "授权成功！网盘功能已可用";
     }
 
@@ -211,9 +214,17 @@ public class BaiduNetdiskService
     public async Task<List<BaiduFile>> ListFiles(string remoteDir = "/")
     {
         var token = await GetAccessToken();
-        var resp = await _http.GetAsync($"{ApiBase}/file?method=list&access_token={token}&dir={Uri.EscapeDataString(remoteDir)}&order=time&desc=1&limit=100");
+        var url = $"{ApiBase}/file?method=list&access_token={token}&dir={Uri.EscapeDataString(remoteDir)}&order=time&desc=1&limit=100";
+        _log.Info("baidu", $"ListFiles: dir={remoteDir}");
+        var resp = await _http.GetAsync(url);
         var body = await resp.Content.ReadAsStringAsync();
+        _log.Info("baidu", $"ListFiles response: {body[..Math.Min(200, body.Length)]}");
         using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("errno", out var err) && err.GetInt32() != 0)
+        {
+            _log.Error("baidu", $"ListFiles failed: errno={err.GetInt32()}");
+            return new List<BaiduFile>();
+        }
         var list = doc.RootElement.GetProperty("list");
         var files = new List<BaiduFile>();
         foreach (var f in list.EnumerateArray())
