@@ -85,6 +85,40 @@ public static class WikiEndpoints
             return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Document not found", statusCode: 404);
         });
 
+        // Serve source code file from workspace (for doc reference links)
+        wiki.MapGet("/tasks/{id}/blob/{**path}", async (string id, string path, HttpContext ctx, WikiGeneratorService generator) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null || string.IsNullOrEmpty(task.WorkspacePath)) return Results.Problem("Not found", statusCode: 404);
+            var fullPath = Path.GetFullPath(Path.Combine(task.WorkspacePath, path));
+            if (!fullPath.StartsWith(Path.GetFullPath(task.WorkspacePath))) return Results.Problem("Access denied", statusCode: 403);
+            if (!File.Exists(fullPath)) return Results.Problem("File not found", statusCode: 404);
+            var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+            var isBinary = new[] { ".dll", ".exe", ".png", ".jpg", ".ico", ".zip" }.Contains(ext);
+            if (isBinary) return Results.Problem("Binary file", statusCode: 400);
+            var content = await File.ReadAllTextAsync(fullPath);
+            var language = ext switch { ".cs" => "csharp", ".py" => "python", ".ts" => "typescript", ".tsx" => "typescript", ".js" => "javascript", ".go" => "go", ".rs" => "rust", ".java" => "java", ".md" => "markdown", ".json" => "json", ".xml" => "xml", ".html" => "html", ".css" => "css", ".sql" => "sql", _ => "" };
+            var lines = content.Split('\n');
+
+            // Return HTML page for browser viewing
+            if (ctx.Request.Headers.Accept.ToString().Contains("text/html"))
+            {
+                var htmlLines = string.Join("", lines.Select((l, i) => $"<tr><td class='ln'>{i+1}</td><td class='code'>{System.Net.WebUtility.HtmlEncode(l)}</td></tr>"));
+                var langTag = !string.IsNullOrEmpty(language) ? $"<span class='lang'>{language}</span>" : "";
+                var html = $@"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>{path} — {task.ProjectName}</title>
+<style>body{{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;background:#1e1e1e;color:#d4d4d4}}
+.header{{padding:10px 16px;background:#252526;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center}}
+.header a{{color:#4fc3f7;text-decoration:none;font-size:12px}}
+table{{width:100%;border-collapse:collapse}}td{{padding:0 8px;line-height:1.4}}td.ln{{width:50px;text-align:right;color:#858585;border-right:1px solid #333;user-select:none;vertical-align:top}}
+td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;color:#858585;margin-left:8px}}</style></head><body>
+<div class='header'><span>{System.Net.WebUtility.HtmlEncode(path)}{langTag}</span><a href='/wiki/{id}'>← 返回文档</a></div>
+<table>{htmlLines}</table></body></html>";
+                return Results.Content(html, "text/html; charset=utf-8");
+            }
+
+            return Results.Ok(new { path, content, language, lines = lines.Length });
+        });
+
         // Wiki settings
         wiki.MapGet("/settings", (WikiGeneratorService generator) => Results.Ok(generator.GetOptions()));
         wiki.MapPut("/settings", (WikiGeneratorOptions opts, WikiGeneratorService generator) => { generator.UpdateOptions(opts); return Results.Ok(new { success = true }); });
