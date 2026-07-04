@@ -1,0 +1,28 @@
+# Dependencies
+web/node_modules/
+web/.next/
+
+# Build
+src/TeamPortal/bin/
+src/TeamPortal/obj/
+src/TeamPortal/publish/
+
+# Python
+ai-service/__pycache__/
+ai-service/.venv/
+
+# Data (mounted at runtime)
+data/knowledge/
+data/inventory.xlsx
+data/flightlogs/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
