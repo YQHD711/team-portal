@@ -66,10 +66,8 @@ public static class WikiEndpoints
             return task is not null ? Results.Ok(task) : Results.Problem("Not found", statusCode: 404);
         });
 
-        // Public read-only endpoints (no auth - task ID is UUID, unguessable)
-        var wikiPublic = app.MapGroup("/api/wiki");
-
-        wikiPublic.MapGet("/tasks/{id}/catalog", async (string id, WikiGeneratorService generator) =>
+        // Serve catalog for wiki viewer
+        wiki.MapGet("/tasks/{id}/catalog", async (string id, WikiGeneratorService generator) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
@@ -77,7 +75,8 @@ public static class WikiEndpoints
             return Results.Content(task.CatalogJson, "application/json");
         });
 
-        wikiPublic.MapGet("/tasks/{id}/doc", async (string id, string path, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        // Serve wiki document content for viewer
+        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, WikiGeneratorService generator, KnowledgeService knowledge) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
@@ -86,8 +85,8 @@ public static class WikiEndpoints
             return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Document not found", statusCode: 404);
         });
 
-        // Source code file viewer — public (referenced by doc links)
-        wikiPublic.MapGet("/tasks/{id}/blob/{**path}", async (string id, string path, HttpContext ctx, WikiGeneratorService generator) =>
+        // Source code file viewer
+        wiki.MapGet("/tasks/{id}/blob/{**path}", async (string id, string path, HttpContext ctx, WikiGeneratorService generator) =>
         {
             var task = await generator.GetTask(id);
             if (task is null || string.IsNullOrEmpty(task.WorkspacePath)) return Results.Problem("Not found", statusCode: 404);

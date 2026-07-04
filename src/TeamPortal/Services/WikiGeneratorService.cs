@@ -535,7 +535,7 @@ README:
 4. 所有信息必须基于实际代码
 5. 写中文文档，但保持代码标识符原文
 6. 代码示例加语言标注 ```python, ```csharp 等
-7. **文件引用链接**: 引用源码时使用格式 [{path}](/api/wiki/tasks/{_currentTaskId}/blob/{path})，点击可查看源码
+7. **文件引用链接**: 引用源码时使用格式 [{path}](/wiki/{_currentTaskId}/blob/{path})，点击可查看源码
 8. 最后必须调用 write_doc 写入文档";
 
         var userMessage = $@"请撰写文档: **{docTitle}**
@@ -550,8 +550,8 @@ README:
 - 标题: {docTitle}
 
 ## 文件引用格式
-源码引用链接: `/api/wiki/tasks/{_currentTaskId}/blob/{{文件路径}}`
-使用 Markdown 链接: `[查看源码](/api/wiki/tasks/{_currentTaskId}/blob/src/main.py)`
+源码引用链接: `/wiki/{_currentTaskId}/blob/{{文件路径}}`
+使用 Markdown 链接: `[查看源码](/wiki/{_currentTaskId}/blob/src/main.py)`
 
 ## 指示
 1. 先用 list_files 和 search_code 找到相关文件
