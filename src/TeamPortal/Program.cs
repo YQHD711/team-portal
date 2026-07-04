@@ -34,6 +34,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddScoped<InventoryService>();
+builder.Services.AddHttpClient<AiProxyService>();
 
 builder.Services.AddOpenApi();
 
@@ -61,5 +62,6 @@ app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API"
 app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapInventoryEndpoints();
+app.MapAiEndpoints();
 
 app.Run();

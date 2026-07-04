@@ -84,19 +84,19 @@
 
 ---
 
-## Phase 4: AI 问答（预计 0.5 天）
+## Phase 4: AI 问答 ✅ (2026-07-04)
 
 ### 4.1 AI 服务
-- [ ] ai-service: POST /api/ai/chat → DeepSeek API (SSE)
-- [ ] ai-service: POST /api/ai/search → 全文检索 + RAG prompt
-- [ ] C# AiProxyService: HttpClient 转调
+- [x] ai-service: POST /api/ai/chat → DeepSeek API (SSE)
+- [x] ai-service: POST /api/ai/search → 全文检索 + RAG prompt
+- [x] C# AiProxyService: HttpClient 转调
 
 ### 4.2 前端 AI 对话
-- [ ] 仪表盘聊天面板
-- [ ] SSE 流式打字效果
-- [ ] 对话历史 (仅会话级，不持久化)
+- [x] 仪表盘聊天面板
+- [x] SSE 流式打字效果
+- [x] 对话历史 (仅会话级，不持久化)
 
-**验证:** 问 "CUADC 报名截止日期" → 从知识库检索 → 返回答案
+**验证:** 问 "CUADC 报名截止日期" → 从知识库检索 → 返回答案 ✅
 
 ---
 
