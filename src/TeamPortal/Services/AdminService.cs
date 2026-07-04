@@ -8,8 +8,9 @@ public class AdminService
 {
     private readonly AppDbContext _db;
     private readonly KnowledgeService _knowledge;
+    private readonly LogService _log;
 
-    public AdminService(AppDbContext db, KnowledgeService knowledge) { _db = db; _knowledge = knowledge; }
+    public AdminService(AppDbContext db, KnowledgeService knowledge, LogService log) { _db = db; _knowledge = knowledge; _log = log; }
 
     // ── Helpers ──
     public async Task<(string? role, string? dept)> GetUserInfo(int userId)
@@ -34,19 +35,15 @@ public class AdminService
     public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username)) return null;
-        // 部长只能创建自己部门的用户
         if (currentRole == "部长" && !string.IsNullOrEmpty(currentDept))
         {
             var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == currentDept);
             deptId = dept?.Id;
         }
-        var user = new User {
-            Username = username,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = (userRole == "admin" || userRole == "部长") ? userRole : "member",
-            DepartmentId = deptId
-        };
-        _db.Users.Add(user); await _db.SaveChangesAsync(); return user;
+        var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", DepartmentId = deptId };
+        _db.Users.Add(user); await _db.SaveChangesAsync();
+        _log.Info("admin", $"User created: {username}", $"{{\"role\":\"{user.Role}\",\"deptId\":{user.DepartmentId}}}", username);
+        return user;
     }
 
     public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? currentRole, string? currentDept)
@@ -65,7 +62,9 @@ public class AdminService
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null || user.Role == "admin" || user.Role == "部长") return false;
         if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
-        _db.Users.Remove(user); await _db.SaveChangesAsync(); return true;
+        _db.Users.Remove(user); await _db.SaveChangesAsync();
+        _log.Warn("admin", $"User deleted: {user.Username}", $"{{\"role\":\"{user.Role}\"}}");
+        return true;
     }
 
     // ── Departments ──
@@ -75,7 +74,8 @@ public class AdminService
     {
         var dept = new Department { Name = name, Description = description };
         _db.Departments.Add(dept); await _db.SaveChangesAsync();
-        _knowledge.CreateDepartmentFolder(name); // auto-create knowledge folder
+        _knowledge.CreateDepartmentFolder(name);
+        _log.Info("admin", $"Department created: {name}", $"{{\"desc\":\"{description}\"}}");
         return dept;
     }
 
@@ -92,7 +92,9 @@ public class AdminService
         var dept = await _db.Departments.FindAsync(id);
         if (dept is null) return false;
         await _db.Users.Where(u => u.DepartmentId == id).ExecuteUpdateAsync(s => s.SetProperty(u => u.DepartmentId, (int?)null));
-        _db.Departments.Remove(dept); await _db.SaveChangesAsync(); return true;
+        _db.Departments.Remove(dept); await _db.SaveChangesAsync();
+        _log.Warn("admin", $"Department deleted: {dept.Name}");
+        return true;
     }
 
     // ── Stats ──

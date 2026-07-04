@@ -24,6 +24,8 @@ public static class WikiEndpoints
 
             var uid = GetUserId(user);
             var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Info("wiki", $"Git task submitted: {req.ProjectName}", $"{{\"url\":\"{req.Url}\"}}");
             return Results.Ok(new { task.Id, task.Status });
         });
 
@@ -47,6 +49,8 @@ public static class WikiEndpoints
 
             var uid = GetUserId(user);
             var task = await generator.SubmitZip(zipPath, projectName, folder, uid);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Info("wiki", $"ZIP task submitted: {projectName}", $"{{\"size\":{file.Length}}}");
             return Results.Ok(new { task.Id, task.Status });
         }).DisableAntiforgery();
 

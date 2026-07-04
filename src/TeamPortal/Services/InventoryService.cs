@@ -9,10 +9,11 @@ public class InventoryService
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
+    private readonly LogService _log;
 
-    public InventoryService(AppDbContext db, IConfiguration config)
+    public InventoryService(AppDbContext db, IConfiguration config, LogService log)
     {
-        _db = db;
+        _db = db; _config = config; _log = log;
         _config = config;
     }
 
@@ -45,6 +46,7 @@ public class InventoryService
         };
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
+        _log.Info("inventory", $"Part added: {name}", $"{{\"qty\":{quantity},\"cat\":\"{category}\"}}");
         return item;
     }
 
@@ -66,9 +68,9 @@ public class InventoryService
     {
         var item = await _db.InventoryItems.FindAsync(id);
         if (item is null) return false;
-
         _db.InventoryItems.Remove(item);
         await _db.SaveChangesAsync();
+        _log.Warn("inventory", $"Part deleted: {item.Name}");
         return true;
     }
 

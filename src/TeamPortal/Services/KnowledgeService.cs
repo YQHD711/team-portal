@@ -3,9 +3,11 @@ namespace TeamPortal.Services;
 public class KnowledgeService
 {
     private readonly string _basePath;
+    private readonly LogService _log;
 
-    public KnowledgeService(IConfiguration config)
+    public KnowledgeService(IConfiguration config, LogService log)
     {
+        _log = log;
         _basePath = config.GetValue<string>("Knowledge:BasePath")
                     ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
     }
@@ -58,14 +60,15 @@ public class KnowledgeService
         var dir = Path.GetDirectoryName(fullPath);
         if (dir is not null) Directory.CreateDirectory(dir);
         File.WriteAllText(fullPath, content);
+        _log.Info("knowledge", $"File written: {relativePath}");
     }
 
     public void DeleteFile(string relativePath)
     {
         var fullPath = ResolvePath(relativePath);
         if (fullPath is null) throw new InvalidOperationException("Invalid path");
-        if (Directory.Exists(fullPath)) Directory.Delete(fullPath, true);
-        else if (File.Exists(fullPath)) File.Delete(fullPath);
+        if (Directory.Exists(fullPath)) { Directory.Delete(fullPath, true); _log.Warn("knowledge", $"Directory deleted: {relativePath}"); }
+        else if (File.Exists(fullPath)) { File.Delete(fullPath); _log.Warn("knowledge", $"File deleted: {relativePath}"); }
         else throw new InvalidOperationException("File not found");
     }
 

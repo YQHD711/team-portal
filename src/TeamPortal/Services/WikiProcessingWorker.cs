@@ -36,9 +36,13 @@ public class WikiProcessingWorker : BackgroundService
 
                 if (task != null)
                 {
-                    _logger.LogInformation("Processing wiki task {Id}: {Project}", task.Id, task.ProjectName);
+                    var log = scope.ServiceProvider.GetRequiredService<LogService>();
+                    log.Info("wiki", $"Processing wiki task: {task.ProjectName}");
                     await generator.ProcessTask(task.Id);
-                    _logger.LogInformation("Wiki task {Id} completed with status: {Status}", task.Id, task.Status);
+                    if (task.Status == "completed")
+                        log.Info("wiki", $"Wiki task completed: {task.ProjectName}", $"{{\"catalogDocs\":{task.CatalogJson?.Length ?? 0}}}");
+                    else
+                        log.Error("wiki", $"Wiki task failed: {task.ProjectName}", task.ErrorMessage);
                 }
             }
             catch (Exception ex)
