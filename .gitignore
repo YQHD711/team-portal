@@ -7,6 +7,11 @@ web/.next/
 **/obj/
 src/TeamPortal/publish/
 
+# Database (local dev)
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
 # Python
 **/__pycache__/
 ai-service/.venv/

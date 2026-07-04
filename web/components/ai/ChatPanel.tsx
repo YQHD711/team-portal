@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import { getToken } from "@/lib/auth";
 
 interface Message {
@@ -32,8 +32,7 @@ export function ChatPanel() {
 
     try {
       const token = getToken();
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const response = await fetch(`${API_BASE}/api/ai/chat`, {
+      const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -60,24 +59,19 @@ export function ChatPanel() {
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
-            const data = line.slice(6);
             try {
-              const parsed = JSON.parse(data);
+              const parsed = JSON.parse(line.slice(6));
               if (parsed.choices?.[0]?.delta?.content) {
-                const chunk = parsed.choices[0].delta.content;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const last = updated[updated.length - 1];
                   updated[updated.length - 1] = {
-                    ...last,
-                    content: last.content + chunk,
+                    ...updated[updated.length - 1],
+                    content: updated[updated.length - 1].content + parsed.choices[0].delta.content,
                   };
                   return updated;
                 });
               }
-            } catch {
-              // Skip unparseable SSE data
-            }
+            } catch { /* skip unparseable */ }
           }
         }
       }
@@ -86,7 +80,7 @@ export function ChatPanel() {
         const updated = [...prev];
         updated[updated.length - 1] = {
           ...updated[updated.length - 1],
-          content: "抱歉，AI 服务暂时不可用。请确认已配置 DEEPSEEK_API_KEY。",
+          content: "抱歉，AI 服务暂不可用。请确认已配置 DEEPSEEK_API_KEY 环境变量。",
         };
         return updated;
       });
@@ -96,72 +90,79 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-[500px] rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 font-medium">
-        AI 助手
+    <div className="flex flex-col rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-sky-50 to-transparent dark:from-sky-950/20">
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-sky-500 text-white">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <span className="font-medium text-sm">AI 助手</span>
+        <span className="text-xs text-zinc-400 ml-auto">基于知识库检索</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[450px]">
         {messages.length === 0 && (
-          <p className="text-center text-zinc-500 dark:text-zinc-400 text-sm mt-8">
-            问我任何关于航模队的问题，我会从知识库中查找答案。
-          </p>
+          <div className="flex flex-col items-center justify-center h-full text-center py-8">
+            <Bot className="h-10 w-10 mb-3 text-zinc-300 dark:text-zinc-600" />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              问我任何关于航模队的问题
+            </p>
+            <p className="text-xs text-zinc-400 mt-1">
+              我会从知识库中查找相关信息来回答
+            </p>
+          </div>
         )}
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
-          >
+          <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : ""}`}>
             {msg.role === "assistant" && (
-              <Bot className="h-5 w-5 shrink-0 mt-1 text-blue-600" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-900 shrink-0 mt-0.5">
+                <Bot className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+              </div>
             )}
             <div
-              className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${
+              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] sm:max-w-[75%] ${
                 msg.role === "user"
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "bg-zinc-100 dark:bg-zinc-800"
+                  ? "bg-sky-500 text-white rounded-br-md"
+                  : "bg-zinc-100 dark:bg-zinc-800 rounded-bl-md"
               }`}
             >
-              {msg.content || (streaming && i === messages.length - 1 ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                msg.content
-              ))}
+              {msg.content ? (
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+              ) : streaming && i === messages.length - 1 ? (
+                <div className="flex items-center gap-1.5 text-zinc-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-xs">思考中...</span>
+                </div>
+              ) : null}
             </div>
             {msg.role === "user" && (
-              <User className="h-5 w-5 shrink-0 mt-1 text-zinc-500" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 shrink-0 mt-0.5">
+                <User className="h-4 w-4 text-zinc-500" />
+              </div>
             )}
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="flex gap-2"
-        >
+      {/* Input */}
+      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="输入问题..."
             disabled={streaming}
-            className="flex-1 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-50 disabled:opacity-50"
+            className="flex-1 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={streaming || !input.trim()}
-            className="rounded-md bg-zinc-900 px-3 py-2 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors"
+            className="rounded-xl bg-sky-500 px-4 py-2.5 text-white hover:bg-sky-600 disabled:opacity-50 transition-colors shadow-sm flex items-center"
           >
-            {streaming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
+            {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
         </form>
       </div>

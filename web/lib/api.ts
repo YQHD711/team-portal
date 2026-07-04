@@ -1,6 +1,6 @@
 /** API client for Team Portal backend. All HTTP requests go through here. */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = ""; // Relative URL — proxied through Next.js rewrites
 
 async function request<T>(
   endpoint: string,
