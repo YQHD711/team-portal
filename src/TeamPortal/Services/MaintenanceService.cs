@@ -114,21 +114,20 @@ public class MaintenanceService
             await RunCommand("git add -A");
             await RunCommand($"git commit -m \"apply: {proposals.Count} proposals — build OK\"");
 
-            // Auto-restart: launch new process before exiting
-            var psi = new ProcessStartInfo
+            // Auto-restart: spawn detached process that waits for port release then starts
+            var restartCmd = $"powershell -Command \"Start-Sleep 3; cd '{ProjRoot}'; dotnet run --project src/TeamPortal/ 2>&1\"";
+            var psi = new ProcessStartInfo("cmd.exe", $"/c {restartCmd}")
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"timeout /t 2 /nobreak >nul && cd /d {ProjRoot} && dotnet run --project src/TeamPortal/\"",
                 UseShellExecute = true,
-                CreateNoWindow = false,
-                WindowStyle = ProcessWindowStyle.Minimized
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             };
             Process.Start(psi);
-            _log.Info("maintenance", "New process launched, exiting current...");
+            _log.Info("maintenance", "Restart scheduled, exiting...");
 
-            _ = Task.Run(async () => { await Task.Delay(500); Environment.Exit(0); });
+            _ = Task.Run(async () => { await Task.Delay(1000); Environment.Exit(0); });
 
-            return new { success = true, message = $"编译成功({buildMs}ms)！{proposals.Count} 个提案已应用，服务将在3秒后自动重启...", files = appliedFiles };
+            return new { success = true, message = $"编译成功({buildMs}ms)！{proposals.Count} 个提案已应用，正在自动重启...（等待5秒后刷新页面）", files = appliedFiles };
         }
         else
         {
