@@ -275,9 +275,11 @@ export default function AIAdminPage() {
             try {
               const res = await api.post<{success:boolean, message:string, error?:string, fullOutput?:string}>("/api/admin/maintenance/apply", {});
               if (res.success) {
-                setResult(`✅ ${res.message}\n\n请在终端执行 dotnet run 重启后端。`);
+                setResult(`✅ ${res.message}`);
+              } else if (res.message?.includes("没有待应用")) {
+                setResult(`ℹ️ ${res.message}`);
               } else {
-                setResult(`❌ 编译失败，已自动回滚！\n\n错误：${res.error || '未知'}\n\n详情：${(res.fullOutput || '').substring(0, 500)}`);
+                setResult(`❌ ${res.message}\n\n错误：${res.error || '未知'}\n\n详情：${(res.fullOutput || '').substring(0, 500)}`);
               }
               fetchProposals();
             } catch (e: any) { setResult("❌ 维护操作失败: " + (e?.message || '网络错误')); }
