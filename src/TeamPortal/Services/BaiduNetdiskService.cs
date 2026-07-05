@@ -21,7 +21,7 @@ public class BaiduNetdiskService
     private const string OAuthUrl = "https://openapi.baidu.com/oauth/2.0/token";
     private const string AuthUrl = "https://openapi.baidu.com/oauth/2.0/authorize";
     private const string ApiBase = "https://pan.baidu.com/rest/2.0/xpan";
-    private static readonly string _tokenFile = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "baidu-token.json");
+    private static string TokenFile => Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "baidu-token.json"));
 
     public BaiduNetdiskService(HttpClient http, IConfiguration config, LogService log)
     {
@@ -69,7 +69,7 @@ public class BaiduNetdiskService
         var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
         _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn - 300);
 
-        File.WriteAllText(_tokenFile, JsonSerializer.Serialize(new { refresh_token = refreshToken }));
+        File.WriteAllText(TokenFile, JsonSerializer.Serialize(new { refresh_token = refreshToken }));
         _log.Info("baidu", $"Netdisk authorized. Token expires in {expiresIn}s, refresh_token stored");
         return "授权成功！网盘功能已可用";
     }
@@ -80,11 +80,11 @@ public class BaiduNetdiskService
             return _accessToken;
 
         // Try refresh token first (from stored file)
-        if (File.Exists(_tokenFile))
+        if (File.Exists(TokenFile))
         {
             try
             {
-                var stored = JsonSerializer.Deserialize<StoredToken>(File.ReadAllText(_tokenFile));
+                var stored = JsonSerializer.Deserialize<StoredToken>(File.ReadAllText(TokenFile));
                 if (stored?.refresh_token != null)
                 {
                     var url = $"{OAuthUrl}?grant_type=refresh_token&refresh_token={stored.refresh_token}&client_id={_appKey}&client_secret={_secretKey}";
@@ -99,7 +99,7 @@ public class BaiduNetdiskService
                             var exp = d.RootElement.GetProperty("expires_in").GetInt32();
                             _tokenExpiry = DateTime.UtcNow.AddSeconds(exp - 300);
                             if (d.RootElement.TryGetProperty("refresh_token", out var rt))
-                                File.WriteAllText(_tokenFile, JsonSerializer.Serialize(new StoredToken { refresh_token = rt.GetString()! }));
+                                File.WriteAllText(TokenFile, JsonSerializer.Serialize(new StoredToken { refresh_token = rt.GetString()! }));
                             return _accessToken;
                         }
                     }
@@ -267,11 +267,13 @@ public class BaiduNetdiskService
         var resp = await _http.GetAsync($"{ApiBase}/file?method=info&access_token={token}");
         var body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("errno", out var err) && err.GetInt32() != 0)
+            return new { total = 0L, used = 0L, free = 0L };
         return new
         {
-            total = doc.RootElement.GetProperty("total").GetInt64(),
-            used = doc.RootElement.GetProperty("used").GetInt64(),
-            free = doc.RootElement.GetProperty("total").GetInt64() - doc.RootElement.GetProperty("used").GetInt64(),
+            total = doc.RootElement.TryGetProperty("total", out var t) ? t.GetInt64() : 0L,
+            used = doc.RootElement.TryGetProperty("used", out var u) ? u.GetInt64() : 0L,
+            free = 0L,
         };
     }
 }
