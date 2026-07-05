@@ -7,13 +7,16 @@ namespace TeamPortal.Services;
 
 public class InventoryService
 {
+    private const int LowStockThreshold = 3;
+
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly LogService _log;
+    private readonly NotificationService _notification;
 
-    public InventoryService(AppDbContext db, IConfiguration config, LogService log)
+    public InventoryService(AppDbContext db, IConfiguration config, LogService log, NotificationService notification)
     {
-        _db = db; _config = config; _log = log;
+        _db = db; _config = config; _log = log; _notification = notification;
     }
 
     public async Task<List<InventoryItem>> GetAll(string? search, string? category)
@@ -46,7 +49,16 @@ public class InventoryService
         };
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
+
+        // 审计日志
         _log.Info("inventory", $"Part added: {name}", $"{{\"qty\":{quantity},\"cat\":\"{category}\"}}");
+
+        // 低量告警
+        if (quantity <= LowStockThreshold)
+        {
+            _notification.Notify("库存预警", $"零件「{name}」库存仅剩 {quantity} 件，请及时补货。");
+        }
+
         return item;
     }
 
@@ -89,18 +101,35 @@ public class InventoryService
         var count = 0;
         foreach (var item in items)
         {
+            var name = item.GetProperty("name").GetString() ?? "";
+            var category = item.GetProperty("category").GetString() ?? "";
+            var quantity = item.GetProperty("quantity").GetInt32();
+            var location = item.GetProperty("location").GetString() ?? "";
+            var status = item.GetProperty("status").GetString() ?? "available";
+
             _db.InventoryItems.Add(new InventoryItem
             {
-                Name = item.GetProperty("name").GetString() ?? "",
-                Category = item.GetProperty("category").GetString() ?? "",
-                Quantity = item.GetProperty("quantity").GetInt32(),
-                Location = item.GetProperty("location").GetString() ?? "",
-                Status = item.GetProperty("status").GetString() ?? "available",
+                Name = name,
+                Category = category,
+                Quantity = quantity,
+                Location = location,
+                Status = status,
                 UpdatedAt = DateTime.UtcNow,
             });
+
+            // 低量告警
+            if (quantity <= LowStockThreshold)
+            {
+                _notification.Notify("库存预警", $"导入零件「{name}」库存仅剩 {quantity} 件，请及时补货。");
+            }
+
             count++;
         }
         await _db.SaveChangesAsync();
+
+        // 审计日志
+        _log.Info("inventory", $"Excel import completed", $"{{\"imported\":{count}}}");
+
         return count;
     }
 }
