@@ -14,7 +14,7 @@ public class FlightLogService
         _logDir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "flightlogs");
     }
 
-    public Task<object?> ListLogs()
+    public async Task<object?> ListLogs()
     {
         Directory.CreateDirectory(_logDir);
         var logs = new List<object>();
@@ -23,7 +23,7 @@ public class FlightLogService
             var info = new FileInfo(f);
             logs.Add(new { filename = info.Name, size = info.Length, modified = ((DateTimeOffset)info.LastWriteTimeUtc).ToUnixTimeSeconds() });
         }
-        return Task.FromResult<object?>(new { logs });
+        return new { logs };
     }
 
     public async Task<object?> ParseLog(string filename)
