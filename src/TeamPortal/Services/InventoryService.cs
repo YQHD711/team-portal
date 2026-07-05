@@ -14,7 +14,6 @@ public class InventoryService
     public InventoryService(AppDbContext db, IConfiguration config, LogService log)
     {
         _db = db; _config = config; _log = log;
-        _config = config;
     }
 
     public async Task<List<InventoryItem>> GetAll(string? search, string? category)
