@@ -114,20 +114,7 @@ public class MaintenanceService
             await RunCommand("git add -A");
             await RunCommand($"git commit -m \"apply: {proposals.Count} proposals — build OK\"");
 
-            // Auto-restart: spawn detached process that waits for port release then starts
-            var restartCmd = $"powershell -Command \"Start-Sleep 3; cd '{ProjRoot}'; dotnet run --project src/TeamPortal/ 2>&1\"";
-            var psi = new ProcessStartInfo("cmd.exe", $"/c {restartCmd}")
-            {
-                UseShellExecute = true,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-            Process.Start(psi);
-            _log.Info("maintenance", "Restart scheduled, exiting...");
-
-            _ = Task.Run(async () => { await Task.Delay(1000); Environment.Exit(0); });
-
-            return new { success = true, message = $"编译成功({buildMs}ms)！{proposals.Count} 个提案已应用，正在自动重启...（等待5秒后刷新页面）", files = appliedFiles };
+            return new { success = true, message = $"✅ 编译成功({buildMs}ms)！{proposals.Count} 个提案已应用。\n\n⚠️ 请重启后端使更改生效：在此终端按 Ctrl+C，然后运行 dotnet run --project src/TeamPortal/", files = appliedFiles };
         }
         else
         {
@@ -185,17 +172,7 @@ public class MaintenanceService
 
         _log.Warn("maintenance", $"回滚完成 — {applied.Count} 提案已恢复");
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"timeout /t 2 /nobreak >nul && cd /d {ProjRoot} && dotnet run --project src/TeamPortal/\"",
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Minimized
-        };
-        Process.Start(psi);
-
-        _ = Task.Run(async () => { await Task.Delay(500); Environment.Exit(0); });
-        return new { success = true, message = $"已回滚 {applied.Count} 个提案，服务将自动重启。" };
+        return new { success = true, message = $"✅ 已回滚 {applied.Count} 个提案。请重启后端使更改生效。" };
     }
 
     private async Task<string> RunCommand(string command, string? workingDir = null)
