@@ -90,12 +90,16 @@ public class MaintenanceService
         }
         await db.SaveChangesAsync();
 
-        // 4. Compile
+        // 4. Compile to temp output dir (avoids .exe lock from running process)
         _log.Info("maintenance", $"开始编译... 成功={appliedFiles.Count - failedCount} 文件, 失败={failedCount}");
+        var tempOut = Path.Combine(Path.GetTempPath(), $"teamportal-build-{Guid.NewGuid():N}");
         var buildStart = DateTime.UtcNow;
-        var buildResult = await RunCommand($"dotnet build src/TeamPortal/", ProjRoot);
+        var buildResult = await RunCommand($"dotnet build src/TeamPortal/ -o \"{tempOut}\" --nologo", ProjRoot);
         var buildMs = (int)(DateTime.UtcNow - buildStart).TotalMilliseconds;
         var buildSuccess = !buildResult.Contains(": error ") && !buildResult.Contains("生成失败") && !buildResult.Contains("Build FAILED");
+
+        // Clean temp
+        if (Directory.Exists(tempOut)) { try { Directory.Delete(tempOut, true); } catch { } }
 
         if (buildSuccess)
         {
@@ -110,7 +114,21 @@ public class MaintenanceService
             await RunCommand("git add -A");
             await RunCommand($"git commit -m \"apply: {proposals.Count} proposals — build OK\"");
 
-            return new { success = true, message = $"编译成功({buildMs}ms)！{proposals.Count} 个提案已应用。请重启服务。", files = appliedFiles };
+            // Auto-restart: launch new process before exiting
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"timeout /t 2 /nobreak >nul && cd /d {ProjRoot} && dotnet run --project src/TeamPortal/\"",
+                UseShellExecute = true,
+                CreateNoWindow = false,
+                WindowStyle = ProcessWindowStyle.Minimized
+            };
+            Process.Start(psi);
+            _log.Info("maintenance", "New process launched, exiting current...");
+
+            _ = Task.Run(async () => { await Task.Delay(500); Environment.Exit(0); });
+
+            return new { success = true, message = $"编译成功({buildMs}ms)！{proposals.Count} 个提案已应用，服务将在3秒后自动重启...", files = appliedFiles };
         }
         else
         {
@@ -167,7 +185,18 @@ public class MaintenanceService
         await db.SaveChangesAsync();
 
         _log.Warn("maintenance", $"回滚完成 — {applied.Count} 提案已恢复");
-        return new { success = true, message = $"已回滚 {applied.Count} 个提案。" };
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c \"timeout /t 2 /nobreak >nul && cd /d {ProjRoot} && dotnet run --project src/TeamPortal/\"",
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Minimized
+        };
+        Process.Start(psi);
+
+        _ = Task.Run(async () => { await Task.Delay(500); Environment.Exit(0); });
+        return new { success = true, message = $"已回滚 {applied.Count} 个提案，服务将自动重启。" };
     }
 
     private async Task<string> RunCommand(string command, string? workingDir = null)
