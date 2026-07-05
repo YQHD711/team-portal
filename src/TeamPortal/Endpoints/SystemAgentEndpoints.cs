@@ -103,9 +103,9 @@ public static class SystemAgentEndpoints
         });
 
         // ── Proposal lifecycle ──
-        // States: pending → (approve) → approved → (auto-apply) → applied / failed
+        // States: pending → (approve) → approved → (maintenance apply) → applied / failed
         //         pending → (reject) → rejected → (retry) → pending
-        //         applied → (revert) → reverted (restores .bak)
+        //         applied → (revert) → reverted
 
         // List proposals
         agent.MapGet("/proposals", async (AppDbContext db) =>
@@ -114,12 +114,11 @@ public static class SystemAgentEndpoints
             return Results.Ok(proposals);
         });
 
-        // Get single proposal with diff preview
+        // Get single proposal
         agent.MapGet("/proposals/{id}", async (string id, AppDbContext db) =>
         {
             var p = await db.CodeProposals.FindAsync(id);
             if (p is null) return Results.Problem("Not found", statusCode: 404);
-            // Compute what the diff would look like
             string? currentCode = null;
             if (!string.IsNullOrEmpty(p.FilePath))
             {
@@ -128,71 +127,23 @@ public static class SystemAgentEndpoints
                 if (fullPath.StartsWith(projRoot) && File.Exists(fullPath))
                     currentCode = await File.ReadAllTextAsync(fullPath);
             }
-            return Results.Ok(new { p.Id, p.Title, p.Description, p.FilePath, p.Status, p.SuggestedCode, p.OriginalCode, p.ErrorMessage, currentCode, p.CreatedAt, p.ReviewedBy });
+            return Results.Ok(new { p.Id, p.Title, p.Description, p.FilePath, p.Status, p.SuggestedCode, p.OriginalCode, p.ErrorMessage, currentCode, p.CreatedAt });
         });
 
-        // Approve + auto-apply
-        agent.MapPost("/proposals/{id}/approve", async (string id, ClaimsPrincipal user, AppDbContext db, LogService log, IWebHostEnvironment env) =>
+        // Approve — just marks status, actual apply is via maintenance panel
+        agent.MapPost("/proposals/{id}/approve", async (string id, ClaimsPrincipal user, AppDbContext db, LogService log) =>
         {
             var p = await db.CodeProposals.FindAsync(id);
             if (p is null) return Results.Problem("Not found", statusCode: 404);
             if (p.Status != "pending" && p.Status != "failed")
-                return Results.Problem($"Cannot approve proposal in '{p.Status}' state", statusCode: 400);
+                return Results.Problem($"Cannot approve in '{p.Status}' state", statusCode: 400);
 
             p.Status = "approved";
             p.ReviewedBy = user.FindFirstValue(ClaimTypes.Name);
             p.ErrorMessage = null;
-            log.Info("admin", $"Proposal approved: {p.Title}");
-
-            // Auto-apply if code is provided
-            if (!string.IsNullOrEmpty(p.FilePath) && !string.IsNullOrEmpty(p.SuggestedCode))
-            {
-                try
-                {
-                    var projRoot = Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", ".."));
-                    var fullPath = Path.GetFullPath(Path.Combine(projRoot, p.FilePath));
-                    log.Info("admin", $"Applying: {fullPath}");
-
-                    if (!fullPath.StartsWith(projRoot + Path.DirectorySeparatorChar) &&
-                        !fullPath.StartsWith(projRoot + "/") &&
-                        fullPath != projRoot)
-                    {
-                        p.Status = "failed";
-                        p.ErrorMessage = "路径安全校验不通过";
-                    }
-                    else
-                    {
-                        // Atomic write: write to .tmp first, then move
-                        var tmpPath = fullPath + ".tmp";
-                        var dir = Path.GetDirectoryName(fullPath);
-                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                            Directory.CreateDirectory(dir);
-
-                        // Backup original
-                        if (File.Exists(fullPath))
-                        {
-                            p.OriginalCode = await File.ReadAllTextAsync(fullPath);
-                            await File.WriteAllTextAsync(fullPath + ".bak", p.OriginalCode);
-                        }
-
-                        // Write new code atomically
-                        await File.WriteAllTextAsync(tmpPath, p.SuggestedCode);
-                        File.Move(tmpPath, fullPath, overwrite: true);
-
-                        p.Status = "applied";
-                        log.Info("admin", $"Proposal applied: {p.Title} → {p.FilePath}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    p.Status = "failed";
-                    p.ErrorMessage = ex.Message;
-                    log.Error("admin", $"Proposal apply failed: {ex.Message}");
-                }
-            }
-
             await db.SaveChangesAsync();
-            return Results.Ok(new { p.Status, p.ErrorMessage });
+            log.Info("admin", $"Proposal approved: {p.Title} (apply via maintenance panel)");
+            return Results.Ok(new { p.Status });
         });
 
         // Reject proposal

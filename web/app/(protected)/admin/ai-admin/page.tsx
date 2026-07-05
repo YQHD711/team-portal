@@ -223,7 +223,7 @@ export default function AIAdminPage() {
                 {p.status === "pending" && (
                   <>
                     <button onClick={() => handleAction(p.id, "approve")} className="inline-flex items-center gap-1 rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600">
-                      <Check className="h-3 w-3" />批准并应用
+                      <Check className="h-3 w-3" />批准
                     </button>
                     <button onClick={() => handleAction(p.id, "reject")} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs">
                       <X className="h-3 w-3" />拒绝
