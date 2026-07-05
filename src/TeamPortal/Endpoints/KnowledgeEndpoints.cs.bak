@@ -36,25 +36,5 @@ public static class KnowledgeEndpoints
             log.Warn("knowledge", $"Content NOT FOUND: path=[{path}]");
             return Results.Problem("Not found", statusCode: 404);
         }).RequireAuthorization();
-
-        app.MapDelete("/api/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log) =>
-        {
-            if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
-            path = Uri.UnescapeDataString(path);
-            var (role, dept) = await GetUserCtx(user, db);
-            if (role != "admin") return Results.Problem("Only admin can delete", statusCode: 403);
-            if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try
-            {
-                svc.DeleteFile(path);
-                log.Warn("knowledge", $"Deleted: [{path}] by user=[{user.FindFirstValue(ClaimTypes.NameIdentifier)}]");
-                return Results.Ok(new { message = $"Deleted: {path}" });
-            }
-            catch (InvalidOperationException ex)
-            {
-                log.Error("knowledge", $"Delete failed: [{path}]", ex.Message);
-                return Results.Problem(ex.Message, statusCode: 404);
-            }
-        }).RequireAuthorization();
     }
 }
