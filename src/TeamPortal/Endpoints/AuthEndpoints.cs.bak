@@ -12,25 +12,15 @@ public static class AuthEndpoints
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
                 return Results.Problem("Username and password are required", statusCode: 400);
 
-            if (req.Username.Trim().Length < 2)
-                return Results.Problem("用户名至少需要2个字符", statusCode: 400);
-
             if (req.Password.Length < 6)
                 return Results.Problem("Password must be at least 6 characters", statusCode: 400);
 
-            try
-            {
-                var user = await auth.Register(req.Username.Trim(), req.Password, req.Role ?? "member");
-                if (user is null)
-                    return Results.Problem("Username already exists", statusCode: 409);
+            var user = await auth.Register(req.Username, req.Password, req.Role ?? "member");
+            if (user is null)
+                return Results.Problem("Username already exists", statusCode: 409);
 
-                notify.Notify("新用户注册", $"{user.Username} 加入了系统", "/admin/users");
-                return Results.Ok(new { user.Id, user.Username, user.Role });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.Problem(ex.Message, statusCode: 400);
-            }
+            notify.Notify("新用户注册", $"{user.Username} 加入了系统", "/admin/users");
+            return Results.Ok(new { user.Id, user.Username, user.Role });
         });
 
         app.MapPost("/api/auth/login", async (LoginRequest req, AuthService auth) =>

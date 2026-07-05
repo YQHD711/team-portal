@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
@@ -7,21 +8,58 @@ namespace TeamPortal.Services;
 public class NotificationService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly Channel<Notification> _channel;
 
-    public NotificationService(IServiceScopeFactory scopeFactory) { _scopeFactory = scopeFactory; }
-
-    public void Notify(string title, string message, string? link = null)
+    public NotificationService(IServiceScopeFactory scopeFactory)
     {
-        _ = Task.Run(async () =>
+        _scopeFactory = scopeFactory;
+        _channel = Channel.CreateBounded<Notification>(new BoundedChannelOptions(500)
         {
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+        _ = ProcessChannel();
+    }
+
+    private async Task ProcessChannel()
+    {
+        var batch = new List<Notification>(10);
+        while (true)
+        {
+            try
+            {
+                batch.Clear();
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                try
+                {
+                    while (batch.Count < 10)
+                    {
+                        var entry = await _channel.Reader.ReadAsync(timeoutCts.Token);
+                        batch.Add(entry);
+                    }
+                }
+                catch (OperationCanceledException) { /* timeout — flush */ }
+            }
+            catch { break; }
+
+            if (batch.Count == 0) continue;
+
             try
             {
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                db.Notifications.Add(new Notification { Title = title, Message = message, Link = link });
+                db.Notifications.AddRange(batch);
                 await db.SaveChangesAsync();
             }
             catch { }
+        }
+    }
+
+    public void Notify(string title, string message, string? link = null)
+    {
+        _channel.Writer.TryWrite(new Notification
+        {
+            Title = title, Message = message, Link = link,
+            CreatedAt = DateTime.UtcNow
         });
     }
 
@@ -53,6 +91,7 @@ public class NotificationService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Notifications.Where(n => !n.IsRead).ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+        await db.Notifications.Where(n => !n.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
     }
 }

@@ -33,18 +33,10 @@ export default function KnowledgePage() {
   useEffect(() => {
     if (!filePath) { setContent(null); setLoading(false); return; }
     const fullPath = filePath + ".md";
-    const url = `/api/knowledge/content?path=${encodeURIComponent(fullPath)}`;
-    console.log("[KnowledgePage] filePath:", filePath, "| fullPath:", fullPath, "| url:", url);
     setLoading(true);
-    fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
-      .then(async r => {
-        const text = await r.text();
-        console.log("[KnowledgePage] status:", r.status, "| body:", text.substring(0, 200));
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = JSON.parse(text);
-        setContent(data.content);
-      })
-      .catch(e => { console.error("[KnowledgePage] error:", e.message); setContent(null); })
+    api.get<{content:string}>("/api/knowledge/content?path=" + encodeURIComponent(fullPath))
+      .then(data => setContent(data.content))
+      .catch(() => setContent(null))
       .finally(() => setLoading(false));
   }, [filePath]);
 

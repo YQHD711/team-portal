@@ -16,16 +16,25 @@ export default function Home() {
   const [notifs, setNotifs] = useState<NotifItem[]>([]);
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    api.get<Stats>("/api/admin/stats").then(setStats).catch(() => {});
-    api.get<NotifItem[]>("/api/notifications").then(d => setNotifs(d.slice(0, 6))).catch(() => {});
-    api.get<TaskInfo[]>("/api/wiki/tasks").then(d => setTasks(d.filter(t => t.status === "completed").slice(0, 3))).catch(() => {});
-    api.get<InventoryItem[]>("/api/inventory").then(items => setLowStock(items.filter(i => i.quantity < 5 && i.quantity > 0))).catch(() => {});
+    Promise.all([
+      api.get<Stats>("/api/admin/stats").catch(() => null),
+      api.get<NotifItem[]>("/api/notifications").catch(() => [] as NotifItem[]),
+      api.get<TaskInfo[]>("/api/wiki/tasks").catch(() => [] as TaskInfo[]),
+      api.get<InventoryItem[]>("/api/inventory").catch(() => [] as InventoryItem[]),
+    ]).then(([s, n, t, items]) => {
+      if (s) setStats(s);
+      setNotifs((n as NotifItem[]).slice(0, 6));
+      setTasks((t as TaskInfo[]).filter(tk => tk.status === "completed").slice(0, 3));
+      setLowStock((items as InventoryItem[]).filter(i => i.quantity < 5 && i.quantity > 0));
+      setLoaded(true);
+    });
   }, []);
 
-  const activeMembers = stats?.userCount ?? "—";
-  const totalParts = stats?.inventoryTotal ?? "—";
+  const activeMembers = loaded ? (stats?.userCount ?? "—") : <span className="inline-block w-8 h-5 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />;
+  const totalParts = loaded ? (stats?.inventoryTotal ?? "—") : <span className="inline-block w-8 h-5 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -34,8 +43,8 @@ export default function Home() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
         <div className="relative flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur">
-              <Bird className="h-7 w-7" />
+            <div className="hidden sm:flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur overflow-hidden">
+              <img src="/logo.png" alt="雏鹰之翼" className="w-10 h-10 object-contain" />
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">雏鹰之翼 · 航模队</h1>
@@ -96,7 +105,7 @@ export default function Home() {
                   {n.link && <Link href={n.link} className="shrink-0 text-xs text-blue-500 hover:underline mt-0.5">查看</Link>}
                 </div>
               ))}
-              {notifs.length === 0 && <div className="text-sm text-muted py-6 text-center">暂无团队动态</div>}
+              {notifs.length === 0 && <div className="text-sm text-muted py-6 text-center">{loaded ? "暂无团队动态" : "加载中..."}</div>}
             </div>
           </div>
         </div>

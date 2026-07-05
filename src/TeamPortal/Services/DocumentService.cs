@@ -26,7 +26,8 @@ public class DocumentService
         var fileName = Path.GetFileName(file.FileName);
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         var mdName = Path.GetFileNameWithoutExtension(fileName) + ".md";
-        var tempPath = Path.GetTempFileName();
+        // Preserve original extension for AI service format detection
+        var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}{ext}");
 
         try
         {

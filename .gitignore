@@ -7,6 +7,9 @@ web/.next/
 **/obj/
 src/TeamPortal/publish/
 
+# Secrets (local dev only — use env vars in production)
+src/TeamPortal/appsettings.Development.json
+
 # Database (local dev)
 **/*.db
 **/*.db-shm

@@ -10,8 +10,8 @@ namespace TeamPortal.Services;
 public class AiProxyService
 {
     private readonly HttpClient _http;
-    private readonly string _apiKey;
-    private readonly string _baseUrl;
+    private readonly IConfiguration _config;
+    private readonly SettingsService _settings;
     private readonly string _knowledgeDir;
 
     private const string SystemPrompt = """
@@ -46,30 +46,39 @@ public class AiProxyService
         - 需要特别注意的安全事项用 ⚠️ 标记
         """;
 
-    public AiProxyService(HttpClient http, IConfiguration config, KnowledgeService knowledge)
+    public AiProxyService(HttpClient http, IConfiguration config, SettingsService settings, KnowledgeService knowledge)
     {
         _http = http;
-        _apiKey = config.GetValue<string>("AiService:DeepSeekKey") ?? "";
-        _baseUrl = config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+        _config = config;
+        _settings = settings;
         _knowledgeDir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
     }
 
     /// <summary>
-    /// Chat with RAG — searches knowledge base and streams answer via SSE.
+    /// Chat with RAG + conversation memory.
     /// </summary>
-    public async Task<Stream?> ChatStream(string question)
+    public async Task<Stream?> ChatStream(string question, List<(string role, string content)>? history = null)
     {
-        if (string.IsNullOrEmpty(_apiKey)) return null;
+        var apiKey = await _settings.Get("AI:DeepSeekKey");
+        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
+        if (string.IsNullOrEmpty(apiKey)) return null;
 
         // 1. Search knowledge base
         var sources = SearchKnowledge(question);
         var context = BuildContext(sources);
 
-        // 2. Build messages
+        // 2. Build messages with conversation history
         var messages = new List<object>
         {
             new { role = "system", content = SystemPrompt },
         };
+
+        // Add conversation history (last 50 messages) for context
+        if (history != null && history.Count > 0)
+        {
+            foreach (var (role, content) in history)
+                messages.Add(new { role, content });
+        }
 
         if (!string.IsNullOrEmpty(context))
         {
@@ -78,24 +87,28 @@ public class AiProxyService
 
         messages.Add(new { role = "user", content = question });
 
-        // 3. Call DeepSeek V4 Pro
+        // 3. Call AI
+        var modelName = await _settings.Get("AI:ModelName", "deepseek-chat");
+        var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
+        var temperature = await _settings.GetDouble("AI:Temperature", 1.0);
+
         var payload = new
         {
-            model = "deepseek-v4-pro",
+            model = modelName,
             messages,
             stream = true,
-            temperature = 1.0,
+            temperature,
             top_p = 1.0,
             max_tokens = 4096,
             extra_body = new { thinking_mode = "non-thinking" }
         };
 
         var json = JsonSerializer.Serialize(payload);
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
-        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+        req.Headers.Add("Authorization", $"Bearer {apiKey}");
 
         var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
         return response.IsSuccessStatusCode ? await response.Content.ReadAsStreamAsync() : null;
@@ -110,7 +123,9 @@ public class AiProxyService
         var context = BuildContext(sources);
 
         string? answer = null;
-        if (!string.IsNullOrEmpty(_apiKey))
+        var apiKey2 = await _settings.Get("AI:DeepSeekKey");
+        if (string.IsNullOrEmpty(apiKey2)) apiKey2 = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
+        if (!string.IsNullOrEmpty(apiKey2))
         {
             try
             {
@@ -125,9 +140,12 @@ public class AiProxyService
 
                 messages.Add(new { role = "user", content = ragPrompt });
 
+                var modelName = await _settings.Get("AI:ModelName", "deepseek-chat");
+                var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
+
                 var payload = new
                 {
-                    model = "deepseek-v4-pro",
+                    model = modelName,
                     messages,
                     temperature = 1.0,
                     top_p = 1.0,
@@ -136,11 +154,11 @@ public class AiProxyService
                 };
 
                 var json = JsonSerializer.Serialize(payload);
-                var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+                var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };
-                req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+                req.Headers.Add("Authorization", $"Bearer {apiKey2}");
 
                 var resp = await _http.SendAsync(req);
                 if (resp.IsSuccessStatusCode)

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/ui/ThemeProvider";
 export const metadata: Metadata = {
   title: "雏鹰之翼 · 航模队管理系统",
   description: "雏鹰之翼航模队 — 知识库、零件库存、飞行日志管理与AI助手",
+  icons: { icon: "/logo.png" },
 };
 
 export default function RootLayout({

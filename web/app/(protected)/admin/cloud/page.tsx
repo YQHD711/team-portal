@@ -4,7 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Cloud, Upload, Download, Trash2, RefreshCw, HardDrive, Folder, File, Loader2, Key, ExternalLink, ArrowLeft } from "lucide-react";
 
 interface Quota { total: number; used: number; free: number; }
-interface BaiduFile { path: string; name: string; size: number; isDir: boolean; modified: number; }
+interface BaiduFile { path: string; name: string; size: number; isDir: boolean; modified: number; fsId: number; }
+
+const AUTH_KEY = "baidu_authed";
 
 export default function CloudPage() {
   const [quota, setQuota] = useState<Quota | null>(null);
@@ -18,38 +20,52 @@ export default function CloudPage() {
   const [authUrl, setAuthUrl] = useState("");
   const [authCode, setAuthCode] = useState("");
   const [authMsg, setAuthMsg] = useState("");
+  const [loadingAuthUrl, setLoadingAuthUrl] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const persistAuth = (value: boolean) => {
+    if (value) localStorage.setItem(AUTH_KEY, "1");
+    else localStorage.removeItem(AUTH_KEY);
+  };
 
   const fetchDir = useCallback(async (dir: string, addToStack: boolean = true) => {
     setLoading(true);
     setCurrentDir(dir);
     try {
+      const token = localStorage.getItem("token");
       const data = await fetch(`/api/admin/baidu/files?dir=${encodeURIComponent(dir)}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        headers: { Authorization: `Bearer ${token}` }
       }).then(r => r.json());
       if (Array.isArray(data)) {
         setFiles(data);
         setAuthed(true);
+        persistAuth(true);
         if (addToStack && dir !== pathStack[pathStack.length - 1]) {
           setPathStack(prev => [...prev, dir]);
         }
       } else {
         setFiles([]);
         setAuthed(false);
+        persistAuth(false);
       }
     } catch {
       setFiles([]);
       setAuthed(false);
+      persistAuth(false);
     }
     setLoading(false);
   }, [pathStack]);
 
   useEffect(() => {
+    // Check previous auth state from localStorage
+    const wasAuthed = localStorage.getItem(AUTH_KEY) === "1";
+
     fetch(`/api/admin/baidu/quota`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     }).then(r => r.json()).then(d => {
-      if (d.total > 0) { setQuota(d); setAuthed(true); }
-    }).catch(() => {});
+      if (d.total > 0) { setQuota(d); setAuthed(true); persistAuth(true); }
+      else if (!wasAuthed) { setAuthed(false); }
+    }).catch(() => { if (!wasAuthed) setAuthed(false); });
     fetchDir("/", false);
   }, []);
 
@@ -67,13 +83,21 @@ export default function CloudPage() {
   };
 
   const getAuthUrl = async () => {
-    const data = await fetch("/api/admin/baidu/auth-url", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-    }).then(r => r.json());
-    setAuthUrl(data.url);
+    setLoadingAuthUrl(true);
+    try {
+      const data = await fetch("/api/admin/baidu/auth-url", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      }).then(r => r.json());
+      setAuthUrl(data.url);
+    } catch {
+      setAuthMsg("❌ 获取授权链接失败，请检查网络连接");
+    } finally {
+      setLoadingAuthUrl(false);
+    }
   };
 
   const submitCode = async () => {
+    setAuthMsg("");
     try {
       const res = await fetch("/api/admin/baidu/auth-code", {
         method: "POST",
@@ -84,9 +108,11 @@ export default function CloudPage() {
       if (data.success) {
         setAuthMsg("✅ " + data.message);
         setAuthed(true);
+        persistAuth(true);
+        setAuthCode("");
         fetchDir("/", false);
       } else {
-        setAuthMsg("❌ 授权码无效");
+        setAuthMsg("❌ 授权码无效或已过期");
       }
     } catch { setAuthMsg("❌ 授权失败"); }
   };
@@ -107,15 +133,24 @@ export default function CloudPage() {
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
-  const handleDownload = async (path: string) => {
+  const handleDownload = async (file: BaiduFile) => {
+    setMsg(`⏳ 正在下载 ${file.name}...`);
     try {
       const token = localStorage.getItem("token");
-      const res = await window.fetch(`/api/admin/baidu/download?path=${encodeURIComponent(path)}`, {
+      const res = await window.fetch(`/api/admin/baidu/download?fsId=${file.fsId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) { setMsg("❌ 下载失败"); return; }
-      const data = await res.json();
-      window.open(data.url, "_blank");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setMsg(`✅ ${file.name} 下载完成`);
     } catch { setMsg("❌ 下载失败"); }
   };
 
@@ -149,13 +184,15 @@ export default function CloudPage() {
 
       {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{msg}</div>}
 
-      {/* Auth section */}
-      {!authed && (
+      {/* Auth section — only show if explicitly not authed */}
+      {authed === false && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 space-y-4">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-semibold"><Key className="h-5 w-5" />需要授权</div>
           <p className="text-sm text-amber-700 dark:text-amber-300">首次使用需授权百度网盘访问权限（仅需一次，之后自动续期）。</p>
           {!authUrl ? (
-            <button onClick={getAuthUrl} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">获取授权链接</button>
+            <button onClick={getAuthUrl} disabled={loadingAuthUrl} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50">
+              {loadingAuthUrl ? "获取中..." : "获取授权链接"}
+            </button>
           ) : (
             <div className="space-y-3">
               <a href={authUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">打开授权页面 <ExternalLink className="h-3 w-3" /></a>
@@ -219,7 +256,7 @@ export default function CloudPage() {
                 </div>
                 {!f.isDir && (
                   <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => handleDownload(f.path)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500"><Download className="h-4 w-4" /></button>
+                    <button onClick={() => handleDownload(f)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500"><Download className="h-4 w-4" /></button>
                     <button onClick={() => handleDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 )}

@@ -11,7 +11,8 @@ public class CodeProposal
     public string FilePath { get; set; } = string.Empty;
     public string? OriginalCode { get; set; }
     public string? SuggestedCode { get; set; }
-    public string Status { get; set; } = "pending"; // pending | approved | rejected | applied
+    public string Status { get; set; } = "pending"; // pending | approved | rejected | applied | failed | reverted
+    public string? ErrorMessage { get; set; }
     public string? CreatedBy { get; set; }
     public string? ReviewedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -20,17 +20,15 @@ public class AdminService
     }
 
     // ── Users ──
-    public async Task<List<object>> ListUsers(string? role, string? dept)
+    public async Task<List<object>> ListUsers(string? role, string? dept, int userId)
     {
         var query = _db.Users.Include(u => u.Department).AsQueryable();
-        if (role == "部长") query = query.Where(u => u.Department!.Name == dept || u.Id == int.Parse(GetUserIdFromDept(dept)));
+        if (role == "部长") query = query.Where(u => u.Department!.Name == dept || u.Id == userId);
         return await query.OrderBy(u => u.Id).Select(u => new {
             u.Id, u.Username, u.Role, Department = u.Department != null ? u.Department.Name : null,
             u.DepartmentId, u.CreatedAt
         }).ToListAsync<object>();
     }
-
-    private string GetUserIdFromDept(string? dept) => "0"; // placeholder
 
     public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept)
     {
@@ -50,7 +48,7 @@ public class AdminService
     {
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
-        if (currentRole == "部长" && user.Department?.Name != currentDept && user.Id != id) return false;
+        if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
         if (userRole is not null) user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member";
         if (deptId.HasValue) user.DepartmentId = deptId == 0 ? null : deptId;
         if (!string.IsNullOrWhiteSpace(password)) user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);

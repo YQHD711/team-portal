@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bird, LogIn, Eye, EyeOff, Sparkles } from "lucide-react";
+import { LogIn, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
-import { setToken } from "@/lib/auth";
+import { setToken, setUserRole } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,7 +19,14 @@ export default function LoginPage() {
     setError(""); setLoading(true);
     try {
       const data = await api.post<{ token: string }>("/api/auth/login", { username, password });
-      setToken(data.token); router.replace("/");
+      setToken(data.token);
+      // Decode JWT to extract role
+      try {
+        const payload = JSON.parse(atob(data.token.split(".")[1]));
+        const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+        if (role) setUserRole(role);
+      } catch { /* ignore decode error */ }
+      router.replace("/");
     } catch (err) { setError(err instanceof Error ? err.message : "登录失败"); }
     finally { setLoading(false); }
   };
@@ -29,12 +36,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 via-cyan-500 to-blue-600 text-white shadow-2xl shadow-blue-500/25 mx-auto mb-4">
-            <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur" />
-            <Bird className="h-9 w-9 relative z-10" />
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-cyan-400 rounded-full flex items-center justify-center shadow-lg">
-              <Sparkles className="h-3 w-3 text-white" />
-            </div>
+          <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 via-cyan-500 to-blue-600 shadow-2xl shadow-blue-500/25 mx-auto mb-4 overflow-hidden">
+            <img src="/logo.png" alt="雏鹰之翼" className="w-14 h-14 object-contain relative z-10" />
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">雏鹰之翼</h1>
           <p className="text-sm text-muted mt-1">队员协作 · 知识共享 · 飞行分析</p>

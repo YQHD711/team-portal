@@ -11,8 +11,11 @@ export default function DepartmentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editDept, setEditDept] = useState<Dept | null>(null);
   const [form, setForm] = useState({ name: "", description: "" });
+  const [loading, setLoading] = useState(true);
 
-  const fetch = () => api.get<Dept[]>("/api/admin/departments").then(setDepts);
+  const fetch = () => {
+    api.get<Dept[]>("/api/admin/departments").then(setDepts).catch(() => {}).finally(() => setLoading(false));
+  };
   useEffect(() => { fetch(); }, []);
 
   const openCreate = () => { setEditDept(null); setForm({ name: "", description: "" }); setShowForm(true); };
@@ -50,7 +53,8 @@ export default function DepartmentsPage() {
             </div>
           </div>
         ))}
-        {depts.length === 0 && <div className="sm:col-span-2 text-center py-12 text-zinc-400"><Building2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无部门</div>}
+        {loading ? <div className="sm:col-span-2 text-center py-12 text-zinc-400">加载中...</div> :
+         depts.length === 0 && <div className="sm:col-span-2 text-center py-12 text-zinc-400"><Building2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无部门</div>}
       </div>
 
       {showForm && (

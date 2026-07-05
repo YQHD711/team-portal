@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BookOpen, Package, BarChart3, X, Bird,
+  LayoutDashboard, BookOpen, Package, BarChart3, X,
   Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -59,8 +59,8 @@ export function Sidebar() {
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 opacity-90" />
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
           <Link href="/" className="relative flex items-center gap-3 text-white" onClick={() => setOpen(false)}>
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur">
-              <Bird className="h-5 w-5" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur overflow-hidden">
+              <img src="/logo.png" alt="雏鹰之翼" className="w-7 h-7 object-contain" />
             </div>
             <div>
               <div className="font-bold text-base leading-tight">雏鹰之翼</div>
