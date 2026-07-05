@@ -42,6 +42,7 @@ public class InventoryService
             Quantity = quantity,
             Location = location,
             Status = status,
+            UpdatedAt = DateTime.UtcNow,
         };
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
@@ -95,6 +96,7 @@ public class InventoryService
                 Quantity = item.GetProperty("quantity").GetInt32(),
                 Location = item.GetProperty("location").GetString() ?? "",
                 Status = item.GetProperty("status").GetString() ?? "available",
+                UpdatedAt = DateTime.UtcNow,
             });
             count++;
         }
