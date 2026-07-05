@@ -95,7 +95,7 @@ public class MaintenanceService
         var buildStart = DateTime.UtcNow;
         var buildResult = await RunCommand($"dotnet build src/TeamPortal/", ProjRoot);
         var buildMs = (int)(DateTime.UtcNow - buildStart).TotalMilliseconds;
-        var buildSuccess = !buildResult.Contains("error CS") && !buildResult.Contains("生成失败");
+        var buildSuccess = !buildResult.Contains(": error ") && !buildResult.Contains("生成失败") && !buildResult.Contains("Build FAILED");
 
         if (buildSuccess)
         {
@@ -195,7 +195,11 @@ public class MaintenanceService
     private static string ExtractBuildError(string buildOutput)
     {
         var lines = buildOutput.Split('\n');
-        var errors = lines.Where(l => l.Contains("error CS")).Take(5).ToList();
-        return errors.Count > 0 ? string.Join("\n", errors) : "Unknown build error";
+        // Match all error formats: CS (C#), MSB (MSBuild), CSC (compiler)
+        var errors = lines.Where(l => l.Contains("error ") && (l.Contains(": error") || l.Contains("error CS") || l.Contains("error MSB"))).Take(8).ToList();
+        if (errors.Count > 0) return string.Join("\n", errors);
+        // Fallback: return tail of output
+        var tail = lines.Where(l => !string.IsNullOrWhiteSpace(l)).TakeLast(20);
+        return string.Join("\n", tail);
     }
 }
