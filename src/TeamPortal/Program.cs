@@ -88,6 +88,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // ── Auto-migrate: add missing columns on existing tables ──
+    // EnsureCreated() only creates new tables; it does NOT alter existing ones.
+    // When models gain new fields after initial creation, we must add columns manually.
+    MigrateExistingTables(db);
+
     var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
     var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
     await auth.SeedAdmin();
@@ -143,3 +149,24 @@ app.MapChatEndpoints();
 app.MapMaintenanceEndpoints();
 
 app.Run();
+
+// ── Schema migration helper ──
+// Uses raw ADO.NET to avoid coupling to evolving EF Core SQL execution APIs.
+static void MigrateExistingTables(AppDbContext db)
+{
+    var conn = db.Database.GetDbConnection();
+    try
+    {
+        if (conn.State != System.Data.ConnectionState.Open)
+            conn.Open();
+
+        // Notification.UserId — added after initial table creation
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "ALTER TABLE Notifications ADD COLUMN UserId INTEGER NULL";
+        cmd.ExecuteNonQuery();
+    }
+    catch
+    {
+        // Column already exists — this is expected on subsequent startups
+    }
+}

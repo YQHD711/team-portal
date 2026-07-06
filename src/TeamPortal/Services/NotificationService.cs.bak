@@ -9,12 +9,10 @@ public class NotificationService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly Channel<Notification> _channel;
-    private readonly LogService _log;
 
-    public NotificationService(IServiceScopeFactory scopeFactory, LogService log)
+    public NotificationService(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;
-        _log = log;
         _channel = Channel.CreateBounded<Notification>(new BoundedChannelOptions(500)
         {
             FullMode = BoundedChannelFullMode.DropOldest
@@ -41,11 +39,7 @@ public class NotificationService
                 }
                 catch (OperationCanceledException) { /* timeout — flush */ }
             }
-            catch (Exception ex)
-            {
-                _log.Error("notification", $"Channel read failed: {ex.Message}", ex.ToString());
-                break;
-            }
+            catch { break; }
 
             if (batch.Count == 0) continue;
 
@@ -56,10 +50,7 @@ public class NotificationService
                 db.Notifications.AddRange(batch);
                 await db.SaveChangesAsync();
             }
-            catch (Exception ex)
-            {
-                _log.Error("notification", $"Failed to persist {batch.Count} notification(s): {ex.Message}", ex.ToString());
-            }
+            catch { }
         }
     }
 
