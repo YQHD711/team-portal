@@ -22,6 +22,12 @@ public class BaiduNetdiskService
     private const string DeviceAuthUrl = "https://openapi.baidu.com/oauth/2.0/device/code";
     private const string ApiBase = "https://pan.baidu.com/rest/2.0/xpan";
     private const string RedirectUri = "oob";
+
+    /// <summary>系统在百度网盘中的根目录</summary>
+    public const string RootDir = "/雏鹰之翼航模队";
+    /// <summary>用户上传文件的默认目录</summary>
+    public const string DefaultUploadDir = RootDir + "/用户数据/文档资料";
+
     private static string TokenFile => Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "baidu-token.json"));
 
     public BaiduNetdiskService(HttpClient http, IConfiguration config, LogService log, SettingsService settings)
@@ -100,58 +106,35 @@ public class BaiduNetdiskService
             var appKey = await GetAppKey();
             var secretKey = await GetSecretKey();
 
-            // Try refresh token first (from stored file)
+            // Try refresh token first
             if (File.Exists(TokenFile))
             {
-                try
+                var saved = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(TokenFile));
+                if (saved.TryGetProperty("refresh_token", out var rt) && rt.GetString() is { Length: > 0 } refreshToken)
                 {
-                    var stored = JsonSerializer.Deserialize<StoredToken>(File.ReadAllText(TokenFile));
-                    if (stored?.refresh_token != null)
+                    var refreshUrl = $"{OAuthUrl}?grant_type=refresh_token&refresh_token={refreshToken}&client_id={appKey}&client_secret={secretKey}";
+                    var resp = await _http.GetAsync(refreshUrl);
+                    var body = await resp.Content.ReadAsStringAsync();
+
+                    if (body.TrimStart().StartsWith('{'))
                     {
-                        var url = $"{OAuthUrl}?grant_type=refresh_token&refresh_token={stored.refresh_token}&client_id={appKey}&client_secret={secretKey}";
-                        _log.Info("baidu", $"Refreshing token...");
-                        var r = await _http.GetAsync(url);
-                        var b = await r.Content.ReadAsStringAsync();
-                        _log.Info("baidu", $"Refresh response: {b[..Math.Min(200, b.Length)]}");
-                        if (b.TrimStart().StartsWith('{'))
+                        using var doc = JsonDocument.Parse(body);
+                        if (!doc.RootElement.TryGetProperty("error", out _))
                         {
-                            using var d = JsonDocument.Parse(b);
-                            if (!d.RootElement.TryGetProperty("error", out var errProp))
-                            {
-                                _accessToken = d.RootElement.GetProperty("access_token").GetString()!;
-                                var exp = d.RootElement.GetProperty("expires_in").GetInt32();
-                                _tokenExpiry = DateTime.UtcNow.AddSeconds(exp - 300);
-                                if (d.RootElement.TryGetProperty("refresh_token", out var rt))
-                                    File.WriteAllText(TokenFile, JsonSerializer.Serialize(new StoredToken { refresh_token = rt.GetString()! }));
-                                _log.Info("baidu", "Token refreshed successfully");
-                                return _accessToken;
-                            }
-                            else
-                            {
-                                var errMsg = errProp.GetString();
-                                var errDesc = d.RootElement.TryGetProperty("error_description", out var ed) ? ed.GetString() : "";
-                                _log.Error("baidu", $"Refresh failed: {errMsg} - {errDesc}");
-                                if (errMsg == "invalid_grant" || errMsg?.Contains("expired") == true)
-                                {
-                                    File.Delete(TokenFile);
-                                    _log.Warn("baidu", "Refresh token invalid/deleted, re-auth required");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            _log.Error("baidu", $"Refresh returned non-JSON: {b[..Math.Min(100, b.Length)]}");
+                            _accessToken = doc.RootElement.GetProperty("access_token").GetString()!;
+                            var newRefresh = doc.RootElement.GetProperty("refresh_token").GetString()!;
+                            var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
+                            _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn - 300);
+                            File.WriteAllText(TokenFile, JsonSerializer.Serialize(new { refresh_token = newRefresh }));
+                            return _accessToken;
                         }
                     }
+
+                    _log.Warn("baidu", $"Token refresh failed: {body[..Math.Min(200, body.Length)]}");
                 }
-                catch (Exception ex) { _log.Warn("baidu", $"Refresh token exception: {ex.Message}"); }
-            }
-            else
-            {
-                _log.Warn("baidu", $"Token file not found: {TokenFile}");
             }
 
-            throw new InvalidOperationException("百度网盘未授权，请先完成一次性授权");
+            throw new InvalidOperationException("百度网盘未授权或Token已过期，请先访问 /api/admin/baidu/auth-url 重新授权");
         }
         finally
         {
@@ -159,11 +142,6 @@ public class BaiduNetdiskService
         }
     }
 
-    private class StoredToken { public string refresh_token { get; set; } = ""; }
-
-    /// <summary>
-    /// Upload a file to Baidu Netdisk. Returns the cloud file path.
-    /// </summary>
     public async Task<string> UploadFile(string localPath, string remotePath, IProgress<int>? progress = null)
     {
         var token = await GetAccessToken();
@@ -179,42 +157,33 @@ public class BaiduNetdiskService
             ["size"] = fileSize.ToString(),
             ["isdir"] = "0",
             ["autoinit"] = "1",
-            ["rtype"] = "3", // overwrite
+            ["rtype"] = "3",
+            ["block_list"] = $"[\"{Guid.NewGuid():N}\"]",
         });
 
-        var preResp = await _http.PostAsync($"{ApiBase}/file?method=precreate", precreate);
+        var preResp = await _http.PostAsync($"{ApiBase}/file", precreate);
         var preBody = await preResp.Content.ReadAsStringAsync();
+
         using var preDoc = JsonDocument.Parse(preBody);
+        if (preDoc.RootElement.TryGetProperty("errno", out var preErrno) && preErrno.GetInt32() != 0)
+            throw new InvalidOperationException($"Pre-create failed: {preBody}");
+
         var uploadId = preDoc.RootElement.GetProperty("uploadid").GetString()!;
 
-        // Upload file in chunks
-        var chunkSize = 4 * 1024 * 1024; // 4MB chunks
-        var chunks = (int)Math.Ceiling((double)fileSize / chunkSize);
-        using var fs = File.OpenRead(localPath);
-        var buffer = new byte[chunkSize];
+        // Upload file content
+        var fileContent = await File.ReadAllBytesAsync(localPath);
+        var uploadContent = new ByteArrayContent(fileContent);
+        uploadContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
 
-        for (int i = 0; i < chunks; i++)
-        {
-            var bytesRead = await fs.ReadAsync(buffer, 0, chunkSize);
-            var chunk = new ByteArrayContent(buffer, 0, bytesRead);
+        var uploadUrl = $"{ApiBase}/file?method=upload&access_token={token}&uploadid={uploadId}&partseq=0";
+        var uploadResp = await _http.PostAsync(uploadUrl, uploadContent);
+        var uploadBody = await uploadResp.Content.ReadAsStringAsync();
 
-            var uploadContent = new MultipartFormDataContent
-            {
-                { new StringContent("upload"), "method" },
-                { new StringContent(token), "access_token" },
-                { new StringContent("tmpfile"), "type" },
-                { new StringContent(remotePath), "path" },
-                { new StringContent(uploadId), "uploadid" },
-                { new StringContent(i.ToString()), "partseq" },
-                { chunk, "file", fileName }
-            };
+        using var uploadDoc = JsonDocument.Parse(uploadBody);
+        if (uploadDoc.RootElement.TryGetProperty("errno", out var uploadErrno) && uploadErrno.GetInt32() != 0)
+            throw new InvalidOperationException($"Upload failed: {uploadBody}");
 
-            var upResp = await _http.PostAsync($"{ApiBase}/file?method=upload", uploadContent);
-            var upBody = await upResp.Content.ReadAsStringAsync();
-            progress?.Report((int)((float)(i + 1) / chunks * 100));
-        }
-
-        // Create file
+        // Create file entry
         var create = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["method"] = "create",
@@ -224,6 +193,7 @@ public class BaiduNetdiskService
             ["isdir"] = "0",
             ["uploadid"] = uploadId,
             ["rtype"] = "3",
+            ["block_list"] = $"[\"{uploadDoc.RootElement.GetProperty("md5").GetString()}\"]",
         });
 
         await _http.PostAsync($"{ApiBase}/file?method=create", create);
@@ -245,71 +215,59 @@ public class BaiduNetdiskService
         using var metaDoc = JsonDocument.Parse(metaBody);
 
         if (metaDoc.RootElement.TryGetProperty("errno", out var errno) && errno.GetInt32() != 0)
-            throw new InvalidOperationException($"获取文件信息失败: errno={errno.GetInt32()}");
+            throw new InvalidOperationException($"File meta failed: {metaBody}");
 
-        var metaList = metaDoc.RootElement.TryGetProperty("list", out var l) ? l : metaDoc.RootElement.GetProperty("info");
-        var fileMeta = metaList[0];
-        var dlink = fileMeta.GetProperty("dlink").GetString()!;
-        var fileName = fileMeta.TryGetProperty("server_filename", out var sn) ? sn.GetString()! : "download";
-        var size = fileMeta.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0L;
+        var list = metaDoc.RootElement.GetProperty("list");
+        if (list.GetArrayLength() == 0)
+            throw new InvalidOperationException("File not found");
 
-        // Download through backend with proper headers
-        var dlUrl = $"{dlink}&access_token={token}";
-        _log.Info("baidu", $"Streaming download: {fileName} ({size} bytes)");
+        var file = list[0];
+        var fileName = file.GetProperty("filename").GetString()!;
+        var size = file.GetProperty("size").GetInt64();
+        var dlink = file.GetProperty("dlink").GetString()!;
 
-        var request = new HttpRequestMessage(HttpMethod.Get, dlUrl);
-        request.Headers.Add("User-Agent", "pan.baidu.com");
-        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
+        var req = new HttpRequestMessage(HttpMethod.Get, dlink);
+        req.Headers.Add("User-Agent", "pan.baidu.com");
+        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
 
-        return (await response.Content.ReadAsStreamAsync(), fileName, size);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Download failed: HTTP {resp.StatusCode}");
+
+        var stream = await resp.Content.ReadAsStreamAsync();
+        return (stream, fileName, size);
     }
 
-    /// <summary>
-    /// List files in a directory.
-    /// </summary>
     public async Task<List<BaiduFile>> ListFiles(string remoteDir = "/")
     {
         var token = await GetAccessToken();
-        var url = $"{ApiBase}/file?method=list&access_token={token}&dir={Uri.EscapeDataString(remoteDir)}&order=time&desc=1&limit=100";
-        _log.Info("baidu", $"ListFiles: dir={remoteDir}");
+        var url = $"{ApiBase}/file?method=list&access_token={token}&dir={Uri.EscapeDataString(remoteDir)}&limit=1000";
         var resp = await _http.GetAsync(url);
         var body = await resp.Content.ReadAsStringAsync();
-        _log.Info("baidu", $"ListFiles response: {body[..Math.Min(200, body.Length)]}");
         using var doc = JsonDocument.Parse(body);
-        if (doc.RootElement.TryGetProperty("errno", out var err) && err.GetInt32() != 0)
+
+        if (doc.RootElement.TryGetProperty("errno", out var errno) && errno.GetInt32() != 0)
+            throw new InvalidOperationException($"List files failed: {body}");
+
+        var result = new List<BaiduFile>();
+        if (doc.RootElement.TryGetProperty("list", out var list))
         {
-            var errCode = err.GetInt32();
-            _log.Error("baidu", $"ListFiles failed: errno={errCode}");
-            // errno 6: auth failed, 111: token invalid, -6: permission denied
-            if (errCode == 6 || errCode == 111 || errCode == -6)
+            foreach (var item in list.EnumerateArray())
             {
-                _accessToken = null;
-                _tokenExpiry = DateTime.MinValue;
-                throw new InvalidOperationException("百度网盘授权已失效，请重新授权");
+                result.Add(new BaiduFile
+                {
+                    FsId = item.TryGetProperty("fs_id", out var fsId) ? fsId.GetInt64() : 0,
+                    Path = item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
+                    FileName = item.TryGetProperty("filename", out var fn) ? fn.GetString() ?? "" : "",
+                    Size = item.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0,
+                    IsDir = item.TryGetProperty("isdir", out var isd) && isd.GetInt32() == 1,
+                    ModifyTime = item.TryGetProperty("server_mtime", out var mt) ? mt.GetInt64() : 0,
+                });
             }
-            return new List<BaiduFile>();
         }
-        var list = doc.RootElement.GetProperty("list");
-        var files = new List<BaiduFile>();
-        foreach (var f in list.EnumerateArray())
-        {
-            files.Add(new BaiduFile
-            {
-                Path = f.GetProperty("path").GetString()!,
-                Name = f.GetProperty("server_filename").GetString()!,
-                Size = f.GetProperty("size").GetInt64(),
-                IsDir = f.GetProperty("isdir").GetInt32() == 1,
-                Modified = f.GetProperty("server_mtime").GetInt64(),
-                FsId = f.GetProperty("fs_id").GetInt64(),
-            });
-        }
-        return files;
+
+        return result;
     }
 
-    /// <summary>
-    /// Delete a file from Baidu Netdisk.
-    /// </summary>
     public async Task<bool> DeleteFile(string remotePath)
     {
         var token = await GetAccessToken();
@@ -318,47 +276,131 @@ public class BaiduNetdiskService
             ["method"] = "filemanager",
             ["access_token"] = token,
             ["opera"] = "delete",
+            ["async"] = "0",
+            ["ondup"] = "fail",
+            ["filelist"] = $"[{{\"path\":\"{remotePath}\"}}]",
         });
-        var resp = await _http.PostAsync($"{ApiBase}/file?method=filemanager&access_token={token}&opera=delete&async=0&filelist={Uri.EscapeDataString($"[\\\"{remotePath}\\\"]")}", null);
-        _log.Info("baidu", $"File deleted: {remotePath}");
-        return resp.IsSuccessStatusCode;
+
+        var resp = await _http.PostAsync($"{ApiBase}/file", content);
+        var body = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+
+        if (doc.RootElement.TryGetProperty("errno", out var errno) && errno.GetInt32() != 0)
+        {
+            _log.Error("baidu", $"Delete failed: {body}");
+            return false;
+        }
+
+        _log.Info("baidu", $"Deleted: {remotePath}");
+        return true;
     }
 
-    /// <summary>
-    /// Get storage quota info.
-    /// </summary>
     public async Task<object> GetQuota()
     {
         var token = await GetAccessToken();
-        var resp = await _http.GetAsync($"{ApiBase}/file?method=info&access_token={token}");
+        var resp = await _http.GetAsync($"{ApiBase}/quota?access_token={token}&checkfree=1&checkexpire=1");
         var body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        if (doc.RootElement.TryGetProperty("errno", out var err) && err.GetInt32() != 0)
-        {
-            var errCode = err.GetInt32();
-            if (errCode == 6 || errCode == 111 || errCode == -6)
-            {
-                _accessToken = null;
-                _tokenExpiry = DateTime.MinValue;
-                throw new InvalidOperationException("百度网盘授权已失效，请重新授权");
-            }
-            return new { total = 0L, used = 0L, free = 0L };
-        }
+
+        long total = 0, used = 0;
+        if (doc.RootElement.TryGetProperty("total", out var t)) total = t.GetInt64();
+        if (doc.RootElement.TryGetProperty("used", out var u)) used = u.GetInt64();
+
         return new
         {
-            total = doc.RootElement.TryGetProperty("total", out var t) ? t.GetInt64() : 0L,
-            used = doc.RootElement.TryGetProperty("used", out var u) ? u.GetInt64() : 0L,
-            free = 0L,
+            totalBytes = total,
+            usedBytes = used,
+            freeBytes = total - used,
+            totalGb = Math.Round(total / 1024.0 / 1024.0 / 1024.0, 2),
+            usedGb = Math.Round(used / 1024.0 / 1024.0 / 1024.0, 2),
         };
+    }
+
+    /// <summary>
+    /// 在百度网盘中创建一个文件夹。
+    /// 使用 filemanager 接口的 opera=create。
+    /// </summary>
+    /// <param name="remotePath">远程路径，如 /雏鹰之翼航模队/系统数据</param>
+    /// <returns>true=创建成功, false=已存在或创建失败</returns>
+    public async Task<bool> CreateDirectory(string remotePath)
+    {
+        var token = await GetAccessToken();
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["method"] = "filemanager",
+            ["access_token"] = token,
+            ["opera"] = "create",
+            ["async"] = "0",
+            ["ondup"] = "fail",
+            ["filelist"] = $"[{{\"path\":\"{remotePath}\",\"isdir\":1,\"size\":0}}]",
+        });
+
+        var resp = await _http.PostAsync($"{ApiBase}/file", content);
+        var body = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+
+        if (doc.RootElement.TryGetProperty("errno", out var errno))
+        {
+            if (errno.GetInt32() == 0)
+            {
+                _log.Info("baidu", $"Directory created: {remotePath}");
+                return true;
+            }
+
+            // errno 17 = "file already exists" — not an error for our use case
+            if (errno.GetInt32() == 17)
+            {
+                _log.Info("baidu", $"Directory already exists: {remotePath}");
+                return false;
+            }
+
+            _log.Warn("baidu", $"Create directory '{remotePath}' failed (errno={errno.GetInt32()}): {body[..Math.Min(200, body.Length)]}");
+            return false;
+        }
+
+        _log.Info("baidu", $"Directory created: {remotePath}");
+        return true;
+    }
+
+    /// <summary>
+    /// 一键创建系统所需的完整文件夹结构。
+    /// 根目录：/雏鹰之翼航模队
+    /// ├── 系统数据/
+    /// │   ├── 备份/
+    /// │   ├── 日志/
+    /// │   └── 配置/
+    /// └── 用户数据/
+    ///     ├── 飞行日志/
+    ///     ├── 照片视频/
+    ///     └── 文档资料/
+    /// </summary>
+    public async Task EnsureFolderStructure()
+    {
+        var dirs = new[]
+        {
+            $"{RootDir}/系统数据/备份",
+            $"{RootDir}/系统数据/日志",
+            $"{RootDir}/系统数据/配置",
+            $"{RootDir}/用户数据/飞行日志",
+            $"{RootDir}/用户数据/照片视频",
+            $"{RootDir}/用户数据/文档资料",
+        };
+
+        foreach (var dir in dirs)
+        {
+            await CreateDirectory(dir);
+        }
+
+        _log.Info("baidu", "Folder structure initialization completed");
     }
 }
 
 public class BaiduFile
 {
+    public long FsId { get; set; }
     public string Path { get; set; } = "";
-    public string Name { get; set; } = "";
+    public string FileName { get; set; } = "";
     public long Size { get; set; }
     public bool IsDir { get; set; }
-    public long Modified { get; set; }
-    public long FsId { get; set; }
+    public long ModifyTime { get; set; }
 }

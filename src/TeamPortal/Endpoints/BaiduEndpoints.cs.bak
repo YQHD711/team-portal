@@ -45,7 +45,7 @@ public static class BaiduEndpoints
             await using (var stream = File.Create(tempPath))
                 await file.CopyToAsync(stream);
 
-            var dir = remoteDir ?? BaiduNetdiskService.DefaultUploadDir;
+            var dir = remoteDir ?? "/apps/team-portal";
             var remotePath = $"{dir}/{file.FileName}";
             await svc.UploadFile(tempPath, remotePath);
             File.Delete(tempPath);
@@ -80,27 +80,6 @@ public static class BaiduEndpoints
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             await svc.DeleteFile(path);
             return Results.Ok(new { success = true });
-        });
-
-        // Initialize folder structure (one-click setup)
-        baidu.MapPost("/init-folders", async (BaiduNetdiskService svc) =>
-        {
-            if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            await svc.EnsureFolderStructure();
-            return Results.Ok(new
-            {
-                success = true,
-                message = "文件夹结构初始化完成",
-                structure = new[]
-                {
-                    $"{BaiduNetdiskService.RootDir}/系统数据/备份",
-                    $"{BaiduNetdiskService.RootDir}/系统数据/日志",
-                    $"{BaiduNetdiskService.RootDir}/系统数据/配置",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/飞行日志",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/照片视频",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/文档资料",
-                }
-            });
         });
     }
 }
