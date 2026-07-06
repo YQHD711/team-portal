@@ -8,35 +8,107 @@ public static class BaiduEndpoints
     {
         var baidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("AdminOnly");
 
+        // Public cloud file view — authenticated users can view/download cloud files
+        // Use /api/baidu/view/{fsId} as embeddable link in knowledge base, inventory, etc.
+        var publicCloud = app.MapGroup("/api/baidu").RequireAuthorization();
+        publicCloud.MapGet("/view/{fsId:long}", async (long fsId, HttpContext ctx, BaiduNetdiskService svc) =>
+        {
+            try
+            {
+                var (stream, fileName, size) = await svc.GetDownloadStream(fsId);
+                var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                var ct = ext switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".gif" => "image/gif",
+                    ".webp" => "image/webp",
+                    ".svg" => "image/svg+xml",
+                    ".pdf" => "application/pdf",
+                    _ => "application/octet-stream",
+                };
+                var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
+                ctx.Response.ContentType = ct;
+                ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                if (size > 0) ctx.Response.Headers.ContentLength = size;
+                await stream.CopyToAsync(ctx.Response.Body);
+            }
+            catch (Exception ex)
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.ContentType = "text/plain";
+                await ctx.Response.WriteAsync($"File not found: {ex.Message}");
+            }
+        });
+
+        // View file by cloud path (resolves to fsId internally)
+        publicCloud.MapGet("/view-by-path", async (string path, HttpContext ctx, BaiduNetdiskService svc) =>
+        {
+            try
+            {
+                var parentDir = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "/";
+                var fileName = Path.GetFileName(path);
+                var files = await svc.ListFiles(parentDir);
+                var file = files.FirstOrDefault(f => f.FileName == fileName && !f.IsDir);
+                if (file is null) { ctx.Response.StatusCode = 404; await ctx.Response.WriteAsync("File not found"); return; }
+
+                var (stream, _, size) = await svc.GetDownloadStream(file.FsId);
+                var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                var ct = ext switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".gif" => "image/gif",
+                    ".webp" => "image/webp",
+                    ".svg" => "image/svg+xml",
+                    ".pdf" => "application/pdf",
+                    _ => "application/octet-stream",
+                };
+                var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
+                ctx.Response.ContentType = ct;
+                ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                if (size > 0) ctx.Response.Headers.ContentLength = size;
+                await stream.CopyToAsync(ctx.Response.Body);
+            }
+            catch (Exception ex)
+            {
+                ctx.Response.StatusCode = 404;
+                ctx.Response.ContentType = "text/plain";
+                await ctx.Response.WriteAsync($"File not found: {ex.Message}");
+            }
+        });
+
+        var adminBaidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("AdminOnly");
+
         // Get authorization URL
-        baidu.MapGet("/auth-url", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/auth-url", async (BaiduNetdiskService svc) =>
         {
             var url = await svc.GetAuthUrl();
             return Results.Ok(new { url, message = "在浏览器中打开此链接，登录百度账号并授权，然后将返回的授权码粘贴到下方" });
         });
 
         // Exchange authorization code
-        baidu.MapPost("/auth-code", async (AuthCodeRequest req, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/auth-code", async (AuthCodeRequest req, BaiduNetdiskService svc) =>
         {
             var result = await svc.ExchangeCode(req.Code);
             return Results.Ok(new { success = true, message = result });
         });
 
-        baidu.MapGet("/quota", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/quota", async (BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             var quota = await svc.GetQuota();
             return Results.Ok(quota);
         });
 
-        baidu.MapGet("/files", async (string? dir, BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/files", async (string? dir, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             var files = await svc.ListFiles(dir ?? "/");
             return Results.Ok(files);
         });
 
-        baidu.MapPost("/upload", async (IFormFile file, string? remoteDir, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/upload", async (IFormFile file, string? remoteDir, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
@@ -52,7 +124,7 @@ public static class BaiduEndpoints
             return Results.Ok(new { success = true, path = remotePath });
         }).DisableAntiforgery();
 
-        baidu.MapGet("/download", async (long fsId, HttpContext ctx, BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/download", async (long fsId, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured())
             {
@@ -75,15 +147,30 @@ public static class BaiduEndpoints
             }
         });
 
-        baidu.MapDelete("/files", async (string path, BaiduNetdiskService svc) =>
+        adminBaidu.MapDelete("/files", async (string path, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             await svc.DeleteFile(path);
             return Results.Ok(new { success = true });
         });
 
+        // One-click system backup (DB + settings → zip → cloud)
+        adminBaidu.MapPost("/backup", async (BaiduNetdiskService svc) =>
+        {
+            if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
+            try
+            {
+                var path = await svc.BackupSystem();
+                return Results.Ok(new { success = true, path, message = $"备份已保存到 {path}" });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem($"备份失败: {ex.Message}", statusCode: 500);
+            }
+        });
+
         // Initialize folder structure (one-click setup)
-        baidu.MapPost("/init-folders", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/init-folders", async (BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             await svc.EnsureFolderStructure();
@@ -93,12 +180,12 @@ public static class BaiduEndpoints
                 message = "文件夹结构初始化完成",
                 structure = new[]
                 {
-                    $"{BaiduNetdiskService.RootDir}/系统数据/备份",
-                    $"{BaiduNetdiskService.RootDir}/系统数据/日志",
-                    $"{BaiduNetdiskService.RootDir}/系统数据/配置",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/飞行日志",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/照片视频",
-                    $"{BaiduNetdiskService.RootDir}/用户数据/文档资料",
+                    $"{BaiduNetdiskService.RootDir}/system/backups",
+                    $"{BaiduNetdiskService.RootDir}/system/logs",
+                    $"{BaiduNetdiskService.RootDir}/system/configs",
+                    $"{BaiduNetdiskService.RootDir}/user-data/flight-logs",
+                    $"{BaiduNetdiskService.RootDir}/user-data/photos-videos",
+                    $"{BaiduNetdiskService.RootDir}/user-data/documents",
                 }
             });
         });

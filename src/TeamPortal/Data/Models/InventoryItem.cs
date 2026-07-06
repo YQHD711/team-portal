@@ -8,5 +8,6 @@ public class InventoryItem
     public int Quantity { get; set; }
     public string Location { get; set; } = string.Empty;
     public string Status { get; set; } = "available";
+    public string? PhotoUrl { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

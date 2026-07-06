@@ -76,6 +76,15 @@ public class InventoryService
         return item;
     }
 
+    public async Task SetPhoto(int id, string photoUrl)
+    {
+        var item = await _db.InventoryItems.FindAsync(id);
+        if (item is null) return;
+        item.PhotoUrl = photoUrl;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+    }
+
     public async Task<bool> Delete(int id)
     {
         var item = await _db.InventoryItems.FindAsync(id);

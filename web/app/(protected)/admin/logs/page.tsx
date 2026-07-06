@@ -30,6 +30,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [level, setLevel] = useState("");
   const [category, setCategory] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -41,6 +42,7 @@ export default function LogsPage() {
     const params = new URLSearchParams();
     if (level) params.set("level", level);
     if (category) params.set("category", category);
+    if (keyword) params.set("keyword", keyword);
     if (from) params.set("from", from + "T00:00:00Z");
     if (to) params.set("to", to + "T23:59:59Z");
     params.set("page", String(page));
@@ -186,6 +188,8 @@ export default function LogsPage() {
           className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm">
           {categories.map(c => <option key={c} value={c === "all" ? "" : c}>{c === "all" ? "全部分类" : c}</option>)}
         </select>
+        <input type="text" placeholder="搜索关键词..." value={keyword} onChange={e => { setKeyword(e.target.value); setPage(1); }}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm w-40" />
         <div className="flex items-center gap-1 text-sm text-muted">
           <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
             className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />

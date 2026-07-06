@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { Search, AlertTriangle, Package, Filter, Plus, Pencil, Trash2, X, Upload } from "lucide-react";
+import { Search, AlertTriangle, Package, Filter, Plus, Pencil, Trash2, X, Upload, Minus, Plus as PlusIcon, History, Loader2 } from "lucide-react";
 
-interface InventoryItem { id: number; name: string; category: string; quantity: number; location: string; status: string; updatedAt: string; }
+interface InventoryItem { id: number; name: string; category: string; quantity: number; location: string; status: string; updatedAt: string; photoUrl?: string; }
+interface Transaction { id: number; type: string; quantity: number; userName: string; note: string | null; createdAt: string; }
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
 const LOW_THRESHOLD = 5;
 const statusOpts = [
@@ -23,6 +24,37 @@ export default function InventoryPage() {
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [form, setForm] = useState({ name: "", category: "", quantity: 0, location: "", status: "available" });
   const [importMsg, setImportMsg] = useState("");
+  const [txItem, setTxItem] = useState<InventoryItem | null>(null);
+  const [txMode, setTxMode] = useState<"checkout" | "checkin" | null>(null);
+  const [txQty, setTxQty] = useState(1);
+  const [txNote, setTxNote] = useState("");
+  const [txHistory, setTxHistory] = useState<Transaction[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const handleTransaction = async () => {
+    if (!txItem || !txMode) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/inventory/${txItem.id}/${txMode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ quantity: txQty, note: txNote || null }),
+      });
+      if (!res.ok) { const err = await res.json(); alert(err.detail || err.title || "操作失败"); return; }
+      setTxItem(null); setTxMode(null); setTxQty(1); setTxNote("");
+      fetchItems();
+    } catch { alert("操作失败"); }
+  };
+
+  const fetchHistory = async (item: InventoryItem) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/inventory/${item.id}/transactions`, { headers: { Authorization: `Bearer ${token}` } });
+      setTxHistory(await res.json());
+      setTxItem(item);
+      setShowHistory(true);
+    } catch { setTxHistory([]); }
+  };
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
 
@@ -120,6 +152,9 @@ export default function InventoryPage() {
                     <div className="text-xs text-muted">{item.category} · {item.location || "—"}</div>
                   </div>
                   <div className="flex items-center gap-1">
+                    <button onClick={() => { setTxItem(item); setTxMode("checkout"); setTxQty(1); setTxNote(""); }} className="p-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500" title="借出"><Minus className="h-4 w-4" /></button>
+                    <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className="p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500" title="归还"><PlusIcon className="h-4 w-4" /></button>
+                    <button onClick={() => fetchHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
                     <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4 text-muted" /></button>
                     <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>
                   </div>
@@ -151,6 +186,9 @@ export default function InventoryPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => { setTxItem(item); setTxMode("checkout"); setTxQty(1); setTxNote(""); }} className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500" title="借出"><Minus className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className="p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500" title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => fetchHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
                         <button onClick={() => openEdit(item)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
                         <button onClick={() => handleDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                       </div>
@@ -188,6 +226,50 @@ export default function InventoryPage() {
               <div><label className="block text-sm font-medium mb-1">状态</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">{statusOpts.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
               <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{editItem ? "保存修改" : "添加零件"}</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout/Checkin Modal */}
+      {txItem && txMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setTxItem(null); setTxMode(null); }}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg">{txMode === "checkout" ? "借出零件" : "归还零件"}</h3>
+              <button onClick={() => { setTxItem(null); setTxMode(null); }}><X className="h-5 w-5 text-zinc-400" /></button>
+            </div>
+            <p className="text-sm text-zinc-500 mb-4">{txItem.name}（当前库存：{txItem.quantity}）</p>
+            <div className="space-y-3">
+              <div><label className="block text-sm font-medium mb-1">数量</label><input type="number" min={1} max={txMode === "checkout" ? txItem.quantity : 999} value={txQty} onChange={e => setTxQty(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
+              <div><label className="block text-sm font-medium mb-1">备注</label><input value={txNote} onChange={e => setTxNote(e.target.value)} placeholder="借用人/用途..." className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
+              <button onClick={handleTransaction} className={`w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white ${txMode === "checkout" ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-500 hover:bg-emerald-600"}`}>
+                {txMode === "checkout" ? `确认借出 ${txQty} 个` : `确认归还 ${txQty} 个`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction History Panel */}
+      {showHistory && txItem && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/40" onClick={() => setShowHistory(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-md max-h-[70vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">出入库记录 — {txItem.name}</h3>
+              <button onClick={() => setShowHistory(false)}><X className="h-5 w-5 text-zinc-400" /></button>
+            </div>
+            {txHistory.length === 0 ? <p className="text-sm text-zinc-500 text-center py-4">暂无记录</p> :
+              <div className="space-y-2">
+                {txHistory.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-sm">
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${t.type === "checkout" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{t.type === "checkout" ? "借出" : "归还"}</span>
+                    <span className="font-medium">{t.quantity}</span>
+                    <span className="text-zinc-500 flex-1">{t.userName}{t.note ? ` · ${t.note}` : ""}</span>
+                    <span className="text-xs text-zinc-400">{new Date(t.createdAt).toLocaleString("zh-CN")}</span>
+                  </div>
+                ))}
+              </div>
+            }
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Cloud, Upload, Download, Trash2, RefreshCw, HardDrive, Folder, File, Loader2, Key, ExternalLink, ArrowLeft } from "lucide-react";
+import { Cloud, Upload, Download, Trash2, RefreshCw, HardDrive, Folder, File, Loader2, Key, ExternalLink, ArrowLeft, Database, Link } from "lucide-react";
 
 interface Quota { total: number; used: number; free: number; }
 interface BaiduFile { path: string; name: string; size: number; isDir: boolean; modified: number; fsId: number; }
@@ -13,6 +13,9 @@ export default function CloudPage() {
   const [files, setFiles] = useState<BaiduFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [currentDir, setCurrentDir] = useState("/");
   const [pathStack, setPathStack] = useState<string[]>(["/"]);
   const [msg, setMsg] = useState("");
@@ -120,17 +123,32 @@ export default function CloudPage() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setUploading(true); setMsg("");
+    setUploadProgress(0);
     const formData = new FormData(); formData.append("file", file);
     try {
       const token = localStorage.getItem("token");
-      const res = await window.fetch(`/api/admin/baidu/upload?remoteDir=${encodeURIComponent(currentDir)}`, {
-        method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(Math.round(e.loaded / e.total * 100)); };
+        xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else reject(new Error(`HTTP ${xhr.status}`)); };
+        xhr.onerror = () => reject(new Error("network"));
+        xhr.open("POST", `/api/admin/baidu/upload?remoteDir=${encodeURIComponent(currentDir)}`);
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.send(formData);
       });
-      if (!res.ok) throw new Error("Upload failed");
       setMsg(`✅ ${file.name} 上传成功`);
       fetchDir(currentDir, false);
     } catch { setMsg("❌ 上传失败"); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+    finally { setUploading(false); setUploadProgress(0); if (fileRef.current) fileRef.current.value = ""; }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const files = e.dataTransfer.files; if (!files.length) return;
+    setUploading(true); setMsg("");
+    for (let i = 0; i < files.length; i++) {
+      handleUpload({ target: { files: [files[i]] } } as unknown as React.ChangeEvent<HTMLInputElement>);
+    }
   };
 
   const handleDownload = async (file: BaiduFile) => {
@@ -154,6 +172,30 @@ export default function CloudPage() {
     } catch { setMsg("❌ 下载失败"); }
   };
 
+  const handleBackup = async () => {
+    setBackingUp(true); setMsg("");
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/admin/baidu/backup", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMsg(`✅ ${data.message}`);
+        fetchDir(currentDir, false);
+      } else {
+        setMsg(`❌ ${data.detail || data.title || "备份失败"}`);
+      }
+    } catch { setMsg("❌ 备份失败"); }
+    finally { setBackingUp(false); }
+  };
+
+  const copyLink = (file: BaiduFile) => {
+    const url = `${window.location.origin}/api/baidu/view/${file.fsId}`;
+    navigator.clipboard.writeText(url).then(() => setMsg(`✅ 链接已复制: ${url}`)).catch(() => setMsg(`📋 ${url}`));
+  };
+
   const handleDelete = async (path: string) => {
     if (!confirm(`删除 ${path}？`)) return;
     try {
@@ -175,10 +217,15 @@ export default function CloudPage() {
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold flex items-center gap-2"><Cloud className="h-6 w-6 text-sky-500" />云存储</h1><p className="text-sm text-muted mt-1">百度网盘 — 大文件云端存储</p></div>
         {authed && (
-          <label className="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600 cursor-pointer shadow-sm">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}上传文件
-            <input ref={fileRef} type="file" onChange={handleUpload} className="hidden" />
-          </label>
+          <div className="flex gap-2">
+            <label className="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600 cursor-pointer shadow-sm">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}上传文件
+              <input ref={fileRef} type="file" onChange={handleUpload} className="hidden" />
+            </label>
+            <button onClick={handleBackup} disabled={backingUp} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50 shadow-sm">
+              {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}创建备份
+            </button>
+          </div>
         )}
       </div>
 
@@ -242,7 +289,19 @@ export default function CloudPage() {
               </span>
             ))}
           </div>
-          <div className="divide-y divide-border">
+          <div className={`divide-y divide-border relative ${dragOver ? "ring-2 ring-sky-400 bg-sky-50 dark:bg-sky-950/20" : ""}`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}>
+            {uploading && uploadProgress > 0 && (
+              <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 text-sm text-blue-600">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />上传中 {uploadProgress}%
+                </div>
+                <div className="h-1.5 rounded-full bg-blue-200 dark:bg-blue-900 mt-1"><div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${uploadProgress}%` }} /></div>
+              </div>
+            )}
+            {dragOver && <div className="absolute inset-0 z-10 flex items-center justify-center bg-sky-100/80 dark:bg-sky-900/50 rounded-xl"><p className="text-sky-600 font-medium">释放文件以上传</p></div>}
             {loading ? <div className="p-8 text-center text-muted"><Loader2 className="h-5 w-5 mx-auto animate-spin" /></div> :
              files.length === 0 ? <div className="p-8 text-center text-muted"><Cloud className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无文件</div> :
              files.map(f => (
@@ -256,8 +315,9 @@ export default function CloudPage() {
                 </div>
                 {!f.isDir && (
                   <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => handleDownload(f)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500"><Download className="h-4 w-4" /></button>
-                    <button onClick={() => handleDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => copyLink(f)} className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-950 text-green-500" title="复制链接"><Link className="h-4 w-4" /></button>
+                    <button onClick={() => handleDownload(f)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500" title="下载"><Download className="h-4 w-4" /></button>
+                    <button onClick={() => handleDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500" title="删除"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 )}
               </div>

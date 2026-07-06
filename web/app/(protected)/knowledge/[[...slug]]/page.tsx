@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { TreeView } from "@/components/knowledge/TreeView";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
-import { ChevronLeft, ChevronRight, BookOpen, Pencil, Save, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, BookOpen, Pencil, Save, X, Search, Loader2 } from "lucide-react";
 
 interface TreeNode { name: string; type: "folder" | "file"; path?: string; children?: TreeNode[]; }
+interface SearchResult { path: string; snippet: string; score: number; }
 
 export default function KnowledgePage() {
   const params = useParams();
@@ -22,6 +23,38 @@ export default function KnowledgePage() {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  const handleSearch = async (q: string) => {
+    setSearchQuery(q);
+    if (q.length < 2) { setSearchResults([]); setShowResults(false); return; }
+    setSearching(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/ai/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      setSearchResults(data.sources || []);
+      setShowResults(true);
+    } catch { setSearchResults([]); }
+    finally { setSearching(false); }
+  };
+
+  const navigateTo = (path: string) => {
+    router.push(`/knowledge/${path.replace(/\.md$/, "")}`);
+    setShowResults(false);
+    setSearchQuery("");
+  };
 
   useEffect(() => { api.get<{role:string}>("/api/admin/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
   const canEdit = role === "admin" || role === "部长";
@@ -40,6 +73,18 @@ export default function KnowledgePage() {
       .finally(() => setLoading(false));
   }, [filePath]);
 
+  // Save to recently viewed in localStorage
+  useEffect(() => {
+    if (!filePath || !content) return;
+    try {
+      const recent = JSON.parse(localStorage.getItem("recentDocs") || "[]");
+      const entry = { path: filePath, title: content.split("\n")[0]?.replace(/^# /, "") || filePath, time: Date.now() };
+      const filtered = recent.filter((r: { path: string }) => r.path !== filePath);
+      filtered.unshift(entry);
+      localStorage.setItem("recentDocs", JSON.stringify(filtered.slice(0, 20)));
+    } catch {}
+  }, [filePath, content]);
+
   // Auto-close sidebar on mobile when content loads
   useEffect(() => {
     if (filePath && typeof window !== "undefined" && window.innerWidth < 1024) {
@@ -55,7 +100,33 @@ export default function KnowledgePage() {
           sidebarOpen ? "w-64 min-w-[16rem]" : "w-0 min-w-0 border-r-0 overflow-hidden"
         }`}
       >
-        <div className="p-3">
+        <div className="p-3" ref={searchRef}>
+          {/* Search bar */}
+          <div className="relative mb-3">
+            <div className="flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1.5">
+              {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400 shrink-0" /> : <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />}
+              <input
+                type="text" value={searchQuery} placeholder="搜索文档..."
+                onChange={e => handleSearch(e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
+              />
+              {searchQuery && <button onClick={() => { setSearchQuery(""); setShowResults(false); }} className="text-zinc-400 hover:text-zinc-600"><X className="h-3.5 w-3.5" /></button>}
+            </div>
+            {showResults && searchResults.length > 0 && (
+              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl max-h-80 overflow-y-auto">
+                {searchResults.map(r => (
+                  <button key={r.path} onClick={() => navigateTo(r.path)}
+                    className="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                    <div className="text-sm font-medium truncate">{r.path.replace(/\.md$/, "").replace(/\//g, " / ")}</div>
+                    <div className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{r.snippet.slice(0, 150)}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !searching && (
+              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-3 text-sm text-zinc-500 text-center">未找到匹配的文档</div>
+            )}
+          </div>
           <TreeView nodes={tree} />
         </div>
       </div>

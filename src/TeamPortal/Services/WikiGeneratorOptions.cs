@@ -12,6 +12,9 @@ public class WikiGeneratorOptions
     /// <summary>AI model for document content generation.</summary>
     public string ContentModel { get; set; } = "deepseek-v4-pro";
 
+    /// <summary>Maximum AI tool-call iterations per phase (catalog + each document). Auto-adjusted by complexity detection.</summary>
+    public int MaxIterations { get; set; } = 30;
+
     /// <summary>Maximum output tokens. DeepSeek supports up to 131,072. Cap to control cost.</summary>
     public int MaxOutputTokens { get; set; } = 32768;
 
@@ -30,8 +33,8 @@ public class WikiGeneratorOptions
     /// <summary>Max char length for README content (truncated if longer).</summary>
     public int ReadmeMaxLength { get; set; } = 10000;
 
-    /// <summary>Timeout in minutes for single document generation.</summary>
-    public int DocumentGenerationTimeoutMinutes { get; set; } = 5;
+    /// <summary>Timeout in minutes for single AI phase (catalog or document). 2 hours default for complex analysis.</summary>
+    public int DocumentGenerationTimeoutMinutes { get; set; } = 120;
 
     /// <summary>Temperature. DeepSeek recommends 1.0 (do NOT use GPT defaults like 0.3-0.7).</summary>
     public double Temperature { get; set; } = 1.0;

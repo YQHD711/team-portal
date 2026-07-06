@@ -76,10 +76,10 @@ export default function WikiImportPage() {
         ))}
       </div>
 
-      <form onSubmit={tab === "git" ? submitGit : submitZip} className="space-y-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
+      <form key={tab} onSubmit={tab === "git" ? submitGit : submitZip} className="space-y-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
         <div><label className="block text-sm font-medium mb-1">项目名称 *</label><input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="例如: my-awesome-project" required className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
         {tab === "git" ? (
-          <div><label className="block text-sm font-medium mb-1">GitHub URL *</label><input value={gitUrl} onChange={e => setGitUrl(e.target.value)} placeholder="https://github.com/user/repo.git" required className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono" /></div>
+          <div><label className="block text-sm font-medium mb-1">GitHub URL *</label><input value={gitUrl ?? ""} onChange={e => setGitUrl(e.target.value)} placeholder="https://github.com/user/repo.git" required className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono" /></div>
         ) : (
           <div><label className="block text-sm font-medium mb-1">代码压缩包 * (.zip, 最大100MB)</label><input ref={fileRef} type="file" accept=".zip" required className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 dark:file:bg-sky-950 dark:file:text-sky-300" /></div>
         )}

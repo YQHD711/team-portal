@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<CodeProposal> CodeProposals => Set<CodeProposal>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +65,18 @@ public class AppDbContext : DbContext
             entity.HasIndex(c => new { c.UserName, c.CreatedAt });
             entity.Property(c => c.Content).HasMaxLength(10000);
             entity.Property(c => c.Role).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<InventoryTransaction>(entity =>
+        {
+            entity.HasIndex(t => t.InventoryItemId);
+            entity.HasIndex(t => t.CreatedAt);
+            entity.Property(t => t.Type).IsRequired().HasMaxLength(20);
+            entity.Property(t => t.UserName).IsRequired().HasMaxLength(50);
+            entity.HasOne(t => t.Item)
+                .WithMany()
+                .HasForeignKey(t => t.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

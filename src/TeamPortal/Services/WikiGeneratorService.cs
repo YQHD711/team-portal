@@ -24,6 +24,7 @@ public class WikiGeneratorService
     private string _workspacePath = "";
     private string _projectName = "";
     private string _targetFolder = "";
+    private int _complexityScore = 3;
     private string _currentTaskId = "";
     private readonly List<string> _processedFiles = new();
     private string _catalogJson = "[]";
@@ -70,6 +71,95 @@ public class WikiGeneratorService
     //  Processing Pipeline
     // ════════════════════════════════════════
 
+    /// <summary>Project complexity score used to auto-tune generation parameters.</summary>
+    private record ComplexityInfo(int Score, int FileCount, int DirCount, int LinesOfCode);
+
+    /// <summary>
+    /// Analyze workspace to determine project complexity (1-5 scale).
+    /// Simple: <30 files, <5 dirs, <2000 LOC → score 1-2
+    /// Moderate: 30-100 files, 5-15 dirs, 2000-10000 LOC → score 3
+    /// Complex: >100 files, >15 dirs, >10000 LOC → score 4-5
+    /// </summary>
+    private static ComplexityInfo DetectProjectComplexity(string workspacePath)
+    {
+        var srcDir = Path.Combine(workspacePath, "repo");
+        if (!Directory.Exists(srcDir)) return new ComplexityInfo(1, 0, 0, 0);
+
+        var codeExts = new HashSet<string> { ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".go", ".rs", ".cpp", ".c", ".h", ".vue", ".svelte", ".swift", ".kt", ".rb", ".php", ".css", ".scss", ".json", ".yaml", ".yml", ".xml", ".csproj", ".sln", ".toml" };
+        var files = Directory.GetFiles(srcDir, "*.*", SearchOption.AllDirectories);
+        var codeFiles = files.Where(f => codeExts.Contains(Path.GetExtension(f).ToLowerInvariant())).ToArray();
+        var dirs = Directory.GetDirectories(srcDir, "*", SearchOption.AllDirectories).Length;
+
+        int totalLines = 0;
+        foreach (var f in codeFiles.Take(200)) // Sample first 200 files for speed
+        {
+            try { totalLines += File.ReadLines(f).Take(500).Count(); } catch { }
+        }
+
+        // Compute score
+        int score;
+        if (codeFiles.Length < 20 && dirs < 5 && totalLines < 1500) score = 1;
+        else if (codeFiles.Length < 50 && dirs < 10 && totalLines < 5000) score = 2;
+        else if (codeFiles.Length < 120 && dirs < 20 && totalLines < 15000) score = 3;
+        else if (codeFiles.Length < 250 && totalLines < 50000) score = 4;
+        else score = 5;
+
+        return new ComplexityInfo(score, codeFiles.Length, dirs, totalLines);
+    }
+
+    /// <summary>
+    /// Auto-adjust generation parameters based on project complexity score.
+    /// Simple projects get fewer iterations, smaller tokens, Flash model to avoid over-documentation.
+    /// Complex projects get Pro model and more iterations for thorough coverage.
+    /// </summary>
+    private void AutoAdjustParameters(ComplexityInfo c)
+    {
+        var model = c.Score <= 2 ? "deepseek-v4-flash" : "deepseek-v4-pro";
+        _options.ContentModel = model;
+        _options.CatalogModel = model;
+
+        _options.MaxIterations = c.Score switch
+        {
+            1 => 10,   // Simple: quick scan, no deep exploration needed
+            2 => 15,
+            3 => 22,
+            4 => 28,
+            _ => 35,   // Complex monorepo: needs deep analysis
+        };
+
+        _options.MaxOutputTokens = c.Score switch
+        {
+            1 => 8192,    // ~2K words — enough for simple project
+            2 => 16384,
+            3 => 32768,
+            4 => 49152,
+            _ => 65536,   // Large monorepo with many subsystems
+        };
+
+        _options.DirectoryTreeMaxDepth = c.Score switch
+        {
+            1 => 2,   // Shallow tree for simple projects
+            2 => 3,
+            _ => -1,  // Unlimited depth for moderate+ (let AI decide)
+        };
+
+        // Reduce parallelism for simple projects, increase for complex
+        _options.ParallelCount = c.Score <= 2 ? 2 : c.Score >= 4 ? 5 : 3;
+
+        // Timeout: simple projects finish fast, complex need hours
+        _options.DocumentGenerationTimeoutMinutes = c.Score switch
+        {
+            1 => 30,    // Simple: half hour is plenty
+            2 => 60,
+            3 => 90,
+            4 => 120,
+            _ => 180,   // Complex monorepo: up to 3 hours per phase
+        };
+
+        // Use thinking mode only for complex projects
+        _options.ThinkingMode = c.Score >= 4 ? "thinking" : "non-thinking";
+    }
+
     public async Task ProcessTask(string taskId)
     {
         var task = await _db.WikiTasks.FindAsync(taskId);
@@ -86,6 +176,14 @@ public class WikiGeneratorService
             task.Status = "preparing"; await _db.SaveChangesAsync();
             _workspacePath = await PrepareWorkspace(task);
             task.WorkspacePath = _workspacePath; await _db.SaveChangesAsync();
+
+            // Step 1.5: Detect complexity and auto-adjust parameters
+            var complexity = DetectProjectComplexity(_workspacePath);
+            _complexityScore = complexity.Score;
+            AutoAdjustParameters(complexity);
+            _logger.LogInformation("Wiki complexity: {Score}/5 ({FileCount} files, {DirCount} dirs, ~{Loc} LOC). Adjusted: iterations={Iter}, tokens={Tokens}, model={Model}",
+                complexity.Score, complexity.FileCount, complexity.DirCount, complexity.LinesOfCode,
+                _options.MaxIterations, _options.MaxOutputTokens, _options.ContentModel);
 
             // Step 2: Generate catalog
             task.Status = "catalog"; await _db.SaveChangesAsync();
@@ -244,8 +342,8 @@ public class WikiGeneratorService
             new { role = "user", content = userMessage }
         };
 
-        var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        var maxIterations = 30;
+        var http = new HttpClient { Timeout = TimeSpan.FromMinutes(_options.DocumentGenerationTimeoutMinutes) };
+        var maxIterations = _options.MaxIterations;
         var iteration = 0;
 
         while (iteration++ < maxIterations)
@@ -434,7 +532,11 @@ public class WikiGeneratorService
 
     private async Task<string> GenerateCatalog()
     {
-        var systemPrompt = @"你是一个资深代码架构分析师。你需要分析项目代码并生成 Wiki 文档目录。
+        var maxTopItems = _complexityScore <= 2 ? "1-4" : _complexityScore >= 4 ? "5-10" : "3-7";
+        var maxDepth = _complexityScore <= 2 ? "2" : "3";
+        var scopeHint = _complexityScore <= 2 ? "简单项目，目录结构简洁即可，不要过度拆分" : "覆盖项目所有核心模块";
+
+        var systemPrompt = $@"你是一个资深代码架构分析师。你需要分析项目代码并生成 Wiki 文档目录。
 
 ## 可用工具
 - list_files(path): 列出目录内容
@@ -449,18 +551,19 @@ public class WikiGeneratorService
 4. 用 write_catalog 输出 JSON 目录
 
 ## 目录输出格式
-[{
+[{{
   ""path"": ""getting-started"",
   ""title"": ""快速开始"",
   ""children"": [
-    { ""path"": ""getting-started/installation"", ""title"": ""安装指南"" }
+    {{ ""path"": ""getting-started/installation"", ""title"": ""安装指南"" }}
   ]
-}]
+}}]
 
 ## 规则
-- 3-8 个顶层目录项
-- 每项最多 3 层深度
+- {maxTopItems} 个顶层目录项
+- 每项最多 {maxDepth} 层深度
 - 使用中文标题
+- {scopeHint}
 - 必须调用 write_catalog 完成";
 
         var userMessage = $@"分析项目并生成 Wiki 目录。
@@ -520,22 +623,29 @@ README:
         var docPath = $"{item.Path}";
         var docTitle = item.Title;
 
-        var systemPrompt = @"你是一个资深技术文档撰写专家。基于项目源代码撰写详细的 Wiki 文档。
+        var complexityHint = _complexityScore <= 2
+            ? "\n\n## 本项目为简单项目\n- 文档应该简洁精炼，不要过度解释显而易见的代码\n- 每个要点 1-2 段即可，避免冗长的背景介绍\n- Mermaid 图可选（仅在确实有助于理解时才画）\n- 重点放在实际使用方法和调用示例上"
+            : _complexityScore >= 4
+            ? "\n\n## 本项目为复杂项目\n- 需要深入分析架构设计和模块间交互\n- 每个模块的职责、数据流、错误处理都应该覆盖\n- 需要详细的 Mermaid 图来辅助理解\n- 代码示例应涵盖主要的 API 和关键路径"
+            : "";
+
+        var systemPrompt = $@"你是一个资深技术文档撰写专家。基于项目源代码撰写 Wiki 文档。
 
 ## 可用工具
 - list_files(path): 列出目录
 - read_file(path): 读取文件内容
 - search_code(pattern, path): 搜索代码
 - write_doc(path, content): 写入文档（必须调用！）
+{complexityHint}
 
 ## 文档要求
 1. 标题用 H1 (# )，必须与指定标题一致
 2. 包含架构概述、核心流程、关键代码片段
-3. 至少包含一个 Mermaid 流程图或时序图
+3. {(_complexityScore <= 2 ? "如果有助于理解，可以包含一个 Mermaid 图" : "至少包含一个 Mermaid 流程图或时序图")}
 4. 所有信息必须基于实际代码
 5. 写中文文档，但保持代码标识符原文
 6. 代码示例加语言标注 ```python, ```csharp 等
-7. **文件引用链接**: 引用源码时使用格式 [{path}](/wiki/{_currentTaskId}/blob/{path})，点击可查看源码
+7. **文件引用链接**: 引用源码时使用格式 [{{path}}](/wiki/{_currentTaskId}/blob/{{path}})，点击可查看源码
 8. 最后必须调用 write_doc 写入文档";
 
         var userMessage = $@"请撰写文档: **{docTitle}**

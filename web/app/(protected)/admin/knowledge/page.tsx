@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
-import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, File, Loader2 } from "lucide-react";
+import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, File, Loader2, Eye, Columns } from "lucide-react";
 import { getToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,8 @@ export default function KnowledgeAdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadFolder, setUploadFolder] = useState("公共");
   const [uploadMsg, setUploadMsg] = useState("");
+  const [preview, setPreview] = useState(false);
+  const [splitMode, setSplitMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchTree = useCallback(() => {
@@ -140,16 +142,32 @@ export default function KnowledgeAdminPage() {
             <>
               <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
                 <span className="text-sm font-medium truncate">{selected}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {dirty && <span className="text-xs text-amber-500">未保存</span>}
+                  <button onClick={() => { setSplitMode(!splitMode); setPreview(false); }} className={`p-1.5 rounded text-xs ${splitMode ? "bg-sky-100 text-sky-600" : "text-zinc-400"}`} title="分栏编辑">
+                    <Columns className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => { setPreview(!preview); if (preview) setSplitMode(false); }} className={`p-1.5 rounded text-xs ${preview ? "bg-sky-100 text-sky-600" : "text-zinc-400"}`} title="预览">
+                    <Eye className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={handleSave} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50 transition-colors">
                     <Save className="h-3.5 w-3.5" />{saving ? "保存中..." : "保存"}
                   </button>
                   <button onClick={() => handleDelete(selected)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
-              <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }}
-                className="flex-1 w-full p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder="编辑 Markdown 内容..." spellCheck={false} />
+              {preview ? (
+                <div className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: content.replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-500 underline">$1</a>').replace(/\n/g, '<br/>') }} />
+              ) : splitMode ? (
+                <div className="flex-1 flex">
+                  <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }}
+                    className="flex-1 w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-r border-zinc-200 dark:border-zinc-800 focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
+                  <div className="flex-1 w-1/2 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: content.replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-500 underline">$1</a>').replace(/\n/g, '<br/>') }} />
+                </div>
+              ) : (
+                <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }}
+                  className="flex-1 w-full p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder="编辑 Markdown 内容..." spellCheck={false} />
+              )}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-zinc-400">

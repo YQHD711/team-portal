@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
-import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Bell, ExternalLink } from "lucide-react";
+import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Bell, ExternalLink, Package, BarChart3, Clock, History } from "lucide-react";
 import Link from "next/link";
 
 interface Stats { userCount: number; inventoryCount: number; inventoryTotal: number; departmentCount: number; }
@@ -17,6 +17,12 @@ export default function Home() {
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [activeTasks, setActiveTasks] = useState<TaskInfo[]>([]);
+  const [recentDocs, setRecentDocs] = useState<{ path: string; title: string; time: number }[]>([]);
+
+  useEffect(() => {
+    try { setRecentDocs(JSON.parse(localStorage.getItem("recentDocs") || "[]")); } catch {}
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -29,6 +35,7 @@ export default function Home() {
       setNotifs((n as NotifItem[]).slice(0, 6));
       setTasks((t as TaskInfo[]).filter(tk => tk.status === "completed").slice(0, 3));
       setLowStock((items as InventoryItem[]).filter(i => i.quantity < 5 && i.quantity > 0));
+      setActiveTasks((t as TaskInfo[]).filter(tk => tk.status !== "completed" && tk.status !== "failed").slice(0, 3));
       setLoaded(true);
     });
   }, []);
@@ -112,6 +119,47 @@ export default function Home() {
 
         {/* Right column — wiki docs + quick links */}
         <div className="space-y-4">
+          {/* Active wiki tasks */}
+          {activeTasks.length > 0 && (
+            <div className="rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-blue-500" />
+                <h3 className="font-semibold text-sm">进行中的 Wiki 任务</h3>
+              </div>
+              <div className="space-y-2">
+                {activeTasks.map(t => (
+                  <Link key={t.id} href={`/wiki/${t.id}`}
+                    className="flex items-center gap-2 p-2 rounded-xl hover:bg-white dark:hover:bg-blue-900/20 transition-colors">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 shrink-0">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{t.projectName}</div>
+                      <div className="text-xs text-blue-500">{t.status}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recently viewed */}
+          {recentDocs.length > 0 && (
+            <div className="rounded-2xl border border-border bg-surface p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <History className="h-4 w-4 text-muted" />
+                <h3 className="font-semibold text-sm">最近浏览</h3>
+              </div>
+              <div className="space-y-1">
+                {recentDocs.slice(0, 5).map((d: { path: string; title: string }, i: number) => (
+                  <Link key={i} href={`/knowledge/${d.path}`}
+                    className="block text-sm p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-zinc-600 dark:text-zinc-400 hover:text-blue-500 truncate">
+                    {d.title || d.path}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Wiki projects */}
           <div className="rounded-2xl border border-border bg-surface p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -153,8 +201,8 @@ export default function Home() {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { href: "/knowledge", label: "知识库", icon: FileText, color: "bg-blue-500/10 text-blue-600" },
-                { href: "/inventory", label: "库存管理", icon: TrendingUp, color: "bg-amber-500/10 text-amber-600" },
-                { href: "/flightlog", label: "飞行日志", icon: TrendingUp, color: "bg-emerald-500/10 text-emerald-600" },
+                { href: "/inventory", label: "库存管理", icon: Package, color: "bg-amber-500/10 text-amber-600" },
+                { href: "/flightlog", label: "飞行日志", icon: BarChart3, color: "bg-emerald-500/10 text-emerald-600" },
                 { href: "/admin/users", label: "用户管理", icon: Bird, color: "bg-purple-500/10 text-purple-600" },
               ].map(item => (
                 <Link key={item.href} href={item.href}

@@ -56,11 +56,12 @@ public static class AuthEndpoints
             return Results.Ok(new { Id = int.Parse(id), Username = username, Role = role });
         }).RequireAuthorization();
 
-        app.MapPut("/api/auth/change-password", async (ChangePasswordRequest req, ClaimsPrincipal user, AuthService auth) =>
+        app.MapPut("/api/auth/change-password", async (ChangePasswordRequest req, ClaimsPrincipal user, AuthService auth, NotificationService notify) =>
         {
             var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
             if (id is null) return Results.Problem("Not authenticated", statusCode: 401);
             var success = await auth.ChangePassword(int.Parse(id), req.CurrentPassword, req.NewPassword);
+            if (success) notify.Notify("密码已修改", "你的账号密码刚刚被修改。如非本人操作，请联系管理员。");
             return success ? Results.Ok(new { success = true }) : Results.Problem("Current password is incorrect", statusCode: 400);
         }).RequireAuthorization();
     }

@@ -72,6 +72,7 @@ builder.Services.AddScoped<WikiGeneratorService>();
 builder.Services.AddScoped<SystemAgentService>();
 builder.Services.AddScoped<BaiduNetdiskService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
+builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddSingleton<LogService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<SettingsService>();

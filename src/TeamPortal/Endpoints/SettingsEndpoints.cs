@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -16,9 +17,13 @@ public static class SettingsEndpoints
         });
 
         // Batch update settings
-        settings.MapPut("/", async (Dictionary<string, string> updates, SettingsService svc) =>
+        settings.MapPut("/", async (Dictionary<string, string> updates, SettingsService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
         {
+            var userName = user.Identity?.Name ?? "unknown";
+            var changedKeys = string.Join(", ", updates.Keys);
             await svc.BatchUpdate(updates);
+            log.Warn("settings", $"Settings updated by {userName}: {changedKeys}");
+            notify.Notify("系统设置已更改", $"{userName} 修改了 {updates.Count} 项设置", "/admin/settings");
             return Results.Ok(new { success = true });
         });
 

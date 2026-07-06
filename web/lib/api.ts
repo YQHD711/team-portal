@@ -51,7 +51,8 @@ async function request<T>(
       throw new Error(error.detail || `HTTP ${res.status}`);
     }
 
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : ({} as T);
   } catch (err) {
     clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === "AbortError") {

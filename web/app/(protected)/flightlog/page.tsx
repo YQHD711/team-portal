@@ -17,11 +17,34 @@ export default function FlightLogPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [meta, setMeta] = useState<Record<string, string>>({});
+  const [metaLoaded, setMetaLoaded] = useState(false);
+
+  const fetchMeta = async (filename: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/flightlogs/${filename}/meta`, { headers: { Authorization: `Bearer ${token}` } });
+      setMeta(await res.json());
+    } catch { setMeta({}); }
+    setMetaLoaded(true);
+  };
+
+  const saveMeta = async () => {
+    if (!selected) return;
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(`/api/flightlogs/${selected}/meta`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(meta),
+      });
+    } catch { alert("保存失败"); }
+  };
 
   const fetchLogs = () => api.get<{ logs: LogEntry[] }>("/api/flightlogs").then(d => setLogs(d.logs || [])).catch(() => setLogs([])).finally(() => setLoading(false));
   useEffect(() => { fetchLogs(); }, []);
 
-  useEffect(() => { if (!selected) { setDetail(null); return; } api.get<LogDetail>(`/api/flightlogs/${selected}`).then(setDetail).catch(() => setDetail(null)); }, [selected]);
+  useEffect(() => { if (!selected) { setDetail(null); setMetaLoaded(false); return; } api.get<LogDetail>(`/api/flightlogs/${selected}`).then(setDetail).catch(() => setDetail(null)); fetchMeta(selected); }, [selected]);
 
   const handleSelect = (filename: string) => { setSelected(filename); setShowList(false); };
 
@@ -31,7 +54,7 @@ export default function FlightLogPage() {
     const formData = new FormData(); formData.append("file", file);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/admin/documents/upload?folder=flightlogs", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
+      const res = await fetch("/api/flightlogs/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
       if (!res.ok) throw new Error("Upload failed");
       setUploadMsg("上传成功"); fetchLogs();
     } catch { setUploadMsg("上传失败"); }
@@ -74,6 +97,33 @@ export default function FlightLogPage() {
                 <div key={s.label} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3"><div className="text-xs text-zinc-400">{s.label}</div><div className="text-lg font-bold mt-0.5">{s.value}</div></div>
               ))}
             </div>
+            {/* Flight metadata form */}
+            {metaLoaded && (
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+                <h3 className="font-medium text-sm mb-3 flex items-center gap-2">📝 飞行信息</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
+                    { key: "pilot", label: "飞行员", placeholder: "姓名" },
+                    { key: "aircraft", label: "飞机型号", placeholder: "如 F450" },
+                    { key: "battery", label: "电池", placeholder: "如 4S 5200mAh" },
+                    { key: "weather", label: "天气", placeholder: "晴/多云/风大" },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-xs text-zinc-400 mb-1">{f.label}</label>
+                      <input value={meta[f.key] || ""} onChange={e => setMeta({ ...meta, [f.key]: e.target.value })} placeholder={f.placeholder}
+                        className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                    </div>
+                  ))}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-zinc-400 mb-1">备注</label>
+                    <input value={meta.notes || ""} onChange={e => setMeta({ ...meta, notes: e.target.value })} placeholder="飞行中的问题、发现..."
+                      className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  </div>
+                </div>
+                <button onClick={saveMeta} className="mt-3 rounded-lg bg-sky-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-sky-600">保存标注</button>
+              </div>
+            )}
+
             {detail.altitudeSeries?.length > 0 && (
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
                 <h3 className="font-medium text-sm mb-3 flex items-center gap-2"><BarChart3 className="h-4 w-4 text-sky-500" />高度变化</h3>

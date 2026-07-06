@@ -92,7 +92,7 @@ public class LogService : IDisposable
 
     // ── Query ──
     public async Task<List<SystemLog>> GetLogs(string? level, string? category, int page = 1, int pageSize = 50,
-        DateTime? from = null, DateTime? to = null)
+        DateTime? from = null, DateTime? to = null, string? keyword = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -101,6 +101,8 @@ public class LogService : IDisposable
         if (!string.IsNullOrEmpty(category)) query = query.Where(l => l.Category == category);
         if (from.HasValue) query = query.Where(l => l.CreatedAt >= from.Value);
         if (to.HasValue) query = query.Where(l => l.CreatedAt <= to.Value);
+        if (!string.IsNullOrEmpty(keyword))
+            query = query.Where(l => (l.Message != null && l.Message.Contains(keyword)) || (l.Detail != null && l.Detail.Contains(keyword)));
         return await query.OrderByDescending(l => l.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
     }
 

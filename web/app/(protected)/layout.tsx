@@ -2,6 +2,7 @@ import { SidebarProvider } from "@/components/layout/SidebarContext";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { FloatingChat } from "@/components/ai/FloatingChat";
 
 export default function ProtectedLayout({
   children,
@@ -18,6 +19,7 @@ export default function ProtectedLayout({
             <main className="flex-1 p-3 sm:p-6">{children}</main>
           </div>
         </div>
+        <FloatingChat />
       </SidebarProvider>
     </AuthGuard>
   );

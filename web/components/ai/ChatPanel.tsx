@@ -50,7 +50,7 @@ export function ChatPanel() {
       const { sessionId: sid } = await res.json();
       setSessionId(sid);
       setShowHistory(false);
-    } catch { setSessionId(crypto.randomUUID().slice(0, 12)); }
+    } catch { setSessionId((crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 14)).slice(0, 12)); }
   }, []);
 
   // Load messages for a session
