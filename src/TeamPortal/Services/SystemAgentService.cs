@@ -24,6 +24,7 @@ public class SystemAgentService
     public SystemAgentService(HttpClient http, IConfiguration config, AppDbContext db, LogService log, SettingsService settings)
     {
         _http = http;
+        _http.Timeout = TimeSpan.FromMinutes(30); // Per-request timeout managed via CancellationToken
         _db = db;
         _log = log;
         _settings = settings;
@@ -129,13 +130,20 @@ public class SystemAgentService
 
         messages.Add(new { role = "user", content = task });
 
-        var model = await _settings.Get("AI:ModelName", "deepseek-chat");
+        var model = await _settings.Get("AI:ModelName", "deepseek-v4-pro");
         var temperature = await _settings.GetDouble("AI:Temperature", 0.7);
         var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
 
-        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}", null, userName);
+        var agentTimeoutMin = await _settings.GetInt("AI:AgentTimeoutMinutes", 20);
+        var maxTokens = await _settings.GetInt("AI:MaxTokens", 8192);
+        var loopThreshold = await _settings.GetInt("AI:LoopThreshold", 8);
+        var reqTimeoutSec = await _settings.GetInt("AI:RequestTimeoutSeconds", 300);
+        var enableThinking = await _settings.Get("AI:EnableThinking", "false") == "true";
+        var reasoningEffort = await _settings.Get("AI:ReasoningEffort", "medium");
 
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={maxTokens}, loopThreshold={loopThreshold}, thinking={enableThinking}", null, userName);
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(agentTimeoutMin));
         var iteration = 0;
         var toolCallCount = 0;
         var lastToolKey = "";
@@ -143,26 +151,44 @@ public class SystemAgentService
         while (!timeoutCts.Token.IsCancellationRequested)
         {
             var apiStart = DateTime.UtcNow;
-            var payload = new
+            var payloadObj = new Dictionary<string, object>
             {
-                model,
-                messages,
-                temperature,
-                top_p = 1.0,
-                max_tokens = 4096,
-                tools = tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.Parameters ?? new { type = "object", properties = new { } } } }).ToList(),
-                tool_choice = "auto"
+                ["model"] = model,
+                ["messages"] = messages,
+                ["temperature"] = temperature,
+                ["top_p"] = 1.0,
+                ["max_tokens"] = maxTokens,
+                ["tools"] = tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.Parameters ?? new { type = "object", properties = new { } } } }).ToList(),
+                ["tool_choice"] = "auto"
             };
 
-            var json = JsonSerializer.Serialize(payload);
+            if (enableThinking)
+            {
+                payloadObj["reasoning_effort"] = reasoningEffort;
+                payloadObj["thinking"] = new { type = "enabled" };
+            }
+
+            var json = JsonSerializer.Serialize(payloadObj);
             var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
             req.Headers.Add("Authorization", $"Bearer {apiKey}");
 
-            var resp = await _http.SendAsync(req, timeoutCts.Token);
-            var body = await resp.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+            reqCts.CancelAfter(TimeSpan.FromSeconds(reqTimeoutSec));
+            HttpResponseMessage resp;
+            string body;
+            try
+            {
+                resp = await _http.SendAsync(req, reqCts.Token);
+                body = await resp.Content.ReadAsStringAsync(reqCts.Token);
+            }
+            catch (OperationCanceledException) when (!timeoutCts.Token.IsCancellationRequested)
+            {
+                _log.Warn("agent", $"Request timeout iter {iteration}: {reqTimeoutSec}s", null, userName);
+                return $"❌ 单次 API 请求超时 ({reqTimeoutSec}秒)，请增大 AI:RequestTimeoutSeconds 设置或简化任务";
+            }
             var apiMs = (int)(DateTime.UtcNow - apiStart).TotalMilliseconds;
 
             if (!resp.IsSuccessStatusCode)
@@ -183,7 +209,9 @@ public class SystemAgentService
             if (msg.TryGetProperty("tool_calls", out var calls) && calls.GetArrayLength() > 0)
             {
                 _log.Info("agent", $"Tool calls iter {iteration}: {calls.GetArrayLength()} tools (API took {apiMs}ms)", null, userName);
-                var toolMsgs = new List<object>();
+
+                // Execute all tools and collect results
+                var toolResults = new List<(string callId, string name, string args, string result)>();
                 foreach (var tc in calls.EnumerateArray())
                 {
                     var fn = tc.GetProperty("function");
@@ -202,16 +230,46 @@ public class SystemAgentService
                     var callKey = $"{name}|{args}";
                     if (callKey == lastToolKey) sameCallCount++;
                     else { sameCallCount = 1; lastToolKey = callKey; }
-                    if (sameCallCount > 5)
+                    if (sameCallCount > loopThreshold)
                     {
                         _log.Warn("agent", $"Loop: {name} with same args {sameCallCount}x", null, userName);
                         return $"❌ 检测到重复调用：{name} 以相同参数被调用 {sameCallCount} 次。请换个方式提问。";
                     }
 
-                    toolMsgs.Add(new { role = "assistant", tool_calls = new[] { new { id = callId, type = "function", function = new { name, arguments = args } } } });
-                    toolMsgs.Add(new { role = "tool", tool_call_id = callId, content = result[..Math.Min(result.Length, 4000)] });
+                    toolResults.Add((callId, name, args, result));
                     toolCallCount++;
                 }
+
+                // Build ONE assistant message with ALL tool calls + preserve reasoning_content (V4 requirement)
+                var assistantMsg = new Dictionary<string, object>
+                {
+                    ["role"] = "assistant",
+                    ["tool_calls"] = calls.EnumerateArray().Select(tc => new
+                    {
+                        id = tc.GetProperty("id").GetString(),
+                        type = "function",
+                        function = new
+                        {
+                            name = tc.GetProperty("function").GetProperty("name").GetString(),
+                            arguments = tc.GetProperty("function").GetProperty("arguments").GetString()
+                        }
+                    }).ToArray()
+                };
+
+                // Preserve content (may be null in tool call responses)
+                if (msg.TryGetProperty("content", out var content) && content.ValueKind != JsonValueKind.Null)
+                    assistantMsg["content"] = content.GetString();
+
+                // Preserve reasoning_content — V4 requires this to be passed back
+                if (msg.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind != JsonValueKind.Null)
+                    assistantMsg["reasoning_content"] = reasoning.GetString();
+
+                var toolMsgs = new List<object> { assistantMsg };
+
+                // Add tool result messages
+                foreach (var (callId, _, _, result) in toolResults)
+                    toolMsgs.Add(new { role = "tool", tool_call_id = callId, content = result[..Math.Min(result.Length, 4000)] });
+
                 messages.AddRange(toolMsgs);
             }
             else
@@ -223,7 +281,7 @@ public class SystemAgentService
         }
 
         _log.Warn("agent", $"Agent timeout: {iteration} iters, {toolCallCount} tools", null, userName);
-        return $"分析超时（{iteration}轮/10分钟），请简化任务或分步执行";
+        return $"分析超时（{iteration}轮/{agentTimeoutMin}分钟），请增大 AI:AgentTimeoutMinutes 设置或简化任务";
     }
 
     private async Task<string> ExecuteTool(string name, string args, string userName)

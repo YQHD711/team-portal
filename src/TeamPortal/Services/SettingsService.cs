@@ -91,12 +91,11 @@ public class SettingsService
         await db.SaveChangesAsync();
     }
 
-    /// <summary>Seed default settings if table is empty.</summary>
+    /// <summary>Ensure all default settings exist. Missing keys are added, existing ones left untouched.</summary>
     public async Task SeedDefaults()
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (await db.SystemSettings.AnyAsync()) return;
 
         var defaults = new List<SystemSetting>
         {
@@ -106,9 +105,15 @@ public class SettingsService
             new() { Key = "Auth:PasswordMinLength", Value = "6", Category = "认证安全", Description = "密码最小长度" },
             new() { Key = "AI:DeepSeekKey", Value = "", Category = "AI 服务", Description = "DeepSeek API Key" },
             new() { Key = "AI:DeepSeekBaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "DeepSeek API 地址" },
-            new() { Key = "AI:ModelName", Value = "deepseek-chat", Category = "AI 服务", Description = "AI 模型名称" },
+            new() { Key = "AI:ModelName", Value = "deepseek-v4-pro", Category = "AI 服务", Description = "AI 模型名称（deepseek-v4-pro / deepseek-v4-flash）" },
             new() { Key = "AI:MaxIterations", Value = "25", Category = "AI 服务", Description = "AI Agent 最大迭代次数" },
             new() { Key = "AI:Temperature", Value = "0.7", Category = "AI 服务", Description = "AI 温度参数 (0-1)" },
+            new() { Key = "AI:AgentTimeoutMinutes", Value = "20", Category = "AI 服务", Description = "AI Agent 单次任务总超时（分钟）" },
+            new() { Key = "AI:MaxTokens", Value = "8192", Category = "AI 服务", Description = "AI 单次 API 调用最大输出 token 数" },
+            new() { Key = "AI:LoopThreshold", Value = "8", Category = "AI 服务", Description = "相同工具+参数重复调用多少次后判定为死循环" },
+            new() { Key = "AI:RequestTimeoutSeconds", Value = "300", Category = "AI 服务", Description = "AI 单次 HTTP 请求超时（秒）" },
+            new() { Key = "AI:EnableThinking", Value = "false", Category = "AI 服务", Description = "启用 V4 thinking 深度思考模式（开启后耗时显著增加）" },
+            new() { Key = "AI:ReasoningEffort", Value = "medium", Category = "AI 服务", Description = "思考深度：low / medium / high / max" },
             new() { Key = "Baidu:AppKey", Value = "", Category = "百度网盘", Description = "百度开放平台 AppKey" },
             new() { Key = "Baidu:SecretKey", Value = "", Category = "百度网盘", Description = "百度开放平台 SecretKey" },
             new() { Key = "Baidu:SignKey", Value = "", Category = "百度网盘", Description = "百度开放平台 SignKey" },
@@ -116,8 +121,14 @@ public class SettingsService
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
         };
-        db.SystemSettings.AddRange(defaults);
-        await db.SaveChangesAsync();
+
+        var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();
+        var toAdd = defaults.Where(d => !existingKeys.Contains(d.Key)).ToList();
+        if (toAdd.Count > 0)
+        {
+            db.SystemSettings.AddRange(toAdd);
+            await db.SaveChangesAsync();
+        }
     }
 
     /// <summary>Clear cache (call after external DB changes).</summary>

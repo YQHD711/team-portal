@@ -6,13 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 高校航模队管理与运营系统，覆盖知识库、零件库存、飞行日志分析、AI 助手四个模块。三容器 Docker Compose 部署，与 OpenDeepWiki 共享技术栈经验但独立维护。
 
-## 当前状态 — 重要
+## 当前状态
 
-项目处于**设计锁定阶段，Phase 0（脚手架初始化）尚未开始**。当前仓库仅包含设计文档，**没有任何可执行代码**：
+项目已完成 Phase 0-9，**所有核心模块均已实现并运行**：
 
-- ❌ `Makefile` — 尚未创建，`make` 命令不可用
-- ❌ `web/`, `src/TeamPortal/`, `ai-service/` — 源代码目录均未创建
-- ❌ `docker-compose.yml` — 未创建
+- ✅ 后端：ASP.NET Core 10 Minimal API（`src/TeamPortal/`）
+- ✅ 前端：Next.js 16 App Router（`web/`）
+- ✅ AI 服务：Python FastAPI（`ai-service/`）
+- ✅ 数据库：SQLite（EF Core，`EnsureCreated` 模式）
+- ✅ `Makefile` / `docker-compose.yml` / `.github/workflows/ci.yml`
+
+**运行方式**：
+```bash
+dotnet run --project src/TeamPortal/    # 后端 :8080
+cd web && npm run dev                   # 前端 :3000
+cd ai-service && .venv/Scripts/python.exe -m uvicorn main:app --port 9001  # AI :9001
+```
+
+**管理员**：admin / admin123（可通过系统设置页面修改）
 - ✅ `docs/ARCHITECTURE.md` — 架构权威来源
 - ✅ `docs/ROADMAP.md` — 开发路线图（Phase 0 → Phase 6）
 - ✅ `docs/AGENT_GUIDE.md` — Agent 工作方式与约束

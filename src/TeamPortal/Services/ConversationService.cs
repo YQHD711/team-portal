@@ -83,7 +83,7 @@ public class ConversationService
         {
             var payload = new
             {
-                model = "deepseek-chat",
+                model = "deepseek-v4-flash",
                 messages = new[] { new { role = "user", content = summaryPrompt } },
                 temperature = 0.3, max_tokens = 500
             };

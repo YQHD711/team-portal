@@ -34,7 +34,7 @@ public static class SystemAgentEndpoints
 
                 var aiKey = config.GetValue<string>("AiService:DeepSeekKey") ?? "";
                 var aiUrl = config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
-                using var aiClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+                using var aiClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
                 await conv.AddMessage(sessionId, username, "user", req.Task, aiClient, aiKey, aiUrl);
 
                 var result = await svc.RunAgent(req.Task, username, historyTuples);
