@@ -101,14 +101,13 @@ public class AuthService
             new Claim(ClaimTypes.Role, user.Role),
         };
 
-        var expireDays = await _settings.GetInt("Auth:JwtExpireDays", 7);
-
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddDays(expireDays),
-            signingCredentials: creds);
+            expires: DateTime.UtcNow.AddHours(24),
+            signingCredentials: creds
+        );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
@@ -130,15 +129,25 @@ public class AuthService
         if (await _db.Users.AnyAsync(u => u.Role == "admin"))
             return;
 
+        var username = _config["Admin:Username"];
+        var password = _config["Admin:Password"];
+
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            _log.Warn("auth", "Admin:Username 或 Admin:Password 未配置，跳过种子管理员创建。请在 appsettings.json 或环境变量中设置。");
+            return;
+        }
+
         var admin = new User
         {
-            Username = "admin",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
+            Username = username,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "admin",
             CreatedAt = DateTime.UtcNow,
         };
+
         _db.Users.Add(admin);
         await _db.SaveChangesAsync();
-        _log.Info("auth", "Default admin account seeded: admin / admin123");
+        _log.Info("auth", $"种子管理员创建成功: {username}");
     }
 }
