@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
-import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Bell, ExternalLink, Package, BarChart3, Clock, History } from "lucide-react";
+import { Bird, AlertTriangle, FileText, TrendingUp, Sparkles, Bell, ExternalLink, Package, BarChart3, Clock, History, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 interface Stats { userCount: number; inventoryCount: number; inventoryTotal: number; departmentCount: number; }

@@ -120,11 +120,27 @@ public class ConversationService
         catch { /* compression failure is non-critical */ }
     }
 
-    /// <summary>Get context for AI — includes compressed summaries + recent messages.</summary>
-    public async Task<List<ChatMessage>> GetContext(string sessionId)
+    /// <summary>Check if a user owns a session (has at least one message in it). Empty session = no owner.</summary>
+    public async Task<bool> IsSessionOwner(string sessionId, string userName)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var any = await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId);
+        if (!any) return true; // brand-new session, first message will claim it
+        return await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId && m.UserName == userName);
+    }
+
+    /// <summary>Get context for AI — includes compressed summaries + recent messages. Verifies ownership.</summary>
+    public async Task<List<ChatMessage>> GetContext(string sessionId, string? userName = null)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (userName is not null)
+        {
+            var any = await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId);
+            if (any && !await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId && m.UserName == userName))
+                return new List<ChatMessage>(); // not owner — return empty
+        }
         return await db.ChatMessages
             .Where(m => m.SessionId == sessionId)
             .OrderBy(m => m.Id)
@@ -166,10 +182,17 @@ public class ConversationService
         return new { sessionId, total, summaries, byRole };
     }
 
-    public async Task DeleteSession(string sessionId)
+    public async Task<bool> DeleteSession(string sessionId, string? userName = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (userName is not null)
+        {
+            var any = await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId);
+            if (any && !await db.ChatMessages.AnyAsync(m => m.SessionId == sessionId && m.UserName == userName))
+                return false; // not owner
+        }
         await db.ChatMessages.Where(m => m.SessionId == sessionId).ExecuteDeleteAsync();
+        return true;
     }
 }

@@ -181,7 +181,7 @@ export function ChatPanel() {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[450px]">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 min-h-[200px] sm:min-h-[300px] max-h-[350px] sm:max-h-[450px]">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <Bot className="h-10 w-10 mb-3 text-zinc-300 dark:text-zinc-600" />

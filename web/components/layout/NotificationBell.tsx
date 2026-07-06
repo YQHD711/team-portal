@@ -39,7 +39,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-80 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-12 w-72 sm:w-80 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h3 className="font-semibold text-sm">通知</h3>
             {unread > 0 && <button onClick={markAll} className="text-xs text-blue-500 hover:underline">全部已读</button>}

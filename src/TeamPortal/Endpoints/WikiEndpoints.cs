@@ -119,9 +119,19 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
             return Results.Ok(new { path, content, language, lines = lines.Length });
         });
 
-        // Wiki settings
-        wiki.MapGet("/settings", (WikiGeneratorService generator) => Results.Ok(generator.GetOptions()));
-        wiki.MapPut("/settings", (WikiGeneratorOptions opts, WikiGeneratorService generator) => { generator.UpdateOptions(opts); return Results.Ok(new { success = true }); });
+        // Wiki settings (staff only)
+        wiki.MapGet("/settings", async (ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var (role, _) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+            return Results.Ok(generator.GetOptions());
+        });
+        wiki.MapPut("/settings", async (WikiGeneratorOptions opts, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var (role, _) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可修改", statusCode: 403);
+            generator.UpdateOptions(opts); return Results.Ok(new { success = true });
+        });
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }

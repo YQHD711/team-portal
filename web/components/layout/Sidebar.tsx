@@ -49,7 +49,7 @@ export function Sidebar() {
     <>
       {open && <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity" onClick={() => setOpen(false)} />}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full w-72 sm:w-64 flex flex-col transition-transform duration-300 shadow-xl",
+        "fixed top-0 left-0 z-50 h-full w-72 sm:w-64 max-w-[calc(100vw-3rem)] flex flex-col transition-transform duration-300 shadow-xl",
         "bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800",
         "lg:translate-x-0 lg:static lg:z-0",
         open ? "translate-x-0" : "-translate-x-full"

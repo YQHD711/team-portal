@@ -71,7 +71,7 @@ export function FloatingChat() {
       {/* FAB button */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-purple-500 text-white shadow-lg hover:bg-purple-600 transition-all hover:scale-105"
+        className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-purple-500 text-white shadow-lg hover:bg-purple-600 transition-all hover:scale-105"
         title="AI 助手"
       >
         {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
@@ -79,7 +79,7 @@ export function FloatingChat() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-2xl flex flex-col" style={{ maxHeight: "60vh" }}>
+        <div className="fixed bottom-20 right-2 sm:right-6 z-50 w-[calc(100vw-1rem)] sm:w-96 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-2xl flex flex-col" style={{ maxHeight: "60vh" }}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
             <span className="font-semibold text-sm text-purple-600 dark:text-purple-400">AI 助手</span>
             <button onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-600"><X className="h-4 w-4" /></button>

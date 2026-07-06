@@ -15,8 +15,12 @@ public static class AiEndpoints
             var userName = user.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
             var sessionId = req.SessionId ?? Guid.NewGuid().ToString("N")[..12];
 
+            // Verify session ownership — if sessionId belongs to another user, start fresh
+            if (!string.IsNullOrEmpty(req.SessionId) && !await conv.IsSessionOwner(sessionId, userName))
+                sessionId = Guid.NewGuid().ToString("N")[..12];
+
             // Load conversation history
-            var history = await conv.GetContext(sessionId);
+            var history = await conv.GetContext(sessionId, userName);
             var historyTuples = history.Select(m => (m.Role, m.Content)).ToList();
 
             // Save user message

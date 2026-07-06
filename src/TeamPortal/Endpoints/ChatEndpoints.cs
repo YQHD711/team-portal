@@ -17,17 +17,21 @@ public static class ChatEndpoints
         });
 
         // Get conversation history (context)
-        chat.MapGet("/sessions/{sessionId}", async (string sessionId, ConversationService svc) =>
+        chat.MapGet("/sessions/{sessionId}", async (string sessionId, ClaimsPrincipal user, ConversationService svc) =>
         {
-            var messages = await svc.GetContext(sessionId);
+            var userName = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
+            var messages = await svc.GetContext(sessionId, userName);
+            if (messages.Count == 0)
+                return Results.Ok(new List<object>()); // not owner or empty
             return Results.Ok(messages.Select(m => new { m.Role, m.Content, m.CreatedAt }));
         });
 
         // Delete a conversation
-        chat.MapDelete("/sessions/{sessionId}", async (string sessionId, ConversationService svc) =>
+        chat.MapDelete("/sessions/{sessionId}", async (string sessionId, ClaimsPrincipal user, ConversationService svc) =>
         {
-            await svc.DeleteSession(sessionId);
-            return Results.Ok(new { success = true });
+            var userName = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
+            var ok = await svc.DeleteSession(sessionId, userName);
+            return ok ? Results.Ok(new { success = true }) : Results.Problem("无权删除此会话", statusCode: 403);
         });
 
         // Generate a new session ID
