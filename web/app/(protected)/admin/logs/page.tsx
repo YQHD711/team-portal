@@ -84,7 +84,7 @@ export default function LogsPage() {
   const handleClearAll = async () => {
     if (!confirm("⚠️ 这将删除所有日志记录，不可恢复！\n\n确定继续？")) return;
     try {
-      const res = await api.post<{ deleted: number; message: string }>("/api/admin/logs/cleanup", { force: true });
+      const res = await api.post<{ deleted: number; message: string }>("/api/admin/logs/cleanup?force=true", {});
       setMsg(`✅ 全部 ${res.deleted} 条日志已清除`);
       fetchLogs();
       fetchStats();

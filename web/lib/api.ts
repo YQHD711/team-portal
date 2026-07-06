@@ -1,29 +1,35 @@
 /** API client for Team Portal backend. All HTTP requests go through here. */
 
 const API_BASE = ""; // Relative URL — proxied through Next.js rewrites
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const DEFAULT_TIMEOUT = 30000; // 30 seconds
 
 function isBrowser() {
   return typeof window !== "undefined";
 }
 
+type RequestOptions = RequestInit & {
+  /** Override request timeout in milliseconds */
+  timeoutMs?: number;
+};
+
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT, ...fetchOptions } = options;
   const token = isBrowser() ? localStorage.getItem("token") : null;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
+    ...fetchOptions.headers,
   };
 
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
+      ...fetchOptions,
       headers,
       signal: controller.signal,
     });
@@ -56,10 +62,12 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(endpoint: string) => request<T>(endpoint),
-  post: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
-  put: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
-  delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
+  get: <T>(endpoint: string, timeoutMs?: number) =>
+    request<T>(endpoint, { timeoutMs }),
+  post: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
+    request<T>(endpoint, { method: "POST", body: JSON.stringify(body), timeoutMs }),
+  put: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
+    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body), timeoutMs }),
+  delete: <T>(endpoint: string, timeoutMs?: number) =>
+    request<T>(endpoint, { method: "DELETE", timeoutMs }),
 };

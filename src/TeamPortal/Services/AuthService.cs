@@ -101,11 +101,13 @@ public class AuthService
             new Claim(ClaimTypes.Role, user.Role),
         };
 
+        var expireDays = await _settings.GetInt("Auth:JwtExpireDays", 7);
+
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(24),
+            expires: DateTime.UtcNow.AddDays(expireDays),
             signingCredentials: creds
         );
 

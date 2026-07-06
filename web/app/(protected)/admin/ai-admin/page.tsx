@@ -66,14 +66,16 @@ export default function AIAdminPage() {
     } catch { }
 
     try {
-      const res = await api.post<{ result: string; stats: MemoryStats }>("/api/admin/agent/analyze", { task: t });
+      const res = await api.post<{ result: string; stats: MemoryStats }>("/api/admin/agent/analyze", { task: t }, 900000); // 15 min timeout for AI analysis
       // Show AI response immediately — no need to refresh
       setHistory(prev => [...prev, { role: "assistant", content: res.result }]);
       setMemory(res.stats);
       fetchProposals();
     } catch (e: any) {
-      const errMsg = e?.message?.includes("429") ? "⏳ AI 管理员正在处理上一个任务，请等待完成后重试"
-        : "❌ 分析失败: " + (e instanceof Error ? e.message : "未知错误");
+      const msg = e?.message || (e instanceof Error ? e.message : "未知错误");
+      const errMsg = msg.includes("429") ? "⏳ AI 管理员正在处理上一个任务，请等待完成后重试"
+        : msg.includes("超时") ? "⏱️ AI 分析超时（15分钟），请简化任务或调大超时设置"
+        : "❌ 分析失败: " + msg;
       setHistory(prev => [...prev, { role: "assistant", content: errMsg }]);
     }
     finally { setLoading(false); }
