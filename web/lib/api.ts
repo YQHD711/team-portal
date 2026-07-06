@@ -39,7 +39,6 @@ async function request<T>(
     // Auto-redirect on 401
     if (res.status === 401 && isBrowser()) {
       localStorage.removeItem("token");
-      localStorage.removeItem("role");
       window.location.href = "/auth/login";
       throw new Error("登录已过期，请重新登录");
     }

@@ -1,16 +1,30 @@
+using System.Security.Claims;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
 public static class NotificationEndpoints
 {
+    private static int GetUserId(ClaimsPrincipal user)
+    {
+        var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        return id is not null ? int.Parse(id) : 0;
+    }
+
     public static void MapNotificationEndpoints(this WebApplication app)
     {
         var n = app.MapGroup("/api/notifications").RequireAuthorization();
 
-        n.MapGet("/", async (NotificationService svc) => Results.Ok(await svc.GetNotifications(false)));
-        n.MapGet("/unread-count", async (NotificationService svc) => Results.Ok(new { count = await svc.GetUnreadCount() }));
-        n.MapPost("/{id:long}/read", async (long id, NotificationService svc) => { await svc.MarkRead(id); return Results.Ok(new { success = true }); });
-        n.MapPost("/read-all", async (NotificationService svc) => { await svc.MarkAllRead(); return Results.Ok(new { success = true }); });
+        n.MapGet("/", async (ClaimsPrincipal user, NotificationService svc) =>
+            Results.Ok(await svc.GetNotifications(GetUserId(user))));
+
+        n.MapGet("/unread-count", async (ClaimsPrincipal user, NotificationService svc) =>
+            Results.Ok(new { count = await svc.GetUnreadCount(GetUserId(user)) }));
+
+        n.MapPost("/{id:long}/read", async (long id, NotificationService svc) =>
+            { await svc.MarkRead(id); return Results.Ok(new { success = true }); });
+
+        n.MapPost("/read-all", async (ClaimsPrincipal user, NotificationService svc) =>
+            { await svc.MarkAllRead(GetUserId(user)); return Results.Ok(new { success = true }); });
     }
 }

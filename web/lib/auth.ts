@@ -1,7 +1,6 @@
 /** Auth helpers — token storage and user state. */
 
 const TOKEN_KEY = "token";
-const ROLE_KEY = "role";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -14,28 +13,33 @@ export function setToken(token: string): void {
 
 export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(ROLE_KEY);
 }
 
 export function isAuthenticated(): boolean {
   return getToken() !== null;
 }
 
-export function getUserRole(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(ROLE_KEY);
+/** Decode role from JWT payload (server-signed, not tamperable client-side). */
+function decodeRole(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ?? null;
+  } catch {
+    return null;
+  }
 }
 
-export function setUserRole(role: string): void {
-  localStorage.setItem(ROLE_KEY, role);
+export function getUserRole(): string | null {
+  return decodeRole();
 }
 
 export function isAdmin(): boolean {
-  const role = getUserRole();
-  return role === "admin";
+  return decodeRole() === "admin";
 }
 
 export function isStaff(): boolean {
-  const role = getUserRole();
+  const role = decodeRole();
   return role === "admin" || role === "部长";
 }

@@ -19,6 +19,7 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [activeTasks, setActiveTasks] = useState<TaskInfo[]>([]);
   const [recentDocs, setRecentDocs] = useState<{ path: string; title: string; time: number }[]>([]);
+  const [isStaff, setIsStaff] = useState(false);
 
   useEffect(() => {
     try { setRecentDocs(JSON.parse(localStorage.getItem("recentDocs") || "[]")); } catch {}
@@ -30,6 +31,7 @@ export default function Home() {
       api.get<NotifItem[]>("/api/notifications").catch(() => [] as NotifItem[]),
       api.get<TaskInfo[]>("/api/wiki/tasks").catch(() => [] as TaskInfo[]),
       api.get<InventoryItem[]>("/api/inventory").catch(() => [] as InventoryItem[]),
+      api.get<{ role: string }>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(() => {}),
     ]).then(([s, n, t, items]) => {
       if (s) setStats(s);
       setNotifs((n as NotifItem[]).slice(0, 6));
@@ -185,7 +187,7 @@ export default function Home() {
             ) : (
               <div className="text-sm text-muted py-4 text-center">
                 暂无完成的项目<br />
-                <Link href="/wiki/import" className="text-xs text-blue-500 hover:underline mt-1 inline-block">导入代码生成文档</Link>
+                {isStaff && <Link href="/wiki/import" className="text-xs text-blue-500 hover:underline mt-1 inline-block">导入代码生成文档</Link>}
               </div>
             )}
             {tasks.length > 0 && (
@@ -203,7 +205,7 @@ export default function Home() {
                 { href: "/knowledge", label: "知识库", icon: FileText, color: "bg-blue-500/10 text-blue-600" },
                 { href: "/inventory", label: "库存管理", icon: Package, color: "bg-amber-500/10 text-amber-600" },
                 { href: "/flightlog", label: "飞行日志", icon: BarChart3, color: "bg-emerald-500/10 text-emerald-600" },
-                { href: "/admin/users", label: "用户管理", icon: Bird, color: "bg-purple-500/10 text-purple-600" },
+                ...(isStaff ? [{ href: "/admin/users", label: "用户管理", icon: Bird, color: "bg-purple-500/10 text-purple-600" }] : []),
               ].map(item => (
                 <Link key={item.href} href={item.href}
                   className="card-hover flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">

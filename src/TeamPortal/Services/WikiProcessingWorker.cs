@@ -48,7 +48,7 @@ public class WikiProcessingWorker : BackgroundService
                     else
                     {
                         log.Error("wiki", $"Wiki task failed: {task.ProjectName}", task.ErrorMessage);
-                        notify.Notify("Wiki 生成失败", $"{task.ProjectName}: {task.ErrorMessage}");
+                        notify.Notify("Wiki 生成失败", $"{task.ProjectName}: {task.ErrorMessage}", userId: task.UserId);
                     }
                 }
             }

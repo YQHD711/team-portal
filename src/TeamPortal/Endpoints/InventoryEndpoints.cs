@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
 using TeamPortal.Services;
@@ -7,6 +8,16 @@ namespace TeamPortal.Endpoints;
 
 public static class InventoryEndpoints
 {
+    private static async Task<(string? role, string? dept)> GetUserCtx(ClaimsPrincipal user, AppDbContext db)
+    {
+        var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (idClaim is null) return (null, null);
+        var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
+        return u is null ? (null, null) : (u.Role, u.Department?.Name);
+    }
+
+    private static bool IsStaff(string? role) => role == "admin" || role == "部长";
+
     public static void MapInventoryEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
@@ -23,8 +34,11 @@ public static class InventoryEndpoints
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
 
-        group.MapPost("/", async (CreateItemRequest req, InventoryService svc) =>
+        group.MapPost("/", async (CreateItemRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可创建零件", statusCode: 403);
+
             if (string.IsNullOrWhiteSpace(req.Name))
                 return Results.Problem("Name is required", statusCode: 400);
 
@@ -32,8 +46,11 @@ public static class InventoryEndpoints
             return Results.Created($"/api/inventory/{item.Id}", item);
         });
 
-        group.MapPost("/import", async (ImportRequest req, InventoryService svc) =>
+        group.MapPost("/import", async (ImportRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可导入零件", statusCode: 403);
+
             if (string.IsNullOrWhiteSpace(req.FilePath))
                 return Results.Problem("FilePath is required", statusCode: 400);
 
@@ -41,8 +58,11 @@ public static class InventoryEndpoints
             return Results.Ok(new { imported = count });
         });
 
-        group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
+
             var item = await svc.Update(id, req.Quantity, req.Location, req.Status);
             if (item is not null)
             {
@@ -54,8 +74,11 @@ public static class InventoryEndpoints
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
 
-        group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除零件", statusCode: 403);
+
             var item = await svc.GetById(id);
             var deleted = await svc.Delete(id);
             if (deleted) { var actor = user.Identity?.Name ?? "unknown"; log.Warn("inventory", $"Part deleted: {item?.Name} (#{id}) by {actor}"); notify.Notify("零件已删除", $"{actor} 删除了 {item?.Name}"); }
@@ -63,8 +86,11 @@ public static class InventoryEndpoints
         });
 
         // Upload photo for a part → store in cloud, save view URL
-        group.MapPost("/{id:int}/photo", async (int id, IFormFile file, InventoryService svc, BaiduNetdiskService baidu, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        group.MapPost("/{id:int}/photo", async (int id, IFormFile file, InventoryService svc, BaiduNetdiskService baidu, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可上传零件照片", statusCode: 403);
+
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
             if (file.Length > 10 * 1024 * 1024) return Results.Problem("Photo too large (max 10MB)", statusCode: 400);
 
@@ -98,6 +124,9 @@ public static class InventoryEndpoints
         // Check-out items (reduce quantity + log transaction)
         group.MapPost("/{id:int}/checkout", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可借出零件", statusCode: 403);
+
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
@@ -123,6 +152,9 @@ public static class InventoryEndpoints
         // Check-in items (increase quantity + log transaction)
         group.MapPost("/{id:int}/checkin", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可归还零件", statusCode: 403);
+
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);

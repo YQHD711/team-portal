@@ -40,7 +40,7 @@ export function Sidebar() {
 
   useEffect(() => {
     if (!getToken()) return;
-    api.get<{ role: string; department: string | null }>("/api/admin/me").then(u => setRole(u.role)).catch(() => setRole(null));
+    api.get<{ role: string; department: string | null }>("/api/auth/me").then(u => setRole(u.role)).catch(() => setRole(null));
   }, []);
 
   const canManage = role === "admin" || role === "部长";

@@ -56,7 +56,7 @@ export default function KnowledgePage() {
     setSearchQuery("");
   };
 
-  useEffect(() => { api.get<{role:string}>("/api/admin/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
+  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
   const canEdit = role === "admin" || role === "部长";
 
   useEffect(() => {

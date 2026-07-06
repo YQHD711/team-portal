@@ -22,7 +22,7 @@ public class AuthService
         _db = db; _config = config; _log = log; _settings = settings;
     }
 
-    public async Task<User?> Register(string username, string password, string role = "member")
+    public async Task<User?> Register(string username, string password)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username))
         {
@@ -38,7 +38,7 @@ public class AuthService
         {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = (role == "admin" || role == "部长") ? role : "member",
+            Role = "member",
             CreatedAt = DateTime.UtcNow,
         };
 

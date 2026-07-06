@@ -17,10 +17,10 @@ public static class AdminEndpoints
 
     public static void MapAdminEndpoints(this WebApplication app)
     {
-        var admin = app.MapGroup("/api/admin").RequireAuthorization("StaffOnly");
+        // Stats — accessible to all authenticated users (dashboard)
+        app.MapGet("/api/admin/stats", async (AdminService svc) => Results.Ok(await svc.GetStats())).RequireAuthorization();
 
-        // ── Stats ──
-        admin.MapGet("/stats", async (AdminService svc) => Results.Ok(await svc.GetStats()));
+        var admin = app.MapGroup("/api/admin").RequireAuthorization("StaffOnly");
 
         // ── Users ──
         admin.MapGet("/users", async (ClaimsPrincipal user, AdminService svc, AppDbContext db) =>

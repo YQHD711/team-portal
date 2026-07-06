@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using TeamPortal.Data;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -20,7 +22,7 @@ public static class AuthEndpoints
 
             try
             {
-                var user = await auth.Register(req.Username.Trim(), req.Password, req.Role ?? "member");
+                var user = await auth.Register(req.Username.Trim(), req.Password);
                 if (user is null)
                     return Results.Problem("Username already exists", statusCode: 409);
 
@@ -45,15 +47,18 @@ public static class AuthEndpoints
             return Results.Ok(new { token });
         });
 
-        app.MapGet("/api/auth/me", (ClaimsPrincipal user) =>
+        app.MapGet("/api/auth/me", async (ClaimsPrincipal user, AppDbContext db) =>
         {
-            var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
             var username = user.FindFirstValue(ClaimTypes.Name);
             var role = user.FindFirstValue(ClaimTypes.Role);
 
-            if (id is null) return Results.Problem("Not authenticated", statusCode: 401);
+            if (idClaim is null) return Results.Problem("Not authenticated", statusCode: 401);
 
-            return Results.Ok(new { Id = int.Parse(id), Username = username, Role = role });
+            var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
+            var department = u?.Department?.Name;
+
+            return Results.Ok(new { Id = int.Parse(idClaim), Username = username, Role = role, Department = department });
         }).RequireAuthorization();
 
         app.MapPut("/api/auth/change-password", async (ChangePasswordRequest req, ClaimsPrincipal user, AuthService auth, NotificationService notify) =>
@@ -61,12 +66,12 @@ public static class AuthEndpoints
             var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
             if (id is null) return Results.Problem("Not authenticated", statusCode: 401);
             var success = await auth.ChangePassword(int.Parse(id), req.CurrentPassword, req.NewPassword);
-            if (success) notify.Notify("密码已修改", "你的账号密码刚刚被修改。如非本人操作，请联系管理员。");
+            if (success) notify.Notify("密码已修改", "你的账号密码刚刚被修改。如非本人操作，请联系管理员。", userId: int.Parse(id));
             return success ? Results.Ok(new { success = true }) : Results.Problem("Current password is incorrect", statusCode: 400);
         }).RequireAuthorization();
     }
 }
 
-public record RegisterRequest(string Username, string Password, string? Role);
+public record RegisterRequest(string Username, string Password);
 public record LoginRequest(string Username, string Password);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);

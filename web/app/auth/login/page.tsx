@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
-import { setToken, setUserRole } from "@/lib/auth";
+import { setToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,12 +20,6 @@ export default function LoginPage() {
     try {
       const data = await api.post<{ token: string }>("/api/auth/login", { username, password });
       setToken(data.token);
-      // Decode JWT to extract role
-      try {
-        const payload = JSON.parse(atob(data.token.split(".")[1]));
-        const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
-        if (role) setUserRole(role);
-      } catch { /* ignore decode error */ }
       router.replace("/");
     } catch (err) { setError(err instanceof Error ? err.message : "登录失败"); }
     finally { setLoading(false); }
