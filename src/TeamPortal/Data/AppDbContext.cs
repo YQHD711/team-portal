@@ -18,6 +18,15 @@ public class AppDbContext : DbContext
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
+    public DbSet<PilotProfile> PilotProfiles => Set<PilotProfile>();
+    public DbSet<TrainingRecord> TrainingRecords => Set<TrainingRecord>();
+    public DbSet<CompetitionRecord> CompetitionRecords => Set<CompetitionRecord>();
+    public DbSet<FlightRecord> FlightRecords => Set<FlightRecord>();
+    public DbSet<BatteryRecord> BatteryRecords => Set<BatteryRecord>();
+    public DbSet<IncidentRecord> IncidentRecords => Set<IncidentRecord>();
+    public DbSet<TrashItem> TrashItems => Set<TrashItem>();
+    public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
+    public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +87,106 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(t => t.InventoryItemId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PilotProfile>(entity =>
+        {
+            entity.HasIndex(p => p.UserId).IsUnique();
+            entity.Property(p => p.Level).HasMaxLength(20);
+            entity.Property(p => p.EmergencyContact).HasMaxLength(50);
+            entity.Property(p => p.EmergencyPhone).HasMaxLength(30);
+            entity.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TrainingRecord>(entity =>
+        {
+            entity.HasIndex(t => t.UserId);
+            entity.Property(t => t.CourseName).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.Examiner).HasMaxLength(50);
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CompetitionRecord>(entity =>
+        {
+            entity.HasIndex(c => c.UserId);
+            entity.Property(c => c.CompetitionName).IsRequired().HasMaxLength(100);
+            entity.Property(c => c.Event).HasMaxLength(50);
+            entity.Property(c => c.Ranking).HasMaxLength(30);
+            entity.HasOne(c => c.User)
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FlightRecord>(entity =>
+        {
+            entity.HasIndex(f => f.PilotUserId);
+            entity.HasIndex(f => f.TakeoffTime);
+            entity.Property(f => f.AircraftModel).HasMaxLength(100);
+            entity.Property(f => f.Location).HasMaxLength(100);
+            entity.Property(f => f.Weather).HasMaxLength(50);
+            entity.Property(f => f.BatteryNumber).HasMaxLength(50);
+            entity.HasOne(f => f.Pilot)
+                .WithMany()
+                .HasForeignKey(f => f.PilotUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BatteryRecord>(entity =>
+        {
+            entity.HasIndex(b => b.BatteryNumber);
+            entity.Property(b => b.BatteryNumber).IsRequired().HasMaxLength(50);
+            entity.Property(b => b.Health).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<IncidentRecord>(entity =>
+        {
+            entity.HasIndex(i => i.Date);
+            entity.Property(i => i.Type).HasMaxLength(30);
+            entity.Property(i => i.Severity).HasMaxLength(20);
+            entity.Property(i => i.Description).IsRequired();
+            entity.Property(i => i.ReportedBy).HasMaxLength(50);
+            entity.HasOne(i => i.RelatedFlight)
+                .WithMany()
+                .HasForeignKey(i => i.RelatedFlightId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TrashItem>(entity =>
+        {
+            entity.HasIndex(t => t.DeletedAt);
+            entity.Property(t => t.OriginalTable).IsRequired().HasMaxLength(50);
+            entity.Property(t => t.Title).IsRequired().HasMaxLength(200);
+            entity.Property(t => t.DeletedByName).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<InviteCode>(entity =>
+        {
+            entity.HasIndex(i => i.Code).IsUnique();
+            entity.Property(i => i.Code).IsRequired().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<PurchaseRequest>(entity =>
+        {
+            entity.HasIndex(p => p.Status);
+            entity.HasIndex(p => p.RequesterUserId);
+            entity.Property(p => p.ItemName).IsRequired().HasMaxLength(200);
+            entity.Property(p => p.Status).HasMaxLength(20);
+            entity.Property(p => p.RejectReason).HasMaxLength(500);
+            entity.HasOne(p => p.Requester)
+                .WithMany()
+                .HasForeignKey(p => p.RequesterUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(p => p.Approver)
+                .WithMany()
+                .HasForeignKey(p => p.ApproverUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

@@ -55,6 +55,15 @@ deploy:
 	docker compose up -d --build
 	@echo "Services starting... Run 'make health' to verify."
 
+deploy-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+	@echo "Production services starting... Run 'make health-prod' to verify."
+
+health-prod:
+	@echo "Checking services (HTTPS)..."
+	@curl -skf https://$${DOMAIN:-localhost} > /dev/null && echo "✓ frontend HTTPS" || echo "✗ frontend HTTPS"
+	@curl -skf https://$${DOMAIN:-localhost}/api/ > /dev/null && echo "✓ backend HTTPS" || echo "✗ backend HTTPS"
+
 # === Clean ===
 clean:
 	dotnet clean src/TeamPortal/

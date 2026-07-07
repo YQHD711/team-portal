@@ -76,6 +76,17 @@ public class KnowledgeService
         if (fullPath is null) throw new InvalidOperationException("Invalid path");
         var dir = Path.GetDirectoryName(fullPath);
         if (dir is not null) Directory.CreateDirectory(dir);
+
+        // Version history backup
+        if (File.Exists(fullPath))
+        {
+            var historyDir = Path.Combine(_basePath, ".history", Path.GetDirectoryName(relativePath) ?? "");
+            Directory.CreateDirectory(historyDir);
+            var ts = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
+            var backupPath = Path.Combine(historyDir, $"{Path.GetFileName(relativePath)}.{ts}.bak");
+            File.Copy(fullPath, backupPath, overwrite: true);
+        }
+
         File.WriteAllText(fullPath, content);
         _log.Info("knowledge", $"File written: {relativePath}");
     }

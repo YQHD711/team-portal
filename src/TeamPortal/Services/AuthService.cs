@@ -22,7 +22,7 @@ public class AuthService
         _db = db; _config = config; _log = log; _settings = settings;
     }
 
-    public async Task<User?> Register(string username, string password)
+    public async Task<User?> Register(string username, string password, string? inviteCode = null)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username))
         {
@@ -30,15 +30,36 @@ public class AuthService
             return null;
         }
 
+        // Validate invite code if provided (or if system requires it)
+        if (!string.IsNullOrEmpty(inviteCode))
+        {
+            var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Code == inviteCode && !c.IsRevoked);
+            if (code is null || code.ExpiresAt < DateTime.UtcNow || code.UsedCount >= code.MaxUses)
+            {
+                _log.Warn("auth", $"注册失败，邀请码无效: {inviteCode}");
+                throw new InvalidOperationException("邀请码无效或已过期");
+            }
+            code.UsedCount++;
+        }
+
         var minLen = await _settings.GetInt("Auth:PasswordMinLength", 6);
         if (password.Length < minLen)
             throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
+
+        // Determine department from invite code
+        int? deptId = null;
+        if (!string.IsNullOrEmpty(inviteCode))
+        {
+            var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Code == inviteCode);
+            deptId = code?.DepartmentId;
+        }
 
         var user = new User
         {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "member",
+            DepartmentId = deptId,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -47,6 +68,73 @@ public class AuthService
 
         _log.Info("auth", $"用户注册成功: {username}", $"{{\"role\":\"{user.Role}\",\"id\":{user.Id}}}", username);
         return user;
+    }
+
+    // ── Invite Codes ──
+
+    public async Task<InviteCode> GenerateInviteCode(int createdByUserId, int? deptId, int maxUses, int daysValid)
+    {
+        var code = Guid.NewGuid().ToString("N")[..8].ToUpper();
+        var invite = new InviteCode
+        {
+            Code = code, DepartmentId = deptId, MaxUses = maxUses,
+            CreatedByUserId = createdByUserId, ExpiresAt = DateTime.UtcNow.AddDays(daysValid)
+        };
+        _db.InviteCodes.Add(invite);
+        await _db.SaveChangesAsync();
+        _log.Info("auth", $"Invite code generated: {code} (dept={deptId}, max={maxUses})");
+        return invite;
+    }
+
+    public async Task<List<InviteCode>> GetInviteCodes()
+        => await _db.InviteCodes.Include(c => c.Department).OrderByDescending(c => c.CreatedAt).ToListAsync();
+
+    public async Task<bool> RevokeInviteCode(int id)
+    {
+        var code = await _db.InviteCodes.FindAsync(id);
+        if (code is null) return false;
+        code.IsRevoked = true;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    // ── CSV Import ──
+
+    public async Task<int> BulkImportUsers(string csvContent, string? defaultPassword)
+    {
+        var lines = csvContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var imported = 0;
+        var pwd = defaultPassword ?? Guid.NewGuid().ToString("N")[..8];
+
+        foreach (var line in lines.Skip(1)) // skip header
+        {
+            var cols = line.Split(',', StringSplitOptions.TrimEntries);
+            if (cols.Length < 1 || string.IsNullOrWhiteSpace(cols[0])) continue;
+
+            var username = cols[0].Trim();
+            if (await _db.Users.AnyAsync(u => u.Username == username)) continue;
+
+            var user = new User
+            {
+                Username = username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(pwd),
+                Role = "member"
+            };
+
+            // Optional: department from column 2
+            if (cols.Length >= 2 && !string.IsNullOrWhiteSpace(cols[1]))
+            {
+                var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == cols[1].Trim());
+                if (dept is not null) user.DepartmentId = dept.Id;
+            }
+
+            _db.Users.Add(user);
+            imported++;
+        }
+
+        await _db.SaveChangesAsync();
+        _log.Info("admin", $"Bulk imported {imported} users from CSV");
+        return imported;
     }
 
     public async Task<string?> Login(string username, string password)

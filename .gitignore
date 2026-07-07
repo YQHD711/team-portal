@@ -21,6 +21,7 @@ ai-service/.venv/
 
 # Data (mounted at runtime)
 data/knowledge/
+data/knowledge/.history/
 data/inventory.xlsx
 data/flightlogs/
 
@@ -37,3 +38,9 @@ data/flightlogs/
 # OS
 .DS_Store
 Thumbs.db
+
+# HTTPS / Let's Encrypt
+certbot/
+deploy/nginx.prod.generated.conf
+deploy/nginx.temp.conf
+data/files/

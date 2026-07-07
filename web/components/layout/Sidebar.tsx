@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud
+  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
@@ -18,17 +18,21 @@ const mainNav = [
   { href: "/inventory", label: "零件库存", icon: Package },
   { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
   { href: "/files", label: "资源共享", icon: Upload },
+  { href: "/finance", label: "采购申请", icon: BarChart3 },
   { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
+  { href: "/profile", label: "我的档案", icon: IdCard },
 ];
 
 const adminNav = [
   { href: "/admin/users", label: "用户管理", icon: Users },
+  { href: "/admin/profiles", label: "队员档案", icon: UserCircle },
   { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/knowledge", label: "资料管理", icon: FileText },
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
+  { href: "/admin/trash", label: "回收站", icon: Trash2 },
   { href: "/admin/cloud", label: "云存储", icon: Cloud },
   { href: "/admin/ai-admin", label: "AI 管理员", icon: Brain },
 ];

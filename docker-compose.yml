@@ -32,6 +32,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - AI_SERVICE_URL=http://ai-service:9001
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
+      - Cors__Origins=http://localhost:3000
     volumes:
       - ./data:/data
     depends_on:

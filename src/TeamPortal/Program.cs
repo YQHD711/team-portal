@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TeamPortal.Data;
@@ -46,11 +47,13 @@ builder.Services.AddAuthorization(options =>
 });
 
 // ── CORS (restrict in production) ──
+var corsOrigins = (builder.Configuration["Cors:Origins"] ?? "http://localhost:3000")
+    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -78,6 +81,10 @@ builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddScoped<WikiGeneratorService>();
 builder.Services.AddScoped<SystemAgentService>();
 builder.Services.AddScoped<BaiduNetdiskService>();
+builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<FlightService>();
+builder.Services.AddScoped<TrashService>();
+builder.Services.AddScoped<FinanceService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddSingleton<LogService>();
@@ -124,6 +131,16 @@ using (var scope = app.Services.CreateScope())
 // ── Middleware pipeline ──
 app.UseTeamPortalExceptionHandler();
 
+// Forwarded Headers：信任来自 nginx 反向代理的 X-Forwarded-* 头
+// Docker 内部网络中所有流量来自可信代理
+var fho = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+fho.KnownProxies.Clear();
+fho.KnownIPNetworks.Clear();
+app.UseForwardedHeaders(fho);
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
@@ -155,6 +172,12 @@ app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
 app.MapChatEndpoints();
 app.MapMaintenanceEndpoints();
+app.MapProfileEndpoints();
+app.MapFlightEndpoints();
+app.MapSearchEndpoints();
+app.MapTrashEndpoints();
+app.MapFinanceEndpoints();
+app.MapDashboardEndpoints();
 
 app.Run();
 
@@ -169,16 +192,169 @@ static void MigrateExistingTables(AppDbContext db)
             conn.Open();
 
         // Notification.UserId — added after initial table creation
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "ALTER TABLE Notifications ADD COLUMN UserId INTEGER NULL";
-        cmd.ExecuteNonQuery();
-    }
-    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column"))
-    {
-        // Column already exists — expected on subsequent startups
+        MigrateSql(conn, "ALTER TABLE Notifications ADD COLUMN UserId INTEGER NULL",
+            "duplicate column");
+
+        // PilotProfiles.FlightTypes — added after initial table creation
+        MigrateSql(conn, "ALTER TABLE PilotProfiles ADD COLUMN FlightTypes TEXT",
+            "duplicate column");
+
+        // ── New tables (Phase 10+: profiles, flights, batteries, incidents, trash) ──
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS PilotProfiles (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL UNIQUE,
+                Level TEXT DEFAULT '学员',
+                TotalFlightHours REAL DEFAULT 0,
+                FirstFlightDate TEXT,
+                Bio TEXT,
+                EmergencyContact TEXT,
+                EmergencyPhone TEXT,
+                UpdatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS TrainingRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                CourseName TEXT NOT NULL,
+                Score REAL,
+                ExamDate TEXT DEFAULT (datetime('now')),
+                Examiner TEXT,
+                Notes TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS CompetitionRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                CompetitionName TEXT NOT NULL,
+                Date TEXT DEFAULT (datetime('now')),
+                Event TEXT,
+                Ranking TEXT,
+                Certificate TEXT,
+                Notes TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS FlightRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                PilotUserId INTEGER NOT NULL,
+                AircraftModel TEXT,
+                TakeoffTime TEXT DEFAULT (datetime('now')),
+                LandingTime TEXT,
+                DurationMinutes REAL,
+                Location TEXT,
+                Weather TEXT,
+                Notes TEXT,
+                LogFileName TEXT,
+                BatteryNumber TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (PilotUserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS BatteryRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                BatteryNumber TEXT NOT NULL,
+                CycleCount INTEGER DEFAULT 0,
+                CapacityMAh REAL,
+                Health TEXT DEFAULT '正常',
+                LastUsedDate TEXT,
+                Notes TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now'))
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS IncidentRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Type TEXT DEFAULT '设备故障',
+                Severity TEXT DEFAULT '一般',
+                Description TEXT NOT NULL,
+                Date TEXT DEFAULT (datetime('now')),
+                RelatedFlightId INTEGER,
+                Resolution TEXT,
+                ReportedBy TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (RelatedFlightId) REFERENCES FlightRecords(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS InviteCodes (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT NOT NULL UNIQUE,
+                DepartmentId INTEGER,
+                MaxUses INTEGER DEFAULT 1,
+                UsedCount INTEGER DEFAULT 0,
+                CreatedByUserId INTEGER NOT NULL,
+                IsRevoked INTEGER DEFAULT 0,
+                ExpiresAt TEXT DEFAULT (datetime('now','+7 days')),
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (DepartmentId) REFERENCES Departments(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS PurchaseRequests (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                RequesterUserId INTEGER NOT NULL,
+                ItemName TEXT NOT NULL,
+                Quantity INTEGER DEFAULT 1,
+                EstimatedPrice REAL DEFAULT 0,
+                ActualPrice REAL,
+                Reason TEXT DEFAULT '',
+                Status TEXT DEFAULT 'pending',
+                ApproverUserId INTEGER,
+                ApprovedAt TEXT,
+                PurchasedAt TEXT,
+                ReceivedAt TEXT,
+                RejectReason TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (RequesterUserId) REFERENCES Users(Id) ON DELETE CASCADE,
+                FOREIGN KEY (ApproverUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS TrashItems (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                OriginalTable TEXT NOT NULL,
+                OriginalId INTEGER NOT NULL,
+                Title TEXT NOT NULL,
+                DataJson TEXT DEFAULT '{}',
+                DeletedByUserId INTEGER NOT NULL,
+                DeletedByName TEXT,
+                DeletedAt TEXT DEFAULT (datetime('now'))
+            )
+        """);
     }
     catch (Exception ex)
     {
         Console.WriteLine($"[WARN] DB migration failed: {ex.Message}");
+    }
+}
+
+static void MigrateSql(System.Data.Common.DbConnection conn, string sql, string? ignoreMsg = null)
+{
+    try
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
+    }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ignoreMsg is not null && ex.Message.Contains(ignoreMsg))
+    {
+        // Expected on subsequent runs
     }
 }
