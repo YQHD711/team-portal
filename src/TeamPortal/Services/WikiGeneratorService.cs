@@ -51,16 +51,169 @@ public class WikiGeneratorService
     //  Public API
     // ════════════════════════════════════════
 
-    public async Task<WikiTask> SubmitGit(string url, string projectName, string targetFolder, int userId)
+    public async Task<WikiTask> SubmitGit(string url, string projectName, string targetFolder, int userId, string visibility = "public")
     {
-        var task = new WikiTask { Type = "git", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId };
+        var task = new WikiTask { Type = "git", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
-    public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId)
+    public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId, string visibility = "public")
     {
-        var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId };
+        var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
+    }
+
+    public async Task<WikiTask> SubmitTranslate(string url, string projectName, string targetFolder, int userId, string visibility = "public")
+    {
+        var task = new WikiTask { Type = "translate", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
+        _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
+    }
+
+    public async Task<bool> UpdateVisibility(string id, string visibility)
+    {
+        var task = await _db.WikiTasks.FindAsync(id);
+        if (task is null) return false;
+        task.Visibility = visibility;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteTask(string id, KnowledgeService knowledge)
+    {
+        var task = await _db.WikiTasks.FindAsync(id);
+        if (task is null) return false;
+        // Clean up knowledge base files
+        try
+        {
+            var zhPath = Path.Combine(task.TargetFolder, task.ProjectName).Replace('\\', '/');
+            knowledge.DeleteFile(zhPath);
+            var enPath = Path.Combine(task.TargetFolder, $"{task.ProjectName}_EN").Replace('\\', '/');
+            try { knowledge.DeleteFile(enPath); } catch { /* EN path may not exist */ }
+        }
+        catch { /* best effort cleanup */ }
+        // Clean up workspace
+        if (!string.IsNullOrEmpty(task.WorkspacePath) && Directory.Exists(task.WorkspacePath))
+            try { Directory.Delete(task.WorkspacePath, true); } catch { }
+        _db.WikiTasks.Remove(task);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>Translate all markdown files in a cloned repo to Chinese.</summary>
+    public async Task ProcessTranslateTask(string taskId)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null) return;
+
+        try
+        {
+            _currentTaskId = task.Id;
+            _projectName = task.ProjectName;
+            _targetFolder = task.TargetFolder;
+
+            task.Status = "preparing"; await _db.SaveChangesAsync();
+            var baseDir = Path.Combine(Path.GetTempPath(), "teamportal-wiki", $"{task.Id}-{DateTime.UtcNow:yyyyMMddHHmmss}");
+            Directory.CreateDirectory(baseDir);
+            var cloneDir = Path.Combine(baseDir, "repo");
+
+            // Clone the repo
+            task.Status = "cloning"; await _db.SaveChangesAsync();
+            var psi = new System.Diagnostics.ProcessStartInfo("git", $"clone --depth 1 {task.SourceUrl} {cloneDir}")
+            { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            var proc = System.Diagnostics.Process.Start(psi)!;
+            await proc.WaitForExitAsync();
+            if (proc.ExitCode != 0)
+            {
+                var err = await proc.StandardError.ReadToEndAsync();
+                throw new InvalidOperationException($"Git clone failed: {err[..Math.Min(200, err.Length)]}");
+            }
+
+            // Find all .md files
+            var mdFiles = Directory.GetFiles(cloneDir, "*.md", SearchOption.AllDirectories)
+                .Where(f => !f.Replace('\\', '/').Contains("/.git/"))
+                .Select(f => new { FullPath = f, Relative = Path.GetRelativePath(cloneDir, f).Replace('\\', '/') })
+                .ToList();
+
+            task.Status = "translating"; await _db.SaveChangesAsync();
+            var total = mdFiles.Count;
+            var done = 0;
+            var aiKey = _config["AiService:DeepSeekKey"] ?? "";
+            var aiUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+            if (string.IsNullOrEmpty(aiKey)) throw new InvalidOperationException("AI API key not configured");
+
+            var catalog = new List<object>();
+
+            foreach (var file in mdFiles)
+            {
+                try
+                {
+                    var content = await File.ReadAllTextAsync(file.FullPath);
+                    if (string.IsNullOrWhiteSpace(content) || content.Length < 50) continue;
+
+                    // Save original English version as mirror
+                    var enPath = $"{_targetFolder}/{_projectName}_EN/{file.Relative}".Replace("//", "/");
+                    _knowledge.WriteFile(enPath, content);
+
+                    // Translate and save Chinese version
+                    var translated = await TranslateText(content, aiKey, aiUrl, _http);
+                    if (!string.IsNullOrWhiteSpace(translated))
+                    {
+                        var zhPath = $"{_targetFolder}/{_projectName}/{file.Relative}".Replace("//", "/");
+                        _knowledge.WriteFile(zhPath, translated);
+                    }
+
+                    catalog.Add(new { path = file.Relative.Replace(".md", ""), title = Path.GetFileNameWithoutExtension(file.Relative) });
+                    done++;
+                    _logger.LogInformation("Translate [{Done}/{Total}]: {File}", done, total, file.Relative);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Translation failed for {File}", file.Relative);
+                }
+            }
+
+            task.CatalogJson = System.Text.Json.JsonSerializer.Serialize(catalog);
+            task.Status = done > 0 ? "completed" : "failed";
+            task.ErrorMessage = done == 0 ? $"All {total} pages failed to translate" : null;
+            task.CompletedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Translation {Status}: {Done}/{Total} pages", task.Status, done, total);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Translation task {TaskId} failed", taskId);
+            task.Status = "failed"; task.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task<string?> TranslateText(string content, string apiKey, string baseUrl, HttpClient http)
+    {
+        var prompt = $@"将以下英文技术文档翻译为简体中文。要求：
+1. 准确翻译技术术语，保持专业性
+2. 保留 Markdown 格式、代码块、链接、图片引用不变
+3. 中文表述流畅自然，符合技术文档风格
+4. 如果有 YAML front matter（---包裹的内容），保留不变
+
+原文：
+{content[..Math.Min(content.Length, 8000)]}";
+
+        var payload = new
+        {
+            model = "deepseek-v4-flash",
+            messages = new[] { new { role = "user", content = prompt } },
+            temperature = 0.1, max_tokens = 8192
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(payload);
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
+        { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        req.Headers.Add("Authorization", $"Bearer {apiKey}");
+
+        var resp = await http.SendAsync(req);
+        if (!resp.IsSuccessStatusCode) return null;
+        var body = await resp.Content.ReadAsStringAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
     }
 
     public async Task<List<WikiTask>> GetTasks() => await _db.WikiTasks.OrderByDescending(t => t.CreatedAt).Take(20).ToListAsync();
@@ -114,49 +267,33 @@ public class WikiGeneratorService
     /// </summary>
     private void AutoAdjustParameters(ComplexityInfo c)
     {
+        // Model selection based on complexity — simple projects use flash (cheaper/faster)
         var model = c.Score <= 2 ? "deepseek-v4-flash" : "deepseek-v4-pro";
         _options.ContentModel = model;
         _options.CatalogModel = model;
 
-        _options.MaxIterations = c.Score switch
-        {
-            1 => 10,   // Simple: quick scan, no deep exploration needed
-            2 => 15,
-            3 => 22,
-            4 => 28,
-            _ => 35,   // Complex monorepo: needs deep analysis
-        };
-
-        _options.MaxOutputTokens = c.Score switch
-        {
-            1 => 8192,    // ~2K words — enough for simple project
-            2 => 16384,
-            3 => 32768,
-            4 => 49152,
-            _ => 65536,   // Large monorepo with many subsystems
-        };
-
+        // Directory depth: shallow for simple projects, unlimited for complex
         _options.DirectoryTreeMaxDepth = c.Score switch
         {
-            1 => 2,   // Shallow tree for simple projects
+            1 => 2,
             2 => 3,
-            _ => -1,  // Unlimited depth for moderate+ (let AI decide)
+            _ => -1,
         };
 
-        // Reduce parallelism for simple projects, increase for complex
+        // Parallelism: fewer concurrent docs for simple, more for complex
         _options.ParallelCount = c.Score <= 2 ? 2 : c.Score >= 4 ? 5 : 3;
 
-        // Timeout: simple projects finish fast, complex need hours
+        // Timeout scales with complexity
         _options.DocumentGenerationTimeoutMinutes = c.Score switch
         {
-            1 => 30,    // Simple: half hour is plenty
+            1 => 30,
             2 => 60,
             3 => 90,
             4 => 120,
-            _ => 180,   // Complex monorepo: up to 3 hours per phase
+            _ => 180,
         };
 
-        // Use thinking mode only for complex projects
+        // Thinking mode only for complex projects
         _options.ThinkingMode = c.Score >= 4 ? "thinking" : "non-thinking";
     }
 
@@ -181,9 +318,9 @@ public class WikiGeneratorService
             var complexity = DetectProjectComplexity(_workspacePath);
             _complexityScore = complexity.Score;
             AutoAdjustParameters(complexity);
-            _logger.LogInformation("Wiki complexity: {Score}/5 ({FileCount} files, {DirCount} dirs, ~{Loc} LOC). Adjusted: iterations={Iter}, tokens={Tokens}, model={Model}",
+            _logger.LogInformation("Wiki complexity: {Score}/5 ({FileCount} files, {DirCount} dirs, ~{Loc} LOC). model={Model}, timeout={Timeout}min",
                 complexity.Score, complexity.FileCount, complexity.DirCount, complexity.LinesOfCode,
-                _options.MaxIterations, _options.MaxOutputTokens, _options.ContentModel);
+                _options.ContentModel, _options.DocumentGenerationTimeoutMinutes);
 
             // Step 2: Generate catalog
             task.Status = "catalog"; await _db.SaveChangesAsync();
@@ -193,6 +330,10 @@ public class WikiGeneratorService
             // Step 3: Generate documents
             task.Status = "documents"; await _db.SaveChangesAsync();
             await GenerateAllDocuments();
+
+            // Step 4: Self-review — fix mermaid syntax, markdown errors, etc.
+            task.Status = "reviewing"; await _db.SaveChangesAsync();
+            await ReviewAllDocuments();
 
             // Done
             task.Status = "completed";
@@ -242,7 +383,7 @@ public class WikiGeneratorService
             if (!File.Exists(zipPath)) throw new FileNotFoundException("ZIP file not found", zipPath);
 
             var extractDir = Path.Combine(baseDir, "repo");
-            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
             return extractDir;
         }
     }
@@ -342,11 +483,9 @@ public class WikiGeneratorService
             new { role = "user", content = userMessage }
         };
 
-        var http = new HttpClient { Timeout = TimeSpan.FromMinutes(_options.DocumentGenerationTimeoutMinutes) };
-        var maxIterations = _options.MaxIterations;
         var iteration = 0;
 
-        while (iteration++ < maxIterations)
+        while (true)
         {
             var payload = new
             {
@@ -372,7 +511,7 @@ public class WikiGeneratorService
             };
             req.Headers.Add("Authorization", $"Bearer {apiKey}");
 
-            var resp = await http.SendAsync(req);
+            var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)
@@ -428,7 +567,7 @@ public class WikiGeneratorService
             }
         }
 
-        throw new InvalidOperationException($"AI agent exceeded max iterations ({maxIterations})");
+        throw new InvalidOperationException($"AI agent timed out after {_options.DocumentGenerationTimeoutMinutes} minutes");
     }
 
     // ════════════════════════════════════════
@@ -618,6 +757,117 @@ README:
         await Task.WhenAll(tasks);
     }
 
+    /// <summary>Review and fix all generated documents — mermaid syntax, markdown issues, etc.</summary>
+    private async Task ReviewAllDocuments()
+    {
+        List<CatalogItem> items;
+        try { items = JsonSerializer.Deserialize<List<CatalogItem>>(_catalogJson, JsonOpts) ?? new(); }
+        catch { return; }
+
+        var leaves = FlattenCatalog(items).Where(i => i.Children is null or { Count: 0 }).ToList();
+        _logger.LogInformation("Reviewing {Count} documents for {Project}", leaves.Count, _projectName);
+
+        foreach (var item in leaves)
+        {
+            try
+            {
+                var kbPath = $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
+                var content = _knowledge.GetContent(kbPath);
+                if (string.IsNullOrWhiteSpace(content)) continue;
+
+                var reviewPrompt = $@"你是技术文档审查专家。检查以下文档问题并修复：
+
+## 检查清单
+1. Mermaid 图表语法是否正确（节点文本中的 ()、[]、{{}} 是否用双引号包裹）
+2. Markdown 格式是否正确（标题层级、代码块语言标注、链接有效性）
+3. 中文表述是否通顺、是否有明显错误
+4. 代码块是否标注了语言（```python, ```csharp 等）
+
+## 要求
+- **只修复问题，不要重写整个文档**
+- 如果文档没有问题，返回原文
+- Mermaid 节点文本中的 () [] {{}} 必须用双引号包裹，如 A[""text()""]
+
+## 原始文档
+{content}
+
+请返回修复后的完整 Markdown 文档：";
+
+                var system = "你是一个文档审查专家。只修复问题，不重写。直接返回修复后的 Markdown 文档。";
+                var aiKey = _config["AiService:DeepSeekKey"] ?? "";
+                var aiUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+
+                var payload = new
+                {
+                    model = "deepseek-v4-flash",
+                    messages = new object[] {
+                        new { role = "system", content = system },
+                        new { role = "user", content = reviewPrompt }
+                    },
+                    temperature = 0.2,
+                    max_tokens = 16384
+                };
+
+                var json = JsonSerializer.Serialize(payload, JsonOpts);
+                var req = new HttpRequestMessage(HttpMethod.Post, $"{aiUrl}/v1/chat/completions")
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("Authorization", $"Bearer {aiKey}");
+
+                var resp = await _http.SendAsync(req);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                var body = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                var reviewed = doc.RootElement.GetProperty("choices")[0]
+                    .GetProperty("message").GetProperty("content").GetString();
+
+                if (!string.IsNullOrWhiteSpace(reviewed) && reviewed.Trim() != content.Trim())
+                {
+                    _knowledge.WriteFile(kbPath, reviewed);
+                    _logger.LogInformation("Doc reviewed & fixed: {Path}", kbPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Review failed for {Path}", item.Path);
+            }
+        }
+    }
+
+    /// <summary>Public entry for manual update — re-run review on a completed task.</summary>
+    public async Task<bool> UpdateDocuments(string taskId)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null || task.Status != "completed") return false;
+
+        _currentTaskId = task.Id;
+        _projectName = task.ProjectName;
+        _targetFolder = task.TargetFolder;
+        _catalogJson = task.CatalogJson;
+        _complexityScore = 3; // moderate for review
+
+        try
+        {
+            task.Status = "reviewing"; await _db.SaveChangesAsync();
+            await ReviewAllDocuments();
+            task.Status = "completed";
+            task.ErrorMessage = null;
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Wiki task updated: {Project}", task.ProjectName);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Wiki update failed: {Project}", task.ProjectName);
+            task.Status = "completed"; // revert to completed
+            task.ErrorMessage = $"Update failed: {ex.Message}";
+            await _db.SaveChangesAsync();
+            return false;
+        }
+    }
+
     private async Task GenerateDocument(CatalogItem item)
     {
         var docPath = $"{item.Path}";
@@ -641,7 +891,7 @@ README:
 ## 文档要求
 1. 标题用 H1 (# )，必须与指定标题一致
 2. 包含架构概述、核心流程、关键代码片段
-3. {(_complexityScore <= 2 ? "如果有助于理解，可以包含一个 Mermaid 图" : "至少包含一个 Mermaid 流程图或时序图")}
+3. {(_complexityScore <= 2 ? "如果有助于理解，可以包含一个 Mermaid 图" : "至少包含一个 Mermaid 流程图或时序图")}（Mermaid 节点文本中的括号、方括号等特殊字符需要用双引号包裹，例如 A[""函数名()""] 这样写）
 4. 所有信息必须基于实际代码
 5. 写中文文档，但保持代码标识符原文
 6. 代码示例加语言标注 ```python, ```csharp 等

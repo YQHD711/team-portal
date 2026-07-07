@@ -6,7 +6,7 @@ import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, File, Loader2, Eye
 import { getToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-interface TreeNode { name: string; type: "folder" | "file"; path?: string; children?: TreeNode[]; }
+interface TreeNode { name: string; type: "folder" | "file" | "wiki"; path?: string; children?: TreeNode[]; extra?: Record<string, string>; }
 
 export default function KnowledgeAdminPage() {
   const [tree, setTree] = useState<TreeNode[]>([]);
@@ -102,18 +102,28 @@ export default function KnowledgeAdminPage() {
     <ul className={level === 0 ? "space-y-0.5" : "ml-4 space-y-0.5"}>
       {nodes.map(n => (
         <li key={n.name + (n.path ?? "")}>
-          {n.type === "folder" ? (
+          {n.type === "wiki" ? (
+            <div>
+              <span className="text-xs text-sky-600 dark:text-sky-400 font-medium px-1">{n.name}/ <span className="text-zinc-400">(Wiki)</span></span>
+              {n.children && renderTree(n.children, level + 1)}
+            </div>
+          ) : n.type === "folder" ? (
             <div className="flex items-center gap-1 group">
               <span className="text-xs text-zinc-400 font-medium px-1">{n.name}/</span>
               <button onClick={() => handleDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-red-500" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>
             </div>
           ) : (
-            <button onClick={() => loadFile(n.path!)} className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
+            <button onClick={() => {
+              const ext = (n.path ?? "").split(".").pop()?.toLowerCase() ?? "";
+              if ([".md", ".txt", ".csv", ".json", ".xml"].some(e => (n.path ?? "").toLowerCase().endsWith(e))) loadFile(n.path!);
+              else window.open(`/api/knowledge/download?path=${encodeURIComponent(n.path!)}`, "_blank");
+            }} className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 group", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
               <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
               <span className="truncate">{n.name}</span>
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(n.path ?? n.name); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-red-500 shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>
             </button>
           )}
-          {n.children && renderTree(n.children, level + 1)}
+          {n.type !== "wiki" && n.children && renderTree(n.children, level + 1)}
         </li>
       ))}
     </ul>

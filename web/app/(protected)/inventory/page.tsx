@@ -8,7 +8,7 @@ import { Search, AlertTriangle, Package, Filter, Plus, Pencil, Trash2, X, Upload
 interface InventoryItem { id: number; name: string; category: string; quantity: number; location: string; status: string; updatedAt: string; photoUrl?: string; }
 interface Transaction { id: number; type: string; quantity: number; userName: string; note: string | null; createdAt: string; }
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
-const LOW_THRESHOLD = 5;
+const LOW_THRESHOLD = 3;
 const statusOpts = [
   { value: "available", label: "可用" },
   { value: "in_use", label: "使用中" },

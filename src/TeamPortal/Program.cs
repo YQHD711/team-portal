@@ -57,17 +57,24 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ── JSON: force UTC on all DateTime serialization ──
+builder.Services.ConfigureHttpJsonOptions(opts =>
+{
+    opts.SerializerOptions.Converters.Add(new TeamPortal.Json.UtcDateTimeConverter());
+});
+
 // ── ProblemDetails for consistent error responses ──
 builder.Services.AddProblemDetails();
 
 // ── Services ──
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
-builder.Services.AddScoped<InventoryService>();
+builder.Services.AddHttpClient<InventoryService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddHttpClient<AiProxyService>();
 builder.Services.AddHttpClient<FlightLogService>();
 builder.Services.AddHttpClient<DocumentService>();
+builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddScoped<WikiGeneratorService>();
 builder.Services.AddScoped<SystemAgentService>();
 builder.Services.AddScoped<BaiduNetdiskService>();
@@ -143,6 +150,7 @@ app.MapLogEndpoints();
 app.MapWikiEndpoints();
 app.MapBaiduEndpoints();
 app.MapNotificationEndpoints();
+app.MapFileEndpoints();
 app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
 app.MapChatEndpoints();
@@ -165,8 +173,12 @@ static void MigrateExistingTables(AppDbContext db)
         cmd.CommandText = "ALTER TABLE Notifications ADD COLUMN UserId INTEGER NULL";
         cmd.ExecuteNonQuery();
     }
-    catch
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column"))
     {
-        // Column already exists — this is expected on subsequent startups
+        // Column already exists — expected on subsequent startups
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[WARN] DB migration failed: {ex.Message}");
     }
 }

@@ -117,7 +117,7 @@ public class ConversationService
                 }
             }
         }
-        catch { /* compression failure is non-critical */ }
+        catch { /* compression failure is non-critical — silently continue */ }
     }
 
     /// <summary>Check if a user owns a session (has at least one message in it). Empty session = no owner.</summary>

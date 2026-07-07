@@ -1,26 +1,44 @@
+using Microsoft.EntityFrameworkCore;
+using TeamPortal.Data;
+
 namespace TeamPortal.Services;
 
 public class KnowledgeService
 {
     private readonly string _basePath;
     private readonly LogService _log;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public KnowledgeService(IConfiguration config, LogService log)
+    public KnowledgeService(IConfiguration config, LogService log, IServiceScopeFactory scopeFactory)
     {
         _log = log;
+        _scopeFactory = scopeFactory;
         _basePath = config.GetValue<string>("Knowledge:BasePath")
                     ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
     }
 
-    public List<TreeNode> GetTree(string? role, string? department)
+    private HashSet<string> GetInvisibleProjects(string? role, string? dept, int userId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var deptProjects = db.WikiTasks
+            .Where(t => t.Visibility == "department" && role != "admin" && t.TargetFolder != dept)
+            .Select(t => t.ProjectName);
+        var personalProjects = db.WikiTasks
+            .Where(t => t.Visibility == "personal" && role != "admin" && t.UserId != userId)
+            .Select(t => t.ProjectName);
+        return deptProjects.AsEnumerable().Union(personalProjects.AsEnumerable()).ToHashSet();
+    }
+
+    public List<TreeNode> GetTree(string? role, string? department, int userId = 0)
     {
         EnsureDirectories();
         var nodes = new List<TreeNode>();
+        var invisible = GetInvisibleProjects(role, department, userId);
 
-        // Public knowledge — always visible
+        // Public knowledge — always visible, but filter out invisible wiki projects
         var publicPath = Path.Combine(_basePath, "公共");
-        var publicChildren = Directory.Exists(publicPath) ? ScanDirectory(publicPath) : new List<TreeNode>();
-        // Also include root-level .md files (legacy migration)
+        var publicChildren = Directory.Exists(publicPath) ? ScanDirectory(publicPath, invisible) : new List<TreeNode>();
         foreach (var file in Directory.GetFiles(_basePath, "*.md").Where(f => !f.EndsWith(".gitkeep")))
             publicChildren.Add(new TreeNode { Name = Path.GetFileNameWithoutExtension(file), Type = "file", Path = Path.GetFileName(file) });
         nodes.Add(new TreeNode { Name = "公共知识库", Type = "folder", Path = "公共", Children = publicChildren });
@@ -28,19 +46,18 @@ public class KnowledgeService
         // Department knowledge
         if (role == "admin")
         {
-            // Admin sees all department folders
             foreach (var deptDir in Directory.GetDirectories(_basePath).OrderBy(Path.GetFileName))
             {
                 var name = Path.GetFileName(deptDir);
                 if (name == "公共") continue;
-                nodes.Add(new TreeNode { Name = name, Type = "folder", Path = name, Children = ScanDirectory(deptDir) });
+                nodes.Add(new TreeNode { Name = name, Type = "folder", Path = name, Children = ScanDirectory(deptDir, invisible) });
             }
         }
         else if (!string.IsNullOrEmpty(department))
         {
             var deptPath = Path.Combine(_basePath, department);
             if (Directory.Exists(deptPath))
-                nodes.Add(new TreeNode { Name = department, Type = "folder", Path = department, Children = ScanDirectory(deptPath) });
+                nodes.Add(new TreeNode { Name = department, Type = "folder", Path = department, Children = ScanDirectory(deptPath, invisible) });
         }
 
         return nodes;
@@ -61,6 +78,23 @@ public class KnowledgeService
         if (dir is not null) Directory.CreateDirectory(dir);
         File.WriteAllText(fullPath, content);
         _log.Info("knowledge", $"File written: {relativePath}");
+    }
+
+    public void WriteFile(string relativePath, byte[] data)
+    {
+        var fullPath = ResolvePath(relativePath);
+        if (fullPath is null) throw new InvalidOperationException("Invalid path");
+        var dir = Path.GetDirectoryName(fullPath);
+        if (dir is not null) Directory.CreateDirectory(dir);
+        File.WriteAllBytes(fullPath, data);
+        _log.Info("knowledge", $"Binary file written: {relativePath}");
+    }
+
+    public byte[]? GetBinaryContent(string relativePath)
+    {
+        var fullPath = ResolvePath(relativePath);
+        if (fullPath is null || !File.Exists(fullPath)) return null;
+        return File.ReadAllBytes(fullPath);
     }
 
     public void DeleteFile(string relativePath)
@@ -93,13 +127,54 @@ public class KnowledgeService
         Directory.CreateDirectory(Path.Combine(_basePath, departmentName));
     }
 
-    private List<TreeNode> ScanDirectory(string dir)
+    /// <summary>Get completed wiki task IDs keyed by project name.</summary>
+    private Dictionary<string, string> GetWikiProjects()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return db.WikiTasks
+            .Where(t => t.Status == "completed")
+            .ToDictionary(t => t.ProjectName, t => t.Id);
+    }
+
+    private List<TreeNode> ScanDirectory(string dir, HashSet<string>? invisibleProjects = null)
     {
         var nodes = new List<TreeNode>();
+        var wikiProjects = GetWikiProjects();
+
         foreach (var subDir in Directory.GetDirectories(dir).OrderBy(Path.GetFileName))
-            nodes.Add(new TreeNode { Name = Path.GetFileName(subDir), Type = "folder", Path = Path.GetRelativePath(_basePath, subDir).Replace('\\', '/'), Children = ScanDirectory(subDir) });
-        foreach (var file in Directory.GetFiles(dir, "*.md").Where(f => !f.EndsWith(".gitkeep")).OrderBy(Path.GetFileName))
-            nodes.Add(new TreeNode { Name = Path.GetFileNameWithoutExtension(file), Type = "file", Path = Path.GetRelativePath(_basePath, file).Replace('\\', '/') });
+        {
+            var dirName = Path.GetFileName(subDir);
+            if (invisibleProjects != null && invisibleProjects.Contains(dirName)) continue;
+            var relPath = Path.GetRelativePath(_basePath, subDir).Replace('\\', '/');
+
+            // Wiki projects: collapsed entry for regular users, expandable for admins
+            if (wikiProjects.TryGetValue(dirName, out var taskId))
+            {
+                nodes.Add(new TreeNode
+                {
+                    Name = dirName, Type = "wiki", Path = relPath,
+                    Extra = new Dictionary<string, string> { ["taskId"] = taskId },
+                    Children = ScanDirectory(subDir, invisibleProjects) // include children for admin editing
+                });
+            }
+            else
+            {
+                nodes.Add(new TreeNode { Name = dirName, Type = "folder", Path = relPath, Children = ScanDirectory(subDir, invisibleProjects) });
+            }
+        }
+        foreach (var file in Directory.GetFiles(dir).Where(f => !f.EndsWith(".gitkeep")).OrderBy(Path.GetFileName))
+        {
+            var ext = Path.GetExtension(file).ToLowerInvariant();
+            var relPath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
+            nodes.Add(new TreeNode
+            {
+                Name = Path.GetFileNameWithoutExtension(file),
+                Type = "file",
+                Path = relPath,
+                Extra = new Dictionary<string, string> { ["ext"] = ext }
+            });
+        }
         return nodes;
     }
 
@@ -107,7 +182,7 @@ public class KnowledgeService
     {
         var fullPath = Path.GetFullPath(Path.Combine(_basePath, relativePath));
         var normalizedBase = Path.GetFullPath(_basePath);
-        if (!fullPath.StartsWith(normalizedBase + Path.DirectorySeparatorChar) && fullPath != normalizedBase) return null;
+        if (!fullPath.StartsWith(normalizedBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && !string.Equals(fullPath, normalizedBase, StringComparison.OrdinalIgnoreCase)) return null;
         return fullPath;
     }
 }
@@ -118,4 +193,5 @@ public class TreeNode
     public string Type { get; set; } = "folder";
     public string? Path { get; set; }
     public List<TreeNode>? Children { get; set; }
+    public Dictionary<string, string>? Extra { get; set; }
 }

@@ -66,6 +66,7 @@ internal class CaptureStream : Stream
     private readonly Func<string, Task> _onComplete;
     private readonly MemoryStream _buffer = new();
     private readonly CancellationTokenSource _cts = new(TimeSpan.FromMinutes(5));
+    private volatile bool _disposed;
 
     public CaptureStream(Stream inner, Func<string, Task> onComplete)
     {
@@ -109,6 +110,7 @@ internal class CaptureStream : Stream
 
     private async Task FinalizeAsync()
     {
+        if (_disposed) return;
         try
         {
             _buffer.Position = 0;
@@ -149,7 +151,7 @@ internal class CaptureStream : Stream
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _inner.Dispose(); _buffer.Dispose(); _cts.Dispose(); }
+        if (disposing) { _disposed = true; _cts.Cancel(); _inner.Dispose(); _buffer.Dispose(); _cts.Dispose(); }
         base.Dispose(disposing);
     }
 }

@@ -49,6 +49,7 @@ export function ChatPanel() {
       const res = await fetch("/api/chat/new-session", { headers: { Authorization: `Bearer ${token}` } });
       const { sessionId: sid } = await res.json();
       setSessionId(sid);
+      localStorage.setItem("chatSessionId", sid);
       setShowHistory(false);
     } catch { setSessionId((crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 14)).slice(0, 12)); }
   }, []);
@@ -56,6 +57,7 @@ export function ChatPanel() {
   // Load messages for a session
   const loadSession = useCallback(async (sid: string) => {
     setSessionId(sid);
+    localStorage.setItem("chatSessionId", sid);
     setShowHistory(false);
     try {
       const token = getToken();
@@ -76,8 +78,13 @@ export function ChatPanel() {
     } catch { }
   };
 
-  // Initialize: create new session if none
-  useEffect(() => { if (!sessionId) newSession(); }, [sessionId, newSession]);
+  // Initialize: restore from localStorage or create new
+  useEffect(() => {
+    if (sessionId) return;
+    const stored = localStorage.getItem("chatSessionId");
+    if (stored) { setSessionId(stored); return; }
+    newSession();
+  }, [sessionId, newSession]);
 
   const handleSend = async () => {
     if (!input.trim() || streaming || !sessionId) return;

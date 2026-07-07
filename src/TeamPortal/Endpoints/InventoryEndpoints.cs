@@ -121,7 +121,7 @@ public static class InventoryEndpoints
             return Results.Ok(new { success = true, photoUrl });
         }).DisableAntiforgery();
 
-        // Check-out items (reduce quantity + log transaction)
+        // Check-out items (reduce quantity + log transaction) — atomic UPDATE for concurrency safety
         group.MapPost("/{id:int}/checkout", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
         {
             var (role, _) = await GetUserCtx(user, db);
@@ -130,12 +130,17 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
-            if (item.Quantity < req.Quantity) return Results.Problem($"Insufficient stock: have {item.Quantity}, need {req.Quantity}", statusCode: 400);
 
             var userName = user.Identity?.Name ?? "unknown";
-            item.Quantity -= req.Quantity;
-            item.UpdatedAt = DateTime.UtcNow;
+            // Atomic decrement: only succeeds if enough stock remains
+            var updated = await db.InventoryItems
+                .Where(i => i.Id == id && i.Quantity >= req.Quantity)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.Quantity, i => i.Quantity - req.Quantity)
+                    .SetProperty(i => i.UpdatedAt, DateTime.UtcNow));
+            if (updated == 0) return Results.Problem("库存不足或已被他人修改，请刷新重试", statusCode: 409);
 
+            var newQty = item.Quantity - req.Quantity;
             db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = id, Type = "checkout", Quantity = req.Quantity,
@@ -143,13 +148,13 @@ public static class InventoryEndpoints
             });
             await db.SaveChangesAsync();
 
-            log.Info("inventory", $"Checkout: {item.Name} -{req.Quantity} by {userName} (now {item.Quantity}){(req.Note is not null ? $", note: {req.Note}" : "")}");
-            if (item.Quantity > 0 && item.Quantity <= 3)
-                notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件（{userName} 借出 {req.Quantity} 个）", "/inventory");
-            return Results.Ok(new { success = true, item.Quantity, message = $"已借出 {req.Quantity} 个 {item.Name}" });
+            log.Info("inventory", $"Checkout: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
+            if (newQty >= 0 && newQty <= InventoryService.LowStockThreshold)
+                notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {newQty} 件（{userName} 借出 {req.Quantity} 个）", "/inventory");
+            return Results.Ok(new { success = true, quantity = newQty, message = $"已借出 {req.Quantity} 个 {item.Name}" });
         });
 
-        // Check-in items (increase quantity + log transaction)
+        // Check-in items (increase quantity + log transaction) — atomic UPDATE for concurrency safety
         group.MapPost("/{id:int}/checkin", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
         {
             var (role, _) = await GetUserCtx(user, db);
@@ -160,9 +165,14 @@ public static class InventoryEndpoints
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
 
             var userName = user.Identity?.Name ?? "unknown";
-            item.Quantity += req.Quantity;
-            item.UpdatedAt = DateTime.UtcNow;
+            var updated = await db.InventoryItems
+                .Where(i => i.Id == id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.Quantity, i => i.Quantity + req.Quantity)
+                    .SetProperty(i => i.UpdatedAt, DateTime.UtcNow));
+            if (updated == 0) return Results.Problem("零件不存在", statusCode: 404);
 
+            var newQty = item.Quantity + req.Quantity;
             db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = id, Type = "checkin", Quantity = req.Quantity,
@@ -170,11 +180,10 @@ public static class InventoryEndpoints
             });
             await db.SaveChangesAsync();
 
-            log.Info("inventory", $"Checkin: {item.Name} +{req.Quantity} by {userName} (now {item.Quantity}){(req.Note is not null ? $", note: {req.Note}" : "")}");
-            // Clear low-stock warning if stock is now healthy
-            if (item.Quantity > 3)
-                notify.Notify("库存恢复", $"零件「{item.Name}」库存已恢复至 {item.Quantity} 件", "/inventory");
-            return Results.Ok(new { success = true, item.Quantity, message = $"已归还 {req.Quantity} 个 {item.Name}" });
+            log.Info("inventory", $"Checkin: {item.Name} +{req.Quantity} by {userName} (now {newQty})");
+            if (newQty > 3)
+                notify.Notify("库存恢复", $"零件「{item.Name}」库存已恢复至 {newQty} 件", "/inventory");
+            return Results.Ok(new { success = true, quantity = newQty, message = $"已归还 {req.Quantity} 个 {item.Name}" });
         });
 
         // Get transaction history for an item

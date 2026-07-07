@@ -43,8 +43,8 @@ public class NotificationService
             }
             catch (Exception ex)
             {
-                _log.Error("notification", $"Channel read failed: {ex.Message}", ex.ToString());
-                break;
+                _log.Error("notification", $"Channel error, retrying in 5s: {ex.Message}");
+                try { await Task.Delay(5000); } catch { break; }
             }
 
             if (batch.Count == 0) continue;

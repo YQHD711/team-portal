@@ -22,14 +22,18 @@ public static class WikiEndpoints
             if (!knowledge.CanAccess(targetFolder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 
+            var visibility = req.Visibility ?? "public";
+            if (visibility is not "public" and not "department" and not "personal")
+                return Results.Problem("Invalid visibility", statusCode: 400);
+
             var uid = GetUserId(user);
-            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid);
+            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility);
             var log = app.Services.GetRequiredService<LogService>();
-            log.Info("wiki", $"Git task submitted: {req.ProjectName}", $"{{\"url\":\"{req.Url}\"}}");
-            return Results.Ok(new { task.Id, task.Status });
+            log.Info("wiki", $"Git task submitted: {req.ProjectName} (visibility={visibility})");
+            return Results.Ok(new { task.Id, task.Status, task.Visibility });
         });
 
-        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
+        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -41,6 +45,10 @@ public static class WikiEndpoints
             if (!knowledge.CanAccess(folder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 
+            var vis = visibility ?? "public";
+            if (vis is not "public" and not "department" and not "personal")
+                return Results.Problem("Invalid visibility", statusCode: 400);
+
             var zipDir = Path.Combine(Path.GetTempPath(), "teamportal-zip");
             Directory.CreateDirectory(zipDir);
             var zipPath = Path.Combine(zipDir, $"{Guid.NewGuid()}.zip");
@@ -48,48 +56,143 @@ public static class WikiEndpoints
                 await file.CopyToAsync(stream);
 
             var uid = GetUserId(user);
-            var task = await generator.SubmitZip(zipPath, projectName, folder, uid);
+            var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis);
             var log = app.Services.GetRequiredService<LogService>();
-            log.Info("wiki", $"ZIP task submitted: {projectName}", $"{{\"size\":{file.Length}}}");
-            return Results.Ok(new { task.Id, task.Status });
+            log.Info("wiki", $"ZIP task submitted: {projectName} (visibility={vis})");
+            return Results.Ok(new { task.Id, task.Status, task.Visibility });
         }).DisableAntiforgery();
 
-        wiki.MapGet("/tasks", async (WikiGeneratorService generator) =>
+        // Submit translation task — clone doc repo + AI translate to Chinese
+        wiki.MapPost("/submit-translate", async (TranslateRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
         {
+            var (role, dept) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
+            if (string.IsNullOrWhiteSpace(req.Url) || string.IsNullOrWhiteSpace(req.ProjectName))
+                return Results.Problem("URL and project name required", statusCode: 400);
+
+            var folder = req.TargetFolder ?? "公共";
+            var vis = req.Visibility ?? "public";
+            var uid = GetUserId(user);
+            var task = await generator.SubmitTranslate(req.Url, req.ProjectName, folder, uid, vis);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Info("wiki", $"Translate task submitted: {req.ProjectName}");
+            return Results.Ok(new { task.Id, task.Status });
+        });
+
+        wiki.MapGet("/tasks", async (ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
             var tasks = await generator.GetTasks();
-            return Results.Ok(tasks.Select(t => new { t.Id, t.Type, t.ProjectName, t.Status, t.ErrorMessage, t.CreatedAt, t.CompletedAt }));
+            var filtered = tasks.Where(t =>
+                t.Visibility == "public" ||
+                (t.Visibility == "department" && (role == "admin" || dept == t.TargetFolder)) ||
+                (t.Visibility == "personal" && (role == "admin" || t.UserId == uid))
+            );
+            return Results.Ok(filtered.Select(t => new { t.Id, t.Type, t.ProjectName, t.Status, t.ErrorMessage, t.Visibility, t.TargetFolder, t.CreatedAt, t.CompletedAt }));
         });
 
-        wiki.MapGet("/tasks/{id}", async (string id, WikiGeneratorService generator) =>
-        {
-            var task = await generator.GetTask(id);
-            return task is not null ? Results.Ok(task) : Results.Problem("Not found", statusCode: 404);
-        });
-
-        // Serve catalog for wiki viewer
-        wiki.MapGet("/tasks/{id}/catalog", async (string id, WikiGeneratorService generator) =>
+        wiki.MapGet("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            return Results.Ok(new { task.Id, task.Type, task.ProjectName, task.Status, task.ErrorMessage, task.Visibility, task.TargetFolder, task.WorkspacePath, task.CatalogJson, task.CreatedAt, task.CompletedAt });
+        });
+
+        // Delete a wiki task
+        wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        {
+            var (role, _) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
+            var ok = await generator.DeleteTask(id, knowledge);
+            return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
+        });
+
+        // Update/review existing documents
+        wiki.MapPost("/tasks/{id}/update", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var (role, _) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可更新", statusCode: 403);
+            var ok = await generator.UpdateDocuments(id);
+            return ok ? Results.Ok(new { success = true, message = "文档审查已启动，完成后自动更新" })
+                      : Results.Problem("任务不存在或未完成", statusCode: 400);
+        });
+
+        // Change visibility of a wiki task
+        wiki.MapPatch("/tasks/{id}/visibility", async (string id, VisibilityRequest req, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var (role, dept) = await GetUserCtx(user, db);
+            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可修改", statusCode: 403);
+            if (req.Visibility is not "public" and not "department" and not "personal")
+                return Results.Problem("Invalid visibility", statusCode: 400);
+            var ok = await generator.UpdateVisibility(id, req.Visibility);
+            return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
+        });
+
+        // Serve catalog for wiki viewer
+        wiki.MapGet("/tasks/{id}/catalog", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
             if (string.IsNullOrEmpty(task.CatalogJson)) return Results.Ok(new List<object>());
             return Results.Content(task.CatalogJson, "application/json");
         });
 
         // Serve wiki document content for viewer
-        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, string? lang, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
-            var kbPath = $"{task.TargetFolder}/{task.ProjectName}/{path}.md".Replace("//", "/");
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            var projName = lang == "en" ? $"{task.ProjectName}_EN" : task.ProjectName;
+            var kbPath = $"{task.TargetFolder}/{projName}/{path}.md".Replace("//", "/");
             var content = knowledge.GetContent(kbPath);
-            return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Document not found", statusCode: 404);
+            if (content is not null)
+            {
+                // Convert wiki-style links: [[Page Name]] or [[Page Name|Display Text]]
+                content = System.Text.RegularExpressions.Regex.Replace(content,
+                    @"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]",
+                    m => {
+                        var page = m.Groups[1].Value.Trim();
+                        var text = m.Groups[2].Success ? m.Groups[2].Value.Trim() : page;
+                        var encoded = Uri.EscapeDataString(page.Replace(" ", "-"));
+                        return $"[{text}](?path={encoded})";
+                    });
+                // Also fix relative links to other .md files in the same project
+                content = System.Text.RegularExpressions.Regex.Replace(content,
+                    @"\[([^\]]+?)\]\(([^)]+?)\)",
+                    m => {
+                        var text = m.Groups[1].Value;
+                        var link = m.Groups[2].Value;
+                        if (link.StartsWith("http") || link.StartsWith("#") || link.StartsWith("/")) return m.Value;
+                        var cleanLink = link.Replace(".md", "").Replace(' ', '-');
+                        return $"[{text}](?path={Uri.EscapeDataString(cleanLink)}&lang={lang ?? "zh"})";
+                    });
+                return Results.Ok(new { path, content });
+            }
+            // Fallback: try the other language
+            var fallbackName = lang == "en" ? task.ProjectName : $"{task.ProjectName}_EN";
+            var fbPath = $"{task.TargetFolder}/{fallbackName}/{path}.md".Replace("//", "/");
+            var fbContent = knowledge.GetContent(fbPath);
+            return fbContent is not null ? Results.Ok(new { path, content = fbContent }) : Results.Problem("Document not found", statusCode: 404);
         });
 
         // Source code file viewer
-        wiki.MapGet("/tasks/{id}/blob/{**path}", async (string id, string path, HttpContext ctx, WikiGeneratorService generator) =>
+        wiki.MapGet("/tasks/{id}/blob/{**path}", async (string id, string path, HttpContext ctx, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
         {
             var task = await generator.GetTask(id);
             if (task is null || string.IsNullOrEmpty(task.WorkspacePath)) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
             var fullPath = Path.GetFullPath(Path.Combine(task.WorkspacePath, path));
             if (!fullPath.StartsWith(Path.GetFullPath(task.WorkspacePath))) return Results.Problem("Access denied", statusCode: 403);
             if (!File.Exists(fullPath)) return Results.Problem("File not found", statusCode: 404);
@@ -143,6 +246,13 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
         var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
         return u is null ? (null, null) : (u.Role, u.Department?.Name);
     }
+
+    private static bool CanViewTask(Data.Models.WikiTask task, string? role, string? dept, int userId) =>
+        task.Visibility == "public" ||
+        (task.Visibility == "department" && (role == "admin" || dept == task.TargetFolder)) ||
+        (task.Visibility == "personal" && (role == "admin" || task.UserId == userId));
 }
 
-public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder);
+public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility);
+public record TranslateRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility);
+public record VisibilityRequest(string Visibility);

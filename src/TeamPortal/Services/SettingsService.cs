@@ -110,7 +110,6 @@ public class SettingsService
             new() { Key = "AI:Temperature", Value = "0.7", Category = "AI 服务", Description = "AI 温度参数 (0-1)" },
             new() { Key = "AI:AgentTimeoutMinutes", Value = "20", Category = "AI 服务", Description = "AI Agent 单次任务总超时（分钟）" },
             new() { Key = "AI:MaxTokens", Value = "8192", Category = "AI 服务", Description = "AI 单次 API 调用最大输出 token 数" },
-            new() { Key = "AI:LoopThreshold", Value = "8", Category = "AI 服务", Description = "相同工具+参数重复调用多少次后判定为死循环" },
             new() { Key = "AI:RequestTimeoutSeconds", Value = "300", Category = "AI 服务", Description = "AI 单次 HTTP 请求超时（秒）" },
             new() { Key = "AI:EnableThinking", Value = "false", Category = "AI 服务", Description = "启用 V4 thinking 深度思考模式（开启后耗时显著增加）" },
             new() { Key = "AI:ReasoningEffort", Value = "medium", Category = "AI 服务", Description = "思考深度：low / medium / high / max" },

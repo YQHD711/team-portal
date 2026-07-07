@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<WikiTask> WikiTasks => Set<WikiTask>();
+    public DbSet<SharedFile> SharedFiles => Set<SharedFile>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CodeProposal> CodeProposals => Set<CodeProposal>();

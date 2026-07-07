@@ -136,18 +136,15 @@ public class SystemAgentService
 
         var agentTimeoutMin = await _settings.GetInt("AI:AgentTimeoutMinutes", 20);
         var maxTokens = await _settings.GetInt("AI:MaxTokens", 8192);
-        var loopThreshold = await _settings.GetInt("AI:LoopThreshold", 8);
         var reqTimeoutSec = await _settings.GetInt("AI:RequestTimeoutSeconds", 300);
         var enableThinking = await _settings.Get("AI:EnableThinking", "false") == "true";
         var reasoningEffort = await _settings.Get("AI:ReasoningEffort", "medium");
 
-        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={maxTokens}, loopThreshold={loopThreshold}, thinking={enableThinking}", null, userName);
+        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={maxTokens}, thinking={enableThinking}", null, userName);
 
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(agentTimeoutMin));
         var iteration = 0;
         var toolCallCount = 0;
-        var lastToolKey = "";
-        var sameCallCount = 0;
         while (!timeoutCts.Token.IsCancellationRequested)
         {
             var apiStart = DateTime.UtcNow;
@@ -225,16 +222,6 @@ public class SystemAgentService
 
                     var truncatedArgs = args.Length > 100 ? args[..100] + "..." : args;
                     _log.Info("agent", $"Tool: {name}({truncatedArgs}) — {toolMs}ms", null, userName);
-
-                    // Smart loop detection: same tool + same args = stuck
-                    var callKey = $"{name}|{args}";
-                    if (callKey == lastToolKey) sameCallCount++;
-                    else { sameCallCount = 1; lastToolKey = callKey; }
-                    if (sameCallCount > loopThreshold)
-                    {
-                        _log.Warn("agent", $"Loop: {name} with same args {sameCallCount}x", null, userName);
-                        return $"❌ 检测到重复调用：{name} 以相同参数被调用 {sameCallCount} 次。请换个方式提问。";
-                    }
 
                     toolResults.Add((callId, name, args, result));
                     toolCallCount++;

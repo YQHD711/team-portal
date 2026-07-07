@@ -17,6 +17,7 @@ const mainNav = [
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/inventory", label: "零件库存", icon: Package },
   { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
+  { href: "/files", label: "资源共享", icon: Upload },
   { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
 ];
 

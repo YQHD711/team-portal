@@ -16,22 +16,21 @@ public static class BaiduEndpoints
             try
             {
                 var (stream, fileName, size) = await svc.GetDownloadStream(fsId);
-                var ext = Path.GetExtension(fileName).ToLowerInvariant();
-                var ct = ext switch
+                await using (stream)
                 {
-                    ".jpg" or ".jpeg" => "image/jpeg",
-                    ".png" => "image/png",
-                    ".gif" => "image/gif",
-                    ".webp" => "image/webp",
-                    ".svg" => "image/svg+xml",
-                    ".pdf" => "application/pdf",
-                    _ => "application/octet-stream",
-                };
-                var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
-                ctx.Response.ContentType = ct;
-                ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
-                if (size > 0) ctx.Response.Headers.ContentLength = size;
-                await stream.CopyToAsync(ctx.Response.Body);
+                    var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                    var ct = ext switch
+                    {
+                        ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png",
+                        ".gif" => "image/gif", ".webp" => "image/webp", ".svg" => "image/svg+xml",
+                        ".pdf" => "application/pdf", _ => "application/octet-stream",
+                    };
+                    var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
+                    ctx.Response.ContentType = ct;
+                    ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                    if (size > 0) ctx.Response.Headers.ContentLength = size;
+                    await stream.CopyToAsync(ctx.Response.Body);
+                }
             }
             catch (Exception ex)
             {
@@ -53,22 +52,21 @@ public static class BaiduEndpoints
                 if (file is null) { ctx.Response.StatusCode = 404; await ctx.Response.WriteAsync("File not found"); return; }
 
                 var (stream, _, size) = await svc.GetDownloadStream(file.FsId);
-                var ext = Path.GetExtension(fileName).ToLowerInvariant();
-                var ct = ext switch
+                await using (stream)
                 {
-                    ".jpg" or ".jpeg" => "image/jpeg",
-                    ".png" => "image/png",
-                    ".gif" => "image/gif",
-                    ".webp" => "image/webp",
-                    ".svg" => "image/svg+xml",
-                    ".pdf" => "application/pdf",
-                    _ => "application/octet-stream",
-                };
-                var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
-                ctx.Response.ContentType = ct;
-                ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
-                if (size > 0) ctx.Response.Headers.ContentLength = size;
-                await stream.CopyToAsync(ctx.Response.Body);
+                    var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                    var ct = ext switch
+                    {
+                        ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png",
+                        ".gif" => "image/gif", ".webp" => "image/webp", ".svg" => "image/svg+xml",
+                        ".pdf" => "application/pdf", _ => "application/octet-stream",
+                    };
+                    var inline = ct.StartsWith("image/") || ct == "application/pdf" ? "inline" : "attachment";
+                    ctx.Response.ContentType = ct;
+                    ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                    if (size > 0) ctx.Response.Headers.ContentLength = size;
+                    await stream.CopyToAsync(ctx.Response.Body);
+                }
             }
             catch (Exception ex)
             {

@@ -122,14 +122,9 @@ public class BaiduNetdiskService
 
     private async Task<string> GetAccessToken()
     {
-        // Fast path — return cached token without lock
-        if (!string.IsNullOrEmpty(_accessToken) && DateTime.UtcNow < _tokenExpiry)
-            return _accessToken;
-
         await _tokenSemaphore.WaitAsync();
         try
         {
-            // Double-check after acquiring lock
             if (!string.IsNullOrEmpty(_accessToken) && DateTime.UtcNow < _tokenExpiry)
                 return _accessToken;
 

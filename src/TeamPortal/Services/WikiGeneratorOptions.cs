@@ -12,10 +12,7 @@ public class WikiGeneratorOptions
     /// <summary>AI model for document content generation.</summary>
     public string ContentModel { get; set; } = "deepseek-v4-pro";
 
-    /// <summary>Maximum AI tool-call iterations per phase (catalog + each document). Auto-adjusted by complexity detection.</summary>
-    public int MaxIterations { get; set; } = 30;
-
-    /// <summary>Maximum output tokens. DeepSeek supports up to 131,072. Cap to control cost.</summary>
+    /// <summary>Maximum output tokens. DeepSeek supports up to 131,072.</summary>
     public int MaxOutputTokens { get; set; } = 32768;
 
     /// <summary>Number of parallel document generation tasks. 3-5 recommended.</summary>

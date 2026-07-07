@@ -22,8 +22,12 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
     blocks.forEach(async (block, i) => {
       if (block.getAttribute("data-processed")) return;
       const id = `mermaid-${Date.now()}-${i}`;
-      const { svg } = await mermaid.render(id, block.textContent ?? "");
-      block.innerHTML = svg;
+      try {
+        const { svg } = await mermaid.render(id, block.textContent ?? "");
+        block.innerHTML = svg;
+      } catch {
+        block.innerHTML = `<div class="text-sm text-red-500 p-3 border border-red-200 rounded-lg">图表渲染失败，请检查语法</div>`;
+      }
       block.setAttribute("data-processed", "true");
     });
   }, [content]);

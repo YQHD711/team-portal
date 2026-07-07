@@ -70,7 +70,7 @@ public static class SystemAgentEndpoints
         });
 
         // Build & restart (applies all pending proposals)
-        agent.MapPost("/rebuild", async (IWebHostEnvironment env) =>
+        agent.MapPost("/rebuild", async (IWebHostEnvironment env, IHostApplicationLifetime lifetime) =>
         {
             var projRoot = Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", ".."));
             var psi = new System.Diagnostics.ProcessStartInfo("dotnet", "build src/TeamPortal/")
@@ -88,12 +88,7 @@ public static class SystemAgentEndpoints
 
             if (proc.ExitCode == 0)
             {
-                // Signal restart — frontend will poll for reconnect
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(500);
-                    Environment.Exit(0);
-                });
+                _ = Task.Run(async () => { await Task.Delay(500); lifetime.StopApplication(); });
                 return Results.Ok(new { success = true, message = "编译成功，服务将在3秒后重启...", output = output[^500..] });
             }
             else

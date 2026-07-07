@@ -17,27 +17,58 @@ public static class KnowledgeEndpoints
 
     public static void MapKnowledgeEndpoints(this WebApplication app)
     {
+        // Tree and content — read-only for all authenticated users (CanAccess filters by role/department)
         app.MapGet("/api/knowledge/tree", async (ClaimsPrincipal user, KnowledgeService svc, AppDbContext db) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
-            var tree = svc.GetTree(role, dept);
+            var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userId = idClaim is not null ? int.Parse(idClaim) : 0;
+            var tree = svc.GetTree(role, dept, userId);
             return Results.Ok(tree);
         }).RequireAuthorization();
 
-        app.MapGet("/api/knowledge/content", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log) =>
+        app.MapGet("/api/knowledge/content", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
-            path = Uri.UnescapeDataString(path); // decode %E5%85%AC → 公共
+            path = Uri.UnescapeDataString(path);
             var (role, dept) = await GetUserCtx(user, db);
-            log.Info("knowledge", $"Content request: path=[{path}] role=[{role}] dept=[{dept}] access=[{svc.CanAccess(path, role, dept)}]");
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             var content = svc.GetContent(path);
-            if (content is not null) { log.Info("knowledge", $"Content found: path=[{path}] len={content.Length}"); return Results.Ok(new { path, content }); }
-            log.Warn("knowledge", $"Content NOT FOUND: path=[{path}]");
-            return Results.Problem("Not found", statusCode: 404);
+            return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Not found", statusCode: 404);
         }).RequireAuthorization();
 
-        app.MapDelete("/api/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log) =>
+        // Download original binary file (PDF, DOCX, images, etc.)
+        app.MapGet("/api/knowledge/download", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, HttpContext ctx) =>
+        {
+            if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
+            path = Uri.UnescapeDataString(path);
+            var (role, dept) = await GetUserCtx(user, db);
+            if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+
+            var data = svc.GetBinaryContent(path);
+            if (data is null) return Results.Problem("Not found", statusCode: 404);
+
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var ct = ext switch
+            {
+                ".pdf" => "application/pdf",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".doc" => "application/msword",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".xls" => "application/vnd.ms-excel",
+                ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                _ => "application/octet-stream",
+            };
+            return Results.File(data, ct, Path.GetFileName(path));
+        }).RequireAuthorization();
+
+        // Write/delete — staff only
+        var kbWrite = app.MapGroup("/api/knowledge").RequireAuthorization("StaffOnly");
+        kbWrite.MapDelete("/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
             path = Uri.UnescapeDataString(path);
@@ -55,6 +86,6 @@ public static class KnowledgeEndpoints
                 log.Error("knowledge", $"Delete failed: [{path}]", ex.Message);
                 return Results.Problem(ex.Message, statusCode: 404);
             }
-        }).RequireAuthorization();
+        });
     }
 }

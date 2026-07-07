@@ -60,11 +60,18 @@ public class DocumentService
             var title = Path.GetFileNameWithoutExtension(fileName);
             var fullContent = $"# {title}\n\n> 上传文件: {fileName}\n\n{content}";
 
-            // Save to knowledge base
-            var relativePath = $"{targetFolder}/{mdName}".TrimStart('/');
-            _knowledge.WriteFile(relativePath, fullContent);
+            // Save converted .md to knowledge base (for AI RAG)
+            var mdPath = $"{targetFolder}/{mdName}".TrimStart('/');
+            _knowledge.WriteFile(mdPath, fullContent);
 
-            return relativePath;
+            // Also save the original file for download
+            if (ext is not ".md" and not ".txt")
+            {
+                var origPath = $"{targetFolder}/{fileName}".TrimStart('/');
+                _knowledge.WriteFile(origPath, File.ReadAllBytes(tempPath));
+            }
+
+            return mdPath;
         }
         finally
         {

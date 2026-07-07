@@ -7,16 +7,17 @@ namespace TeamPortal.Services;
 
 public class InventoryService
 {
-    private const int LowStockThreshold = 3;
+    public const int LowStockThreshold = 3;
 
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly LogService _log;
     private readonly NotificationService _notification;
+    private readonly HttpClient _http;
 
-    public InventoryService(AppDbContext db, IConfiguration config, LogService log, NotificationService notification)
+    public InventoryService(AppDbContext db, IConfiguration config, LogService log, NotificationService notification, HttpClient http)
     {
-        _db = db; _config = config; _log = log; _notification = notification;
+        _db = db; _config = config; _log = log; _notification = notification; _http = http;
     }
 
     public async Task<List<InventoryItem>> GetAll(string? search, string? category)
@@ -98,8 +99,7 @@ public class InventoryService
     public async Task<int> ImportFromExcel(string filePath)
     {
         var pythonUrl = _config["AiService:BaseUrl"] ?? "http://localhost:9001";
-        using var client = new HttpClient();
-        var response = await client.PostAsync(
+        var response = await _http.PostAsync(
             $"{pythonUrl}/api/parse/excel?filepath={Uri.EscapeDataString(filePath)}", null);
 
         response.EnsureSuccessStatusCode();

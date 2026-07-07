@@ -89,7 +89,7 @@ public class MaintenanceWorker : BackgroundService
     /// <summary>Calculate delay until next 3:00 AM. If already past, next day.</summary>
     private static TimeSpan GetDelayUntilNextRun()
     {
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;
         var next = now.Date.AddHours(3);
         if (next <= now)
             next = next.AddDays(1);
