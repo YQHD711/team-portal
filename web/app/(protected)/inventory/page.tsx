@@ -5,7 +5,8 @@ import { api } from "@/lib/api";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Search, AlertTriangle, Package, Filter, Plus, Pencil, Trash2, X, Upload, Minus, Plus as PlusIcon, History, Loader2 } from "lucide-react";
 
-interface InventoryItem { id: number; name: string; category: string; quantity: number; location: string; status: string; updatedAt: string; photoUrl?: string; }
+interface InventoryItem { id: number; name: string; category: string; quantity: number; locationCode?: string; status: string; grade: string; unitPrice: number; departmentId?: number; department?: { id: number; name: string }; projectTag?: string; updatedAt: string; photoUrl?: string; }
+interface Department { id: number; name: string; }
 interface Transaction { id: number; type: string; quantity: number; userName: string; note: string | null; createdAt: string; }
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
 const LOW_THRESHOLD = 3;
@@ -14,6 +15,8 @@ const statusOpts = [
   { value: "in_use", label: "使用中" },
   { value: "broken", label: "损坏" },
 ];
+const categoryOpts = ["电子元器件", "结构材料", "工具设备", "耗材", "动力系统", "飞控系统", "通信设备", "电池电源", "其他"];
+const roomOpts = ["1012", "1013", "1014", "1015", "201", "202", "203"];
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -22,10 +25,30 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
-  const [form, setForm] = useState({ name: "", category: "", quantity: 0, location: "", status: "available" });
+  const [form, setForm] = useState({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" });
+  const [locRoom, setLocRoom] = useState("");
+  const [locCabinet, setLocCabinet] = useState("");
+  const [locShelf, setLocShelf] = useState("");
+  const [locPos, setLocPos] = useState("");
+
+  const buildLocCode = (room: string, cab: string, shelf: string, pos: string) => {
+    const parts = [room, cab.padStart(2, "0"), shelf, pos.padStart(2, "0")].filter(Boolean);
+    return parts.join("-");
+  };
+  const parseLocCode = (code: string) => {
+    const parts = (code || "").split("-");
+    setLocRoom(parts[0] || "");
+    setLocCabinet(parts[1] || "");
+    setLocShelf(parts[2] || "");
+    setLocPos(parts[3] || "");
+  };
   const [importMsg, setImportMsg] = useState("");
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [role, setRole] = useState("");
+
+  const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
   const [txItem, setTxItem] = useState<InventoryItem | null>(null);
-  const [txMode, setTxMode] = useState<"checkout" | "checkin" | null>(null);
+  const [txMode, setTxMode] = useState<"checkout" | "checkin" | "consume" | null>(null);
   const [txQty, setTxQty] = useState(1);
   const [txNote, setTxNote] = useState("");
   const [txHistory, setTxHistory] = useState<Transaction[]>([]);
@@ -35,12 +58,33 @@ export default function InventoryPage() {
     if (!txItem || !txMode) return;
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/inventory/${txItem.id}/${txMode}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ quantity: txQty, note: txNote || null }),
-      });
-      if (!res.ok) { const err = await res.json(); alert(err.detail || err.title || "操作失败"); return; }
+      if (txMode === "consume") {
+        // C级快速消耗：直接扣库存
+        const res = await fetch(`/api/inventory/${txItem.id}/consume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ quantity: txQty, note: txNote || null }),
+        });
+        if (!res.ok) { const err = await res.json(); alert(err.detail || err.title || "操作失败"); return; }
+        alert(`已消耗 ${txQty} 个 ${txItem.name}`);
+      } else if (txMode === "checkout") {
+        const res = await fetch(`/api/material/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ itemId: txItem.id, quantity: txQty, note: txNote || null }),
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.detail || data.title || "操作失败"); return; }
+        if (data.status === "approved") alert(`${data.grade}级物料，领用成功！`);
+        else alert(`${data.grade}级物料，已提交审批，请等待审批结果。`);
+      } else if (txMode === "checkin") {
+        const res = await fetch(`/api/inventory/${txItem.id}/checkin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ quantity: txQty, note: txNote || null }),
+        });
+        if (!res.ok) { const err = await res.json(); alert(err.detail || err.title || "操作失败"); return; }
+      }
       setTxItem(null); setTxMode(null); setTxQty(1); setTxNote("");
       fetchItems();
     } catch { alert("操作失败"); }
@@ -57,6 +101,8 @@ export default function InventoryPage() {
   };
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
+  useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
+  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -69,14 +115,15 @@ export default function InventoryPage() {
     finally { setLoading(false); }
   };
 
-  const openCreate = () => { setEditItem(null); setForm({ name: "", category: "", quantity: 0, location: "", status: "available" }); setShowForm(true); };
-  const openEdit = (i: InventoryItem) => { setEditItem(i); setForm({ name: i.name, category: i.category, quantity: i.quantity, location: i.location, status: i.status }); setShowForm(true); };
+  const openCreate = () => { setEditItem(null); setForm({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" }); setLocRoom(""); setLocCabinet(""); setLocShelf(""); setLocPos(""); setShowForm(true); };
+  const openEdit = (i: InventoryItem) => { setEditItem(i); setForm({ name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C", unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0, projectTag: i.projectTag || "", locationCode: i.locationCode || "" }); parseLocCode(i.locationCode || ""); setShowForm(true); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editItem) await api.put(`/api/inventory/${editItem.id}`, { quantity: form.quantity, location: form.location, status: form.status });
-      else await api.post("/api/inventory", form);
+      const locCode = buildLocCode(locRoom, locCabinet, locShelf, locPos) || null;
+      if (editItem) await api.put(`/api/inventory/${editItem.id}`, { grade: form.grade, unitPrice: form.unitPrice, departmentId: form.departmentId || null, projectTag: form.projectTag || null, locationCode: locCode });
+      else await api.post("/api/inventory", { ...form, locationCode: locCode });
       setShowForm(false); fetchItems();
     } catch { alert("操作失败"); }
   };
@@ -113,8 +160,10 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div><h1 className="text-2xl font-bold">零件库存</h1><p className="text-sm text-zinc-500">{items.length} 种 · 共 {totalItems} 件</p></div>
         <div className="flex gap-2">
-          <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600 shadow-sm"><Plus className="h-4 w-4" />添加零件</button>
-          <label className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>
+          {(role === "admin" || role === "部长") && <>
+            <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600 shadow-sm"><Plus className="h-4 w-4" />添加零件</button>
+            <label className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>
+          </>}
         </div>
       </div>
 
@@ -149,14 +198,16 @@ export default function InventoryPage() {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="font-medium text-sm">{item.name}</div>
-                    <div className="text-xs text-muted">{item.category} · {item.location || "—"}</div>
+                    <div className="text-xs text-muted">{item.category} · {item.locationCode || "—"}</div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => { setTxItem(item); setTxMode("checkout"); setTxQty(1); setTxNote(""); }} className="p-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500" title="借出"><Minus className="h-4 w-4" /></button>
-                    <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className="p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500" title="归还"><PlusIcon className="h-4 w-4" /></button>
+                    <button onClick={() => { setTxItem(item); setTxMode(item.grade === "C" ? "consume" : "checkout"); setTxQty(1); setTxNote(""); }}
+                      className={`p-1 rounded-lg ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
+                      title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
+                    <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
                     <button onClick={() => fetchHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
-                    <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4 text-muted" /></button>
-                    <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>
+                    {(role === "admin" || role === "部长") && <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4 text-muted" /></button>}
+                    {(role === "admin" || role === "部长") && <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -169,16 +220,19 @@ export default function InventoryPage() {
           {/* Desktop table */}
           <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-border bg-slate-50 dark:bg-slate-900"><th className="px-4 py-3 text-left font-medium text-muted">名称</th><th className="px-4 py-3 text-left font-medium text-muted hidden sm:table-cell">分类</th><th className="px-4 py-3 text-right font-medium text-muted">数量</th><th className="px-4 py-3 text-left font-medium text-muted hidden md:table-cell">位置</th><th className="px-4 py-3 text-left font-medium text-muted">状态</th><th className="px-4 py-3 text-right font-medium text-muted">操作</th></tr></thead>
+              <thead><tr className="border-b border-border bg-slate-50 dark:bg-slate-900"><th className="px-4 py-3 text-left font-medium text-muted">名称</th><th className="px-4 py-3 text-left font-medium text-muted hidden sm:table-cell">分类</th><th className="px-4 py-3 text-center font-medium text-muted w-12">等级</th><th className="px-4 py-3 text-right font-medium text-muted">数量</th><th className="px-4 py-3 text-left font-medium text-muted hidden md:table-cell">位置</th><th className="px-4 py-3 text-left font-medium text-muted">状态</th><th className="px-4 py-3 text-right font-medium text-muted">操作</th></tr></thead>
               <tbody className="divide-y divide-border">
-                {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 6 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 shimmer rounded" /></td>)}</tr>) :
-                 items.length === 0 ? <tr><td colSpan={6} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
+                {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 shimmer rounded" /></td>)}</tr>) :
+                 items.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
                  items.map(item => (
                   <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
                     <td className="px-4 py-3"><span className="font-medium">{item.name}</span><span className="block text-xs text-zinc-400 sm:hidden">{item.category}</span></td>
                     <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">{item.category}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${item.grade === "A" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : item.grade === "B" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"}`}>{item.grade || "C"}</span>
+                    </td>
                     <td className={`px-4 py-3 text-right font-medium tabular-nums ${item.quantity === 0 ? "text-red-600" : item.quantity < LOW_THRESHOLD ? "text-amber-600" : ""}`}>{item.quantity}</td>
-                    <td className="px-4 py-3 text-zinc-500 hidden md:table-cell">{item.location || "—"}</td>
+                    <td className="px-4 py-3 text-zinc-500 hidden md:table-cell text-xs font-mono">{item.locationCode || "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
                         {statusOpts.find(s => s.value === item.status)?.label || item.status}
@@ -186,11 +240,15 @@ export default function InventoryPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => { setTxItem(item); setTxMode("checkout"); setTxQty(1); setTxNote(""); }} className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500" title="借出"><Minus className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className="p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500" title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => { setTxItem(item); setTxMode(item.grade === "C" ? "consume" : "checkout"); setTxQty(1); setTxNote(""); }}
+                          className={`p-1 rounded ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
+                          title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className={`p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
                         <button onClick={() => fetchHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => openEdit(item)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => handleDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        {(role === "admin" || role === "部长") && <>
+                          <button onClick={() => openEdit(item)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => handleDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -217,13 +275,64 @@ export default function InventoryPage() {
             <form onSubmit={handleSave} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium mb-1">名称</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required disabled={!!editItem} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
-                <div><label className="block text-sm font-medium mb-1">分类</label><input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">分类</label>
+                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                    className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <option value="">选择分类...</option>
+                    {categoryOpts.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              {!editItem && <div><label className="block text-sm font-medium mb-1">初始数量</label><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /><p className="text-xs text-zinc-400 mt-1">仅新建时填写，后续通过盘点或采购入库调整</p></div>}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">等级</label>
+                  <select value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-bold ${
+                      form.grade === "A" ? "border-red-300 bg-red-50 dark:bg-red-950 text-red-700" :
+                      form.grade === "B" ? "border-amber-300 bg-amber-50 dark:bg-amber-950 text-amber-700" :
+                      "border-zinc-300 bg-white dark:bg-zinc-950"}`}>
+                    <option value="A">A — 关键管控 (≥¥1000)</option>
+                    <option value="B">B — 常规管理 (¥100-999)</option>
+                    <option value="C">C — 自主领用 (&lt;¥100)</option>
+                  </select>
+                </div>
+                <div><label className="block text-sm font-medium mb-1">单价 ¥</label>
+                  <input type="number" step="0.01" min="0"
+                    value={form.unitPrice}
+                    onChange={e => {
+                      const price = Number(e.target.value);
+                      setForm({ ...form, unitPrice: price, grade: price > 0 ? calcGrade(price) : form.grade });
+                    }}
+                    placeholder="填写后自动判定等级"
+                    className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  {form.unitPrice > 0 && (
+                    <p className="text-xs text-zinc-400 mt-1">自动判定: {calcGrade(form.unitPrice)} 级 {calcGrade(form.unitPrice) !== form.grade ? "(已手动修改)" : ""}</p>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium mb-1">数量</label><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
-                <div><label className="block text-sm font-medium mb-1">位置</label><input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
+                <div><label className="block text-sm font-medium mb-1">归属部门</label><select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value={0}>— 无 —</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                <div><label className="block text-sm font-medium mb-1">项目标签</label><input value={form.projectTag} onChange={e => setForm({ ...form, projectTag: e.target.value })} placeholder="如: CADC2026" className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
               </div>
-              <div><label className="block text-sm font-medium mb-1">状态</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">{statusOpts.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
+              <div>
+                <label className="block text-sm font-medium mb-1">库位编码 <span className="text-zinc-400 text-xs">室-架-层-位</span></label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <select value={locRoom} onChange={e => setLocRoom(e.target.value)}
+                    className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <option value="">室</option>
+                    {roomOpts.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <input type="number" min={1} max={99} value={locCabinet} onChange={e => setLocCabinet(e.target.value)}
+                    placeholder="架" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  <input type="number" min={1} max={9} value={locShelf} onChange={e => setLocShelf(e.target.value)}
+                    placeholder="层" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  <input type="number" min={1} max={99} value={locPos} onChange={e => setLocPos(e.target.value)}
+                    placeholder="位" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                </div>
+                {(locRoom || locCabinet) && <p className="text-xs text-zinc-400 mt-1">编码: {buildLocCode(locRoom, locCabinet, locShelf, locPos) || "—"}</p>}
+              </div>
               <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{editItem ? "保存修改" : "添加零件"}</button>
             </form>
           </div>
@@ -235,15 +344,18 @@ export default function InventoryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setTxItem(null); setTxMode(null); }}>
           <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">{txMode === "checkout" ? "借出零件" : "归还零件"}</h3>
+              <h3 className="font-semibold text-lg">{txMode === "consume" ? "消耗登记" : txMode === "checkout" ? "领用零件" : "归还零件"}</h3>
               <button onClick={() => { setTxItem(null); setTxMode(null); }}><X className="h-5 w-5 text-zinc-400" /></button>
             </div>
-            <p className="text-sm text-zinc-500 mb-4">{txItem.name}（当前库存：{txItem.quantity}）</p>
+            <p className="text-sm text-zinc-500 mb-4">
+                {txItem.name} · {txItem.grade}级 · 库存 {txItem.quantity}
+                {txMode === "consume" && <span className="block text-purple-500 text-xs mt-1">C级耗材，直接消耗不入归还流程。批量消耗请通过盘点补货。</span>}
+              </p>
             <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">数量</label><input type="number" min={1} max={txMode === "checkout" ? txItem.quantity : 999} value={txQty} onChange={e => setTxQty(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
-              <div><label className="block text-sm font-medium mb-1">备注</label><input value={txNote} onChange={e => setTxNote(e.target.value)} placeholder="借用人/用途..." className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
-              <button onClick={handleTransaction} className={`w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white ${txMode === "checkout" ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-500 hover:bg-emerald-600"}`}>
-                {txMode === "checkout" ? `确认借出 ${txQty} 个` : `确认归还 ${txQty} 个`}
+              <div><label className="block text-sm font-medium mb-1">数量</label><input type="number" min={1} max={txMode === "checkin" ? 999 : txItem.quantity} value={txQty} onChange={e => setTxQty(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
+              <div><label className="block text-sm font-medium mb-1">{txMode === "consume" ? "用途" : "备注"}</label><input value={txNote} onChange={e => setTxNote(e.target.value)} placeholder={txMode === "consume" ? "用了做什么..." : "借用人/用途..."} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
+              <button onClick={handleTransaction} className={`w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white ${txMode === "consume" ? "bg-purple-500 hover:bg-purple-600" : txMode === "checkout" ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-500 hover:bg-emerald-600"}`}>
+                {txMode === "consume" ? `确认消耗 ${txQty} 个` : txMode === "checkout" ? `确认领用 ${txQty} 个` : `确认归还 ${txQty} 个`}
               </button>
             </div>
           </div>

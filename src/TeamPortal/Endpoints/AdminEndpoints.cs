@@ -35,7 +35,7 @@ public static class AdminEndpoints
                 return Results.Problem("用户名和密码必填", statusCode: 400);
             var (role, dept, _) = await GetUserCtx(user, db);
             var u = await svc.CreateUser(req.Username, req.Password, req.Role ?? "member", req.DepartmentId, role, dept);
-            if (u is not null) notify.Notify("新成员加入", $"{req.Username} 加入了团队", "/admin/users");
+            if (u is not null) notify.Notify("新成员加入", $"{req.Username} 加入了团队", "/admin/users", targetRole: "staff");
             return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在", statusCode: 409);
         });
 
@@ -51,7 +51,7 @@ public static class AdminEndpoints
                 if (req.DepartmentId.HasValue) changes.Add($"dept→{req.DepartmentId}");
                 if (req.Password is not null) changes.Add("password-reset");
                 log.Warn("admin", $"User #{id} updated by {actor}: {string.Join(", ", changes)}");
-                notify.Notify("用户信息已更新", $"{actor} 修改了用户 #{id} 的信息", "/admin/users");
+                notify.Notify("用户信息已更新", $"{actor} 修改了用户 #{id} 的信息", "/admin/users", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("权限不足或用户不存在", statusCode: 404);
         });
@@ -61,7 +61,7 @@ public static class AdminEndpoints
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.DeleteUser(id, role, dept);
-            if (ok) { log.Warn("admin", $"User #{id} deleted by {actor}"); notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/users"); }
+            if (ok) { log.Warn("admin", $"User #{id} deleted by {actor}"); notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/users", targetRole: "staff"); }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("无法删除", statusCode: 400);
         });
 
@@ -73,14 +73,14 @@ public static class AdminEndpoints
             var dept = await svc.CreateDepartment(req.Name, req.Description ?? "");
             var actor = user.Identity?.Name ?? "unknown";
             log.Info("admin", $"Department created: {dept.Name} by {actor}");
-            notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/departments");
+            notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/departments", targetRole: "staff");
             return Results.Ok(dept);
         });
 
         admin.MapPut("/departments/{id:int}", async (int id, UpdateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
         {
             var ok = await svc.UpdateDepartment(id, req.Name, req.Description ?? "");
-            if (ok) { var actor = user.Identity?.Name ?? "unknown"; log.Info("admin", $"Department #{id} updated: {req.Name} by {actor}"); notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/departments"); }
+            if (ok) { var actor = user.Identity?.Name ?? "unknown"; log.Info("admin", $"Department #{id} updated: {req.Name} by {actor}"); notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/departments", targetRole: "staff"); }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
         });
 
@@ -88,7 +88,7 @@ public static class AdminEndpoints
         {
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.DeleteDepartment(id);
-            if (ok) { log.Warn("admin", $"Department #{id} deleted by {actor}"); notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/departments"); }
+            if (ok) { log.Warn("admin", $"Department #{id} deleted by {actor}"); notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/departments", targetRole: "staff"); }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
         });
 
@@ -99,7 +99,7 @@ public static class AdminEndpoints
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}"); return Results.Ok(new { success = true }); }
+            try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}", targetRole: "staff"); return Results.Ok(new { success = true }); }
             catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
         });
 
@@ -109,7 +109,7 @@ public static class AdminEndpoints
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try { svc.DeleteFile(path); log.Warn("knowledge", $"File deleted: {path} by {actor}"); notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}"); return Results.Ok(new { success = true }); }
+            try { svc.DeleteFile(path); log.Warn("knowledge", $"File deleted: {path} by {actor}"); notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}", targetRole: "staff"); return Results.Ok(new { success = true }); }
             catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
         });
 
@@ -150,7 +150,7 @@ public static class AdminEndpoints
                     catch (Exception ex) { log.Warn("baidu", $"Document cloud sync failed: {file.FileName} — {ex.Message}"); }
                 }
 
-                notify.Notify("文档上传完成", $"{actor} 上传了 {file.FileName} 到 {targetFolder}", $"/knowledge/{path.Replace(".md","")}");
+                notify.Notify("文档上传完成", $"{actor} 上传了 {file.FileName} 到 {targetFolder}", $"/knowledge/{path.Replace(".md","")}", targetRole: "staff");
                 return Results.Ok(new { success = true, path, cloudUrl });
             }
             catch (UnauthorizedAccessException) { return Results.Problem("Access denied", statusCode: 403); }

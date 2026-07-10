@@ -26,7 +26,7 @@ public static class AuthEndpoints
                 if (user is null)
                     return Results.Problem("Username already exists", statusCode: 409);
 
-                notify.Notify("新用户注册", $"{user.Username} 加入了系统", "/admin/users");
+                notify.Notify("新用户注册", $"{user.Username} 加入了系统", "/admin/users", targetRole: "staff");
                 return Results.Ok(new { user.Id, user.Username, user.Role });
             }
             catch (InvalidOperationException ex)

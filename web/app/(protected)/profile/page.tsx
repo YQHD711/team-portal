@@ -189,7 +189,7 @@ export default function ProfilePage() {
             <div className="p-12 text-center text-zinc-400">
               <GraduationCap className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
               <p>暂无培训记录</p>
-              <p className="text-xs mt-1">请联系管理员添加</p>
+              <p className="text-xs mt-1">请联系部长或管理员添加</p>
             </div>
           ) : profile?.trainingRecords?.map(t => (
             <div key={t.id} className="p-4">
@@ -220,7 +220,7 @@ export default function ProfilePage() {
             <div className="p-12 text-center text-zinc-400">
               <Trophy className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
               <p>暂无参赛记录</p>
-              <p className="text-xs mt-1">请联系管理员添加</p>
+              <p className="text-xs mt-1">请联系部长或管理员添加</p>
             </div>
           ) : profile?.competitionRecords?.map(c => (
             <div key={c.id} className="p-4">

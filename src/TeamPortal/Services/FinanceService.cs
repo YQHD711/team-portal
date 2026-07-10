@@ -24,7 +24,7 @@ public class FinanceService
         _db.PurchaseRequests.Add(req);
         await _db.SaveChangesAsync();
         _log.Info("finance", $"Purchase request created: {itemName} x{quantity} ¥{estimatedPrice}");
-        _notif.Notify("新的采购申请", $"{itemName} x{quantity} (¥{estimatedPrice})", "/finance");
+        _notif.Notify("新的采购申请", $"{itemName} x{quantity} (¥{estimatedPrice})", "/finance", targetRole: "staff");
         return req;
     }
 

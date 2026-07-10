@@ -8,5 +8,6 @@ public class Notification
     public string? Link { get; set; }
     public bool IsRead { get; set; }
     public int? UserId { get; set; }
+    public string? TargetRole { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, FileText, Package, GitBranch, Upload, TrendingUp, Loader2 } from "lucide-react";
+import { Search, FileText, Package, GitBranch, Upload, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface SearchResult {
@@ -9,14 +9,13 @@ interface SearchResult {
   inventory: { type: string; title: string; snippet: string; path: string }[];
   wiki: { type: string; title: string; snippet: string; path: string }[];
   files: { type: string; title: string; snippet: string; path: string }[];
-  flights: { type: string; title: string; snippet: string; path: string }[];
 }
 
 const typeIcons: Record<string, typeof FileText> = {
-  knowledge: FileText, inventory: Package, wiki: GitBranch, file: Upload, flight: TrendingUp,
+  knowledge: FileText, inventory: Package, wiki: GitBranch, file: Upload,
 };
 const typeLabels: Record<string, string> = {
-  knowledge: "知识库", inventory: "库存", wiki: "Wiki", file: "文件", flight: "飞行",
+  knowledge: "知识库", inventory: "库存", wiki: "Wiki", file: "文件",
 };
 
 export function GlobalSearch() {
@@ -51,7 +50,7 @@ export function GlobalSearch() {
   }, [q]);
 
   const allResults = results ? [
-    ...results.knowledge, ...results.inventory, ...results.wiki, ...results.files, ...results.flights
+    ...results.knowledge, ...results.inventory, ...results.wiki, ...results.files
   ] : [];
 
   const navigate = (path: string) => { setOpen(false); setQ(""); setResults(null); window.location.href = path; };
@@ -59,9 +58,9 @@ export function GlobalSearch() {
   return (
     <>
       <button onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors min-w-[200px]">
-        <Search className="h-4 w-4" />
-        <span className="flex-1 text-left">搜索...</span>
+        className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-sm text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors sm:min-w-[200px]">
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="hidden sm:block flex-1 text-left">搜索...</span>
         <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-zinc-300 dark:border-zinc-600 px-1.5 py-0.5 text-[10px] text-zinc-400 font-mono">Ctrl+K</kbd>
       </button>
 
@@ -72,7 +71,7 @@ export function GlobalSearch() {
             <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
               {loading ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" /> : <Search className="h-5 w-5 text-zinc-400" />}
               <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
-                placeholder="搜索知识库、库存、Wiki、文件、飞行记录..."
+                placeholder="搜索知识库、库存、Wiki、文件..."
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400" />
               <kbd className="text-[10px] text-zinc-400 font-mono border rounded-md px-1.5 py-0.5">ESC</kbd>
             </div>

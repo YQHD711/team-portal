@@ -42,7 +42,8 @@ public static class InventoryEndpoints
             if (string.IsNullOrWhiteSpace(req.Name))
                 return Results.Problem("Name is required", statusCode: 400);
 
-            var item = await svc.Create(req.Name, req.Category ?? "", req.Quantity, req.Location ?? "", req.Status ?? "available");
+            var item = await svc.Create(req.Name, req.Category ?? "", req.Quantity,
+                req.Grade ?? "C", req.UnitPrice ?? 0, req.DepartmentId, req.ProjectTag, req.LocationCode);
             return Results.Created($"/api/inventory/{item.Id}", item);
         });
 
@@ -63,11 +64,12 @@ public static class InventoryEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
 
-            var item = await svc.Update(id, req.Quantity, req.Location, req.Status);
+            var item = await svc.Update(id,
+                req.Grade, req.UnitPrice, req.DepartmentId, req.ProjectTag, req.LocationCode);
             if (item is not null)
             {
                 var actor = user.Identity?.Name ?? "unknown";
-                log.Info("inventory", $"Part updated: {item.Name} qty→{item.Quantity} loc→{item.Location} by {actor}");
+                log.Info("inventory", $"Part updated: {item.Name} by {actor}");
                 if (item.Quantity > 0 && item.Quantity <= 3)
                     notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件", "/inventory");
             }
@@ -186,6 +188,36 @@ public static class InventoryEndpoints
             return Results.Ok(new { success = true, quantity = newQty, message = $"已归还 {req.Quantity} 个 {item.Name}" });
         });
 
+        // Quick consume — for C-level consumables (no approval, no return)
+        group.MapPost("/{id:int}/consume", async (int id, TransactionRequest req, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
+        {
+            var userName = user.Identity?.Name ?? "unknown";
+            if (req.Quantity <= 0) return Results.Problem("数量必须大于0", statusCode: 400);
+            var item = await db.InventoryItems.FindAsync(id);
+            if (item is null) return Results.Problem("零件不存在", statusCode: 404);
+            if (item.Quantity < req.Quantity) return Results.Problem("库存不足", statusCode: 400);
+
+            var updated = await db.InventoryItems
+                .Where(i => i.Id == id && i.Quantity >= req.Quantity)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.Quantity, i => i.Quantity - req.Quantity)
+                    .SetProperty(i => i.UpdatedAt, DateTime.UtcNow));
+            if (updated == 0) return Results.Problem("库存不足", statusCode: 409);
+
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                InventoryItemId = id, Type = "consume", Quantity = req.Quantity,
+                UserName = userName, Note = req.Note
+            });
+            await db.SaveChangesAsync();
+
+            var newQty = item.Quantity - req.Quantity;
+            log.Info("inventory", $"Consumed: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
+            if (newQty <= InventoryService.LowStockThreshold)
+                notify.Notify("库存预警", $"耗材「{item.Name}」仅剩 {newQty} 件", "/inventory");
+            return Results.Ok(new { success = true, quantity = newQty, message = $"已消耗 {req.Quantity} 个 {item.Name}" });
+        });
+
         // Get transaction history for an item
         group.MapGet("/{id:int}/transactions", async (int id, AppDbContext db) =>
         {
@@ -200,7 +232,9 @@ public static class InventoryEndpoints
     }
 }
 
-public record CreateItemRequest(string Name, string? Category, int Quantity, string? Location, string? Status);
-public record UpdateItemRequest(int? Quantity, string? Location, string? Status);
+public record CreateItemRequest(string Name, string? Category, int Quantity,
+    string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
+public record UpdateItemRequest(
+    string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
 public record ImportRequest(string FilePath);
 public record TransactionRequest(int Quantity, string? Note);

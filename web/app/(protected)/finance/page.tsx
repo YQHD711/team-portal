@@ -82,7 +82,7 @@ export default function FinancePage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="rounded-xl border p-3 bg-white dark:bg-zinc-900 text-center"><div className="text-xl font-bold text-yellow-600">{stats.pending}</div><div className="text-xs text-zinc-400">待审批</div></div>
           <div className="rounded-xl border p-3 bg-white dark:bg-zinc-900 text-center"><div className="text-xl font-bold text-blue-600">{stats.approved}</div><div className="text-xs text-zinc-400">已批准</div></div>
           <div className="rounded-xl border p-3 bg-white dark:bg-zinc-900 text-center"><div className="text-xl font-bold text-purple-600">{stats.purchased}</div><div className="text-xs text-zinc-400">已购买</div></div>
@@ -236,11 +236,11 @@ export default function FinancePage() {
                 <div className="rounded-xl border p-4 bg-white dark:bg-zinc-900"><div className="text-2xl font-bold text-zinc-700">¥{(report.actualTotal || 0).toFixed(0)}</div><div className="text-xs text-zinc-400">实际支出</div></div>
               </div>
 
-              <div className="rounded-xl border bg-white dark:bg-zinc-900 divide-y">
-                <div className="grid grid-cols-7 gap-2 p-3 text-xs font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-800"><div>物品</div><div>数量</div><div>预估</div><div>实际</div><div>申请人</div><div>状态</div><div>日期</div></div>
+              <div className="rounded-xl border bg-white dark:bg-zinc-900 divide-y overflow-x-auto">
+                <div className="grid grid-cols-7 gap-2 p-3 text-xs font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-800 min-w-[600px]"><div>物品</div><div>数量</div><div>预估</div><div>实际</div><div>申请人</div><div>状态</div><div>日期</div></div>
                 {report.requests.length === 0 ? <div className="p-8 text-center text-zinc-400">本月暂无采购记录</div> :
                   report.requests.map((r: any) => (
-                    <div key={r.id} className="grid grid-cols-7 gap-2 p-3 text-sm items-center">
+                    <div key={r.id} className="grid grid-cols-7 gap-2 p-3 text-sm items-center min-w-[600px]">
                       <div className="font-medium truncate">{r.itemName}</div><div>{r.quantity}</div><div>¥{r.estimatedPrice}</div><div>{r.actualPrice ? `¥${r.actualPrice}` : "-"}</div><div className="text-xs">{r.requester}</div>
                       <div><span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_COLORS[r.status]}`}>{STATUS_LABELS[r.status]}</span></div>
                       <div className="text-xs">{new Date(r.createdAt).toLocaleDateString("zh-CN")}</div>

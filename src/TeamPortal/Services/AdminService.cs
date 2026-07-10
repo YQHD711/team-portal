@@ -49,10 +49,16 @@ public class AdminService
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
         if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
-        if (userRole is not null) user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member";
-        if (deptId.HasValue) user.DepartmentId = deptId == 0 ? null : deptId;
-        if (!string.IsNullOrWhiteSpace(password)) user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-        await _db.SaveChangesAsync(); return true;
+
+        var changes = new List<string>();
+        if (userRole is not null && user.Role != userRole) { changes.Add($"role:{user.Role}→{userRole}"); user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member"; }
+        if (deptId.HasValue) { var newDept = deptId == 0 ? null : deptId; if (user.DepartmentId != newDept) { changes.Add($"dept:{user.DepartmentId}→{newDept}"); user.DepartmentId = newDept; } }
+        if (!string.IsNullOrWhiteSpace(password)) { changes.Add("password:reset"); user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); }
+        await _db.SaveChangesAsync();
+
+        if (changes.Count > 0)
+            _log.Info("admin", $"User updated: {user.Username}", $"{{\"changes\":\"{string.Join(",", changes)}\"}}", user.Username);
+        return true;
     }
 
     public async Task<bool> DeleteUser(int id, string? currentRole, string? currentDept)
@@ -81,8 +87,11 @@ public class AdminService
     {
         var dept = await _db.Departments.FindAsync(id);
         if (dept is null) return false;
+        var oldName = dept.Name;
         dept.Name = name; dept.Description = description;
-        await _db.SaveChangesAsync(); return true;
+        await _db.SaveChangesAsync();
+        _log.Info("admin", $"Department updated: {oldName}→{name}");
+        return true;
     }
 
     public async Task<bool> DeleteDepartment(int id)

@@ -27,44 +27,6 @@ public static class FlightEndpoints
     {
         var fg = app.MapGroup("/api/flights").RequireAuthorization();
 
-        // ── Flight Records ──
-        fg.MapGet("/", async (int? pilot, int? page, FlightService svc) =>
-            Results.Ok(await svc.GetFlights(pilot, page ?? 1)));
-
-        fg.MapGet("/{id:int}", async (int id, FlightService svc) =>
-        {
-            var f = await svc.GetFlight(id);
-            return f is not null ? Results.Ok(f) : Results.Problem("Not found", statusCode: 404);
-        });
-
-        fg.MapPost("/", async (CreateFlightRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
-        {
-            var (role, _) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
-            var f = await svc.CreateFlight(req.PilotUserId, req.AircraftModel, req.TakeoffTime,
-                req.LandingTime, req.DurationMinutes, req.Location, req.Weather, req.Notes, req.LogFileName, req.BatteryNumber);
-            return Results.Created($"/api/flights/{f.Id}", f);
-        });
-
-        fg.MapPut("/{id:int}", async (int id, CreateFlightRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
-        {
-            var (role, _) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
-            var ok = await svc.UpdateFlight(id, req.AircraftModel, req.TakeoffTime, req.LandingTime,
-                req.DurationMinutes, req.Location, req.Weather, req.Notes, req.BatteryNumber);
-            return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("Not found", statusCode: 404);
-        });
-
-        fg.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
-        {
-            var (role, _) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除", statusCode: 403);
-            await svc.DeleteFlight(id);
-            return Results.Ok(new { message = "已删除" });
-        });
-
-        fg.MapGet("/stats", async (FlightService svc) => Results.Ok(await svc.GetFlightStats()));
-
         // ── Batteries ──
         var bg = app.MapGroup("/api/batteries").RequireAuthorization();
 
@@ -74,7 +36,7 @@ public static class FlightEndpoints
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
-            var b = await svc.CreateBattery(req.BatteryNumber, req.CycleCount, req.CapacityMAh, req.Health, req.Notes);
+            var b = await svc.CreateBattery(req.BatteryNumber, req.Health, req.IncidentDate, req.Notes);
             return Results.Created($"/api/batteries/{b.Id}", b);
         });
 
@@ -82,7 +44,7 @@ public static class FlightEndpoints
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
-            var ok = await svc.UpdateBattery(id, req.BatteryNumber, req.CycleCount, req.CapacityMAh, req.Health, req.Notes);
+            var ok = await svc.UpdateBattery(id, req.BatteryNumber, req.Health, req.IncidentDate, req.Notes);
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("Not found", statusCode: 404);
         });
 
@@ -104,7 +66,7 @@ public static class FlightEndpoints
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
             var inc = await svc.CreateIncident(req.Type, req.Severity, req.Description, req.Date,
-                req.RelatedFlightId, req.Resolution, req.ReportedBy);
+                req.Resolution, req.ReportedBy);
             return Results.Created($"/api/incidents/{inc.Id}", inc);
         });
 
@@ -126,6 +88,5 @@ public static class FlightEndpoints
     }
 }
 
-public record CreateFlightRequest(int PilotUserId, string AircraftModel, DateTime TakeoffTime, DateTime? LandingTime, double? DurationMinutes, string? Location, string? Weather, string? Notes, string? LogFileName, string? BatteryNumber);
-public record BatteryRequest(string BatteryNumber, int CycleCount, double? CapacityMAh, string? Health, string? Notes);
-public record IncidentRequest(string Type, string Severity, string Description, DateTime Date, int? RelatedFlightId, string? Resolution, string? ReportedBy);
+public record BatteryRequest(string BatteryNumber, string? Health, DateTime IncidentDate, string? Notes);
+public record IncidentRequest(string Type, string Severity, string Description, DateTime Date, string? Resolution, string? ReportedBy);

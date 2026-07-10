@@ -11,20 +11,23 @@ public static class NotificationEndpoints
         return id is not null ? int.Parse(id) : 0;
     }
 
+    private static string? GetUserRole(ClaimsPrincipal user)
+        => user.FindFirstValue(ClaimTypes.Role);
+
     public static void MapNotificationEndpoints(this WebApplication app)
     {
         var n = app.MapGroup("/api/notifications").RequireAuthorization();
 
         n.MapGet("/", async (ClaimsPrincipal user, NotificationService svc) =>
-            Results.Ok(await svc.GetNotifications(GetUserId(user))));
+            Results.Ok(await svc.GetNotifications(GetUserId(user), GetUserRole(user))));
 
         n.MapGet("/unread-count", async (ClaimsPrincipal user, NotificationService svc) =>
-            Results.Ok(new { count = await svc.GetUnreadCount(GetUserId(user)) }));
+            Results.Ok(new { count = await svc.GetUnreadCount(GetUserId(user), GetUserRole(user)) }));
 
         n.MapPost("/{id:long}/read", async (long id, NotificationService svc) =>
             { await svc.MarkRead(id); return Results.Ok(new { success = true }); });
 
         n.MapPost("/read-all", async (ClaimsPrincipal user, NotificationService svc) =>
-            { await svc.MarkAllRead(GetUserId(user)); return Results.Ok(new { success = true }); });
+            { await svc.MarkAllRead(GetUserId(user), GetUserRole(user)); return Results.Ok(new { success = true }); });
     }
 }

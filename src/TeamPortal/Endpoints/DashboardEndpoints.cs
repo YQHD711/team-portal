@@ -18,22 +18,12 @@ public static class DashboardEndpoints
             var invTotal = await db.InventoryItems.SumAsync(i => i.Quantity);
             var deptCount = await db.Departments.CountAsync();
 
-            // Flight stats
-            var totalFlights = await db.FlightRecords.CountAsync();
-            var monthFlights = await db.FlightRecords.CountAsync(f => f.TakeoffTime >= monthStart);
-            var totalHours = Math.Round(await db.FlightRecords.SumAsync(f => f.DurationMinutes ?? 0) / 60.0, 1);
-            var monthHours = await db.FlightRecords.Where(f => f.TakeoffTime >= monthStart).SumAsync(f => f.DurationMinutes ?? 0);
-            monthHours = Math.Round(monthHours / 60.0, 1);
-
             // Finance stats
             var pendingRequests = await db.PurchaseRequests.CountAsync(r => r.Status == "pending");
             var monthSpent = await db.PurchaseRequests.Where(r => r.Status == "received" && r.ReceivedAt >= monthStart).SumAsync(r => r.ActualPrice ?? r.EstimatedPrice);
 
             // Low stock
             var lowStock = await db.InventoryItems.Where(i => i.Quantity < 5 && i.Quantity > 0).OrderBy(i => i.Quantity).Take(5).Select(i => new { i.Id, i.Name, i.Quantity, i.Category }).ToListAsync();
-
-            // Recent flights
-            var recentFlights = await db.FlightRecords.OrderByDescending(f => f.TakeoffTime).Take(5).Select(f => new { f.Id, f.AircraftModel, f.TakeoffTime, f.DurationMinutes, f.PilotUserId }).ToListAsync();
 
             // Active wiki tasks
             var activeWiki = await db.WikiTasks.Where(w => w.Status != "completed" && w.Status != "failed").OrderByDescending(w => w.CreatedAt).Take(3).Select(w => new { w.Id, w.ProjectName, w.Status, w.CreatedAt }).ToListAsync();
@@ -47,9 +37,8 @@ public static class DashboardEndpoints
             return Results.Ok(new
             {
                 users = userCount, inventory = invCount, inventoryTotal = invTotal, departments = deptCount,
-                flights = totalFlights, flightsMonth = monthFlights, flightHours = totalHours, flightHoursMonth = monthHours,
                 pendingPurchases = pendingRequests, monthSpent = Math.Round(monthSpent, 0),
-                lowStock, recentFlights, activeWiki, recentIncidents, completedWiki
+                lowStock, activeWiki, recentIncidents, completedWiki
             });
         }).RequireAuthorization();
     }

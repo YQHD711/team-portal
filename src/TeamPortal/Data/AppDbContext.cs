@@ -21,12 +21,16 @@ public class AppDbContext : DbContext
     public DbSet<PilotProfile> PilotProfiles => Set<PilotProfile>();
     public DbSet<TrainingRecord> TrainingRecords => Set<TrainingRecord>();
     public DbSet<CompetitionRecord> CompetitionRecords => Set<CompetitionRecord>();
-    public DbSet<FlightRecord> FlightRecords => Set<FlightRecord>();
     public DbSet<BatteryRecord> BatteryRecords => Set<BatteryRecord>();
     public DbSet<IncidentRecord> IncidentRecords => Set<IncidentRecord>();
     public DbSet<TrashItem> TrashItems => Set<TrashItem>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
+    public DbSet<CheckoutRequest> CheckoutRequests => Set<CheckoutRequest>();
+    public DbSet<CheckinRecord> CheckinRecords => Set<CheckinRecord>();
+    public DbSet<Stocktake> Stocktakes => Set<Stocktake>();
+    public DbSet<StocktakeItem> StocktakeItems => Set<StocktakeItem>();
+    public DbSet<DamageReport> DamageReports => Set<DamageReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,8 +62,14 @@ public class AppDbContext : DbContext
         {
             entity.Property(i => i.Name).IsRequired().HasMaxLength(100);
             entity.Property(i => i.Category).HasMaxLength(50);
-            entity.Property(i => i.Location).HasMaxLength(100);
+            entity.Property(i => i.LocationCode).HasMaxLength(50);
             entity.Property(i => i.Status).HasMaxLength(20);
+            entity.Property(i => i.Grade).HasMaxLength(1);
+            entity.Property(i => i.ProjectTag).HasMaxLength(100);
+            entity.HasOne(i => i.Department)
+                .WithMany()
+                .HasForeignKey(i => i.DepartmentId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<SystemSetting>(entity =>
@@ -124,25 +134,12 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<FlightRecord>(entity =>
-        {
-            entity.HasIndex(f => f.PilotUserId);
-            entity.HasIndex(f => f.TakeoffTime);
-            entity.Property(f => f.AircraftModel).HasMaxLength(100);
-            entity.Property(f => f.Location).HasMaxLength(100);
-            entity.Property(f => f.Weather).HasMaxLength(50);
-            entity.Property(f => f.BatteryNumber).HasMaxLength(50);
-            entity.HasOne(f => f.Pilot)
-                .WithMany()
-                .HasForeignKey(f => f.PilotUserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         modelBuilder.Entity<BatteryRecord>(entity =>
         {
             entity.HasIndex(b => b.BatteryNumber);
             entity.Property(b => b.BatteryNumber).IsRequired().HasMaxLength(50);
             entity.Property(b => b.Health).HasMaxLength(20);
+            entity.Property(b => b.Notes).HasMaxLength(500);
         });
 
         modelBuilder.Entity<IncidentRecord>(entity =>
@@ -152,10 +149,6 @@ public class AppDbContext : DbContext
             entity.Property(i => i.Severity).HasMaxLength(20);
             entity.Property(i => i.Description).IsRequired();
             entity.Property(i => i.ReportedBy).HasMaxLength(50);
-            entity.HasOne(i => i.RelatedFlight)
-                .WithMany()
-                .HasForeignKey(i => i.RelatedFlightId)
-                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<TrashItem>(entity =>
@@ -187,6 +180,94 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(p => p.ApproverUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CheckoutRequest>(entity =>
+        {
+            entity.HasIndex(c => c.Status);
+            entity.HasIndex(c => c.RequesterUserId);
+            entity.Property(c => c.Grade).HasMaxLength(1);
+            entity.Property(c => c.Status).HasMaxLength(20);
+            entity.Property(c => c.Note).HasMaxLength(500);
+            entity.Property(c => c.RejectReason).HasMaxLength(500);
+            entity.HasOne(c => c.Item)
+                .WithMany()
+                .HasForeignKey(c => c.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(c => c.Requester)
+                .WithMany()
+                .HasForeignKey(c => c.RequesterUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(c => c.DeptApprover)
+                .WithMany()
+                .HasForeignKey(c => c.DeptApproverUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(c => c.AdminApprover)
+                .WithMany()
+                .HasForeignKey(c => c.AdminApproverUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CheckinRecord>(entity =>
+        {
+            entity.HasIndex(c => c.CheckoutRequestId).IsUnique();
+            entity.Property(c => c.Condition).HasMaxLength(20);
+            entity.Property(c => c.TestNotes).HasMaxLength(1000);
+            entity.HasOne(c => c.CheckoutRequest)
+                .WithOne(c => c.Checkin)
+                .HasForeignKey<CheckinRecord>(c => c.CheckoutRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(c => c.CheckedBy)
+                .WithMany()
+                .HasForeignKey(c => c.CheckedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Stocktake>(entity =>
+        {
+            entity.HasIndex(s => s.Status);
+            entity.Property(s => s.Type).HasMaxLength(20);
+            entity.Property(s => s.Grade).HasMaxLength(1);
+            entity.Property(s => s.Status).HasMaxLength(20);
+            entity.HasOne(s => s.CreatedBy)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<StocktakeItem>(entity =>
+        {
+            entity.HasIndex(s => new { s.StocktakeId, s.InventoryItemId }).IsUnique();
+            entity.Property(s => s.Note).HasMaxLength(500);
+            entity.HasOne(s => s.Stocktake)
+                .WithMany(s => s.Items)
+                .HasForeignKey(s => s.StocktakeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.InventoryItem)
+                .WithMany()
+                .HasForeignKey(s => s.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.CheckedBy)
+                .WithMany()
+                .HasForeignKey(s => s.CheckedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DamageReport>(entity =>
+        {
+            entity.HasIndex(d => d.InventoryItemId);
+            entity.Property(d => d.Type).HasMaxLength(20);
+            entity.Property(d => d.Description).IsRequired();
+            entity.Property(d => d.Liability).HasMaxLength(20);
+            entity.Property(d => d.Resolution).HasMaxLength(1000);
+            entity.HasOne(d => d.Item)
+                .WithMany()
+                .HasForeignKey(d => d.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

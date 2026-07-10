@@ -93,11 +93,18 @@ export default function KnowledgePage() {
   }, [filePath]);
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] -m-6 max-w-6xl mx-auto">
+    <div className="flex h-[calc(100vh-7rem)] -m-3 sm:-m-6 max-w-6xl mx-auto relative">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Tree sidebar */}
       <div
         className={`border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto transition-all duration-300 ${
-          sidebarOpen ? "w-64 min-w-[16rem]" : "w-0 min-w-0 border-r-0 overflow-hidden"
+          sidebarOpen
+            ? "fixed lg:relative z-50 left-0 top-0 h-full w-72 lg:w-64 lg:min-w-[16rem] shadow-2xl lg:shadow-none"
+            : "w-0 min-w-0 border-r-0 overflow-hidden"
         }`}
       >
         <div className="p-3" ref={searchRef}>
@@ -134,7 +141,7 @@ export default function KnowledgePage() {
       {/* Toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="shrink-0 flex items-center justify-center w-7 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-200 dark:border-zinc-800 text-zinc-400"
+        className="shrink-0 flex items-center justify-center w-8 sm:w-7 min-h-[2rem] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-200 dark:border-zinc-800 text-zinc-400"
         aria-label={sidebarOpen ? "关闭目录" : "打开目录"}
       >
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2
+  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
@@ -15,20 +15,29 @@ import { cn } from "@/lib/utils";
 const mainNav = [
   { href: "/", label: "仪表盘", icon: LayoutDashboard },
   { href: "/knowledge", label: "知识库", icon: BookOpen },
-  { href: "/inventory", label: "零件库存", icon: Package },
   { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
+  { href: "/incidents", label: "事故安全", icon: ShieldAlert },
   { href: "/files", label: "资源共享", icon: Upload },
-  { href: "/finance", label: "采购申请", icon: BarChart3 },
   { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
   { href: "/profile", label: "我的档案", icon: IdCard },
 ];
 
-const adminNav = [
-  { href: "/admin/users", label: "用户管理", icon: Users },
+const materialNav = [
+  { href: "/inventory", label: "零件库存", icon: Package },
+  { href: "/inventory/checkout", label: "领用管理", icon: ArrowLeftRight },
+  { href: "/inventory/stocktake", label: "盘点", icon: ClipboardCheck },
+  { href: "/finance", label: "采购申请", icon: BarChart3 },
+];
+
+const staffNav = [
   { href: "/admin/profiles", label: "队员档案", icon: UserCircle },
-  { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/knowledge", label: "资料管理", icon: FileText },
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
+];
+
+const adminNav = [
+  { href: "/admin/users", label: "队员管理", icon: Users },
+  { href: "/admin/departments", label: "部门管理", icon: Building2 },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
@@ -41,6 +50,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { open, setOpen } = useSidebar();
   const [adminOpen, setAdminOpen] = useState(false);
+  const [materialOpen, setMaterialOpen] = useState(false);
   const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,7 +58,8 @@ export function Sidebar() {
     api.get<{ role: string; department: string | null }>("/api/auth/me").then(u => setRole(u.role)).catch(() => setRole(null));
   }, []);
 
-  const canManage = role === "admin" || role === "部长";
+  const isStaff = role === "admin" || role === "部长";
+  const isAdmin = role === "admin";
 
   return (
     <>
@@ -95,8 +106,42 @@ export function Sidebar() {
             );
           })}
 
+          {/* Material management submenu */}
+          <div className="pt-1">
+            <button onClick={() => setMaterialOpen(!materialOpen)}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                pathname.startsWith("/inventory")
+                  ? "bg-blue-600/20 text-blue-300"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+              )}>
+              <Package className={cn("h-5 w-5 shrink-0", pathname.startsWith("/inventory") && "text-blue-400")} />
+              <span className="flex-1 text-left">物料管理</span>
+              <ChevronDown className={cn("h-3 w-3 transition-transform", materialOpen && "rotate-180")} />
+            </button>
+            {(materialOpen || pathname.startsWith("/inventory")) && (
+              <div className="mt-1 ml-4 space-y-0.5 border-l border-white/10 pl-3">
+                {materialNav.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150",
+                        isActive
+                          ? "bg-blue-600/20 text-blue-300"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                      )}>
+                      <item.icon className={cn("h-4 w-4 shrink-0", isActive && "text-blue-400")} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Admin section */}
-          {canManage && (
+          {isStaff && (
             <div className="pt-3 mt-3 border-t border-white/10">
               <button onClick={() => setAdminOpen(!adminOpen)}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-xs font-medium text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors">
@@ -105,7 +150,22 @@ export function Sidebar() {
               </button>
               {adminOpen && (
                 <div className="mt-1 space-y-1">
-                  {adminNav.map((item) => {
+                  {staffNav.map((item) => {
+                    const isActive = pathname.startsWith(item.href);
+                    return (
+                      <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                          isActive
+                            ? "bg-blue-600/30 text-blue-300 shadow-lg shadow-blue-500/10"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                        )}>
+                        <item.icon className={cn("h-5 w-5 shrink-0", isActive && "text-blue-400")} />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                  {isAdmin && adminNav.map((item) => {
                     const isActive = pathname.startsWith(item.href);
                     return (
                       <Link key={item.href} href={item.href} onClick={() => setOpen(false)}

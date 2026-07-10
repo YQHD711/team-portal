@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 
@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: "雏鹰之翼 · 航模队管理系统",
   description: "雏鹰之翼航模队 — 知识库、零件库存、飞行日志管理与AI助手",
   icons: { icon: "/logo.png" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -16,7 +22,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className="h-full antialiased"
+      className="h-full antialiased touch-manipulation"
       suppressHydrationWarning
     >
       <body className="min-h-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 font-sans">

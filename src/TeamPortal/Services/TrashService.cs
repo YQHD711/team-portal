@@ -47,10 +47,6 @@ public class TrashService
                     var inv = JsonSerializer.Deserialize<InventoryItem>(item.DataJson);
                     if (inv is not null) { inv.Id = 0; _db.InventoryItems.Add(inv); }
                     break;
-                case "FlightRecord":
-                    var fl = JsonSerializer.Deserialize<FlightRecord>(item.DataJson);
-                    if (fl is not null) { fl.Id = 0; _db.FlightRecords.Add(fl); }
-                    break;
                 case "BatteryRecord":
                     var bat = JsonSerializer.Deserialize<BatteryRecord>(item.DataJson);
                     if (bat is not null) { bat.Id = 0; _db.BatteryRecords.Add(bat); }

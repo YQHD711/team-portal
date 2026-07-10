@@ -39,11 +39,16 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-72 sm:w-80 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <h3 className="font-semibold text-sm">通知</h3>
-            {unread > 0 && <button onClick={markAll} className="text-xs text-blue-500 hover:underline">全部已读</button>}
-          </div>
+        <>
+          <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed left-4 right-4 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-80 max-w-sm mx-auto sm:mx-0 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="font-semibold text-sm">通知</h3>
+              <div className="flex items-center gap-2">
+                {unread > 0 && <button onClick={markAll} className="text-xs text-blue-500 hover:underline">全部已读</button>}
+                <button onClick={() => setOpen(false)} className="lg:hidden p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-zinc-400">✕</button>
+              </div>
+            </div>
           <div className="max-h-80 overflow-y-auto divide-y divide-border">
             {notifs.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted">暂无通知</div>
@@ -51,18 +56,19 @@ export function NotificationBell() {
               <div key={n.id} className={`px-4 py-3 text-sm ${n.isRead ? "" : "bg-blue-50/50 dark:bg-blue-950/20"}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{n.title}</div>
+                    <div className="font-medium truncate text-xs sm:text-sm">{n.title}</div>
                     <div className="text-xs text-muted mt-0.5 line-clamp-2">{n.message}</div>
                     <div className="flex items-center gap-2 mt-1.5">
-                      {n.link && <Link href={n.link} onClick={() => setOpen(false)} className="text-xs text-blue-500 hover:underline inline-flex items-center gap-1"><ExternalLink className="h-3 w-3" />查看</Link>}
+                      {n.link && <Link href={n.link} onClick={() => setOpen(false)} className="text-xs text-blue-500 hover:underline inline-flex items-center gap-1 py-0.5"><ExternalLink className="h-3 w-3" />查看</Link>}
                     </div>
                   </div>
-                  {!n.isRead && <button onClick={() => markRead(n.id)} className="shrink-0 p-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500"><Check className="h-3.5 w-3.5" /></button>}
+                  {!n.isRead && <button onClick={() => markRead(n.id)} className="shrink-0 p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500"><Check className="h-3.5 w-3.5" /></button>}
                 </div>
               </div>
             ))}
           </div>
         </div>
+        </>
       )}
     </div>
   );

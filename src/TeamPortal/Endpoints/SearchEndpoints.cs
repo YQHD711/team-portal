@@ -11,7 +11,7 @@ public static class SearchEndpoints
         app.MapGet("/api/search", async (string q, AppDbContext db, KnowledgeSearchService ks, KnowledgeService knowledge) =>
         {
             if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
-                return Results.Ok(new { knowledge = Array.Empty<object>(), inventory = Array.Empty<object>(), wiki = Array.Empty<object>(), files = Array.Empty<object>(), flights = Array.Empty<object>() });
+                return Results.Ok(new { knowledge = Array.Empty<object>(), inventory = Array.Empty<object>(), wiki = Array.Empty<object>(), files = Array.Empty<object>() });
 
             var keyword = q.ToLower().Trim();
 
@@ -21,7 +21,7 @@ public static class SearchEndpoints
             // Inventory
             var items = await db.InventoryItems
                 .Where(i => i.Name.ToLower().Contains(keyword) || (i.Category != null && i.Category.ToLower().Contains(keyword)))
-                .Take(5).Select(i => new { type = "inventory", title = i.Name, snippet = $"库存: {i.Quantity} · {i.Category} · {i.Location}", path = $"/inventory?id={i.Id}" })
+                .Take(5).Select(i => new { type = "inventory", title = i.Name, snippet = $"库存: {i.Quantity} · {i.Category} · {i.LocationCode ?? ""}", path = $"/inventory?id={i.Id}" })
                 .ToListAsync();
 
             // Wiki tasks
@@ -36,20 +36,12 @@ public static class SearchEndpoints
                 .Take(5).Select(f => new { type = "file", title = f.OriginalName, snippet = $"{f.Size} bytes · {f.UploaderName}", path = $"/files?id={f.Id}" })
                 .ToListAsync();
 
-            // Flight records
-            var flights = await db.FlightRecords
-                .Where(f => f.AircraftModel.ToLower().Contains(keyword) || (f.Location != null && f.Location.ToLower().Contains(keyword)))
-                .OrderByDescending(f => f.TakeoffTime).Take(5)
-                .Select(f => new { type = "flight", title = f.AircraftModel, snippet = $"{f.TakeoffTime:yyyy-MM-dd} · {f.DurationMinutes}min · {f.Location}", path = $"/flightlog?id={f.Id}" })
-                .ToListAsync();
-
             return Results.Ok(new
             {
                 knowledge = kbResults,
                 inventory = items,
                 wiki = wikis,
-                files = files,
-                flights = flights
+                files = files
             });
         }).RequireAuthorization();
     }

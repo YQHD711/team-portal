@@ -33,7 +33,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   }, [content]);
 
   return (
-    <div ref={mermaidRef} className="prose prose-zinc dark:prose-invert max-w-none">
+    <div ref={mermaidRef} className="prose prose-sm sm:prose-base prose-zinc dark:prose-invert max-w-none overflow-x-auto">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

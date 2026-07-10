@@ -16,7 +16,7 @@ export default function ProtectedLayout({
           <Sidebar />
           <div className="flex flex-col flex-1 min-w-0">
             <Topbar />
-            <main className="flex-1 p-3 pb-20 sm:p-6">{children}</main>
+            <main className="flex-1 p-2 sm:p-4 lg:p-6 pb-16 sm:pb-20">{children}</main>
           </div>
         </div>
         <FloatingChat />

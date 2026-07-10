@@ -45,7 +45,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (u: UserInfo) => {
-    if (!confirm(`确认删除用户 "${u.username}"？`)) return;
+    if (!confirm(`确认删除队员 "${u.username}"？`)) return;
     try { await api.delete(`/api/admin/users/${u.id}`); fetchUsers(); } catch { alert("无法删除管理员账号"); }
   };
 
@@ -71,7 +71,7 @@ export default function UsersPage() {
   };
 
   const tabs = [
-    { key: "users", label: "用户列表" },
+    { key: "users", label: "队员列表" },
     { key: "invites", label: "邀请码" },
     { key: "import", label: "批量导入" },
   ];
@@ -82,10 +82,10 @@ export default function UsersPage() {
     <div className="space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">用户管理</h1>
-          <p className="text-sm text-zinc-500">{users.length} 个用户</p>
+          <h1 className="text-2xl font-bold tracking-tight">队员管理</h1>
+          <p className="text-sm text-zinc-500">{users.length} 名队员</p>
         </div>
-        {tab === "users" && <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"><Plus className="h-4 w-4"/>添加用户</button>}
+        {tab === "users" && <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"><Plus className="h-4 w-4"/>添加队员</button>}
         {tab === "invites" && <button onClick={() => setShowInviteForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"><Ticket className="h-4 w-4"/>生成邀请码</button>}
       </div>
 
@@ -102,11 +102,11 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-                <th className="px-4 py-3 text-left font-medium text-zinc-500">用户名</th><th className="px-4 py-3 text-left font-medium text-zinc-500">角色</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden sm:table-cell">部门</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden md:table-cell">创建时间</th><th className="px-4 py-3 text-right font-medium text-zinc-500">操作</th>
+                <th className="px-4 py-3 text-left font-medium text-zinc-500">队员名</th><th className="px-4 py-3 text-left font-medium text-zinc-500">角色</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden sm:table-cell">部门</th><th className="px-4 py-3 text-left font-medium text-zinc-500 hidden md:table-cell">创建时间</th><th className="px-4 py-3 text-right font-medium text-zinc-500">操作</th>
               </tr></thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {loading ? <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400">加载中...</td></tr> :
-                 users.length === 0 ? <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400"><Users className="h-8 w-8 mx-auto mb-2 text-zinc-300"/>暂无用户</td></tr> :
+                 users.length === 0 ? <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400"><Users className="h-8 w-8 mx-auto mb-2 text-zinc-300"/>暂无队员</td></tr> :
                  users.map(u => (
                   <tr key={u.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950">
                     <td className="px-4 py-3 font-medium">{u.username}</td>
@@ -149,10 +149,10 @@ export default function UsersPage() {
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">上传 CSV 文件</label>
-            <p className="text-xs text-zinc-400 mb-2">CSV 格式：用户名,部门名（部门名为可选列，不存在则忽略）</p>
+            <p className="text-xs text-zinc-400 mb-2">CSV 格式：队员名,部门名（部门名为可选列，不存在则忽略）</p>
             <input ref={fileRef} type="file" accept=".csv" className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700"/>
           </div>
-          <button onClick={handleCsvImport} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"><Upload className="h-4 w-4"/>导入用户</button>
+          <button onClick={handleCsvImport} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"><Upload className="h-4 w-4"/>导入队员</button>
           {csvMsg && <div className={`text-sm p-2 rounded-lg ${csvMsg.includes("成功")?"bg-green-50 text-green-700":"bg-red-50 text-red-600"}`}>{csvMsg}</div>}
         </div>
       )}
@@ -161,13 +161,13 @@ export default function UsersPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={()=>setShowForm(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e=>e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editUser?"编辑用户":"添加用户"}</h2><button onClick={()=>setShowForm(false)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5"/></button></div>
+            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editUser?"编辑队员":"添加队员"}</h2><button onClick={()=>setShowForm(false)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5"/></button></div>
             <form onSubmit={handleSave} className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">用户名</label><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" required disabled={!!editUser}/></div>
+              <div><label className="block text-sm font-medium mb-1">队员名</label><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" required disabled={!!editUser}/></div>
               <div><label className="block text-sm font-medium mb-1">密码{editUser&&" (留空不修改)"}</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" required={!editUser}/></div>
               <div><label className="block text-sm font-medium mb-1">角色</label><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm"><option value="member">成员</option><option value="部长">部长</option><option value="admin">管理员</option></select></div>
               <div><label className="block text-sm font-medium mb-1">部门</label><select value={form.departmentId} onChange={e=>setForm({...form,departmentId:Number(e.target.value)})} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm"><option value={0}>无</option>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-              <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{editUser?"保存修改":"创建用户"}</button>
+              <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{editUser?"保存修改":"创建队员"}</button>
             </form>
           </div>
         </div>

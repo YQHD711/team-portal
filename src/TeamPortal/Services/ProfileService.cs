@@ -36,15 +36,19 @@ public class ProfileService
         var profile = await _db.PilotProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile is null) return false;
 
-        if (level is not null) profile.Level = level;
-        if (flightHours.HasValue) profile.TotalFlightHours = flightHours.Value;
-        if (firstFlight.HasValue) profile.FirstFlightDate = firstFlight;
-        if (bio is not null) profile.Bio = bio;
-        if (emergencyContact is not null) profile.EmergencyContact = emergencyContact;
-        if (emergencyPhone is not null) profile.EmergencyPhone = emergencyPhone;
-        if (flightTypes is not null) profile.FlightTypes = flightTypes;
+        var changes = new List<string>();
+        if (level is not null && profile.Level != level) { changes.Add($"level:{profile.Level}→{level}"); profile.Level = level; }
+        if (flightHours.HasValue && Math.Abs(profile.TotalFlightHours - flightHours.Value) > 0.01) { changes.Add($"hours:{profile.TotalFlightHours}→{flightHours.Value}"); profile.TotalFlightHours = flightHours.Value; }
+        if (firstFlight.HasValue && profile.FirstFlightDate != firstFlight) { changes.Add("firstFlight"); profile.FirstFlightDate = firstFlight; }
+        if (bio is not null && profile.Bio != bio) { changes.Add("bio"); profile.Bio = bio; }
+        if (emergencyContact is not null && profile.EmergencyContact != emergencyContact) { changes.Add("emergency"); profile.EmergencyContact = emergencyContact; }
+        if (emergencyPhone is not null && profile.EmergencyPhone != emergencyPhone) { changes.Add("phone"); profile.EmergencyPhone = emergencyPhone; }
+        if (flightTypes is not null && profile.FlightTypes != flightTypes) { changes.Add("flightTypes"); profile.FlightTypes = flightTypes; }
         profile.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        if (changes.Count > 0)
+            _log.Info("profile", $"Profile updated: userId={userId}", $"{{\"changes\":\"{string.Join(",", changes)}\"}}");
         return true;
     }
 

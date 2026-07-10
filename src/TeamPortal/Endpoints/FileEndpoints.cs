@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
@@ -33,13 +34,14 @@ public static class FileEndpoints
         });
 
         // Upload
-        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db) =>
+        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db, LogService log) =>
         {
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
             if (file.Length > 100 * 1024 * 1024) return Results.Problem("Max 100MB", statusCode: 400);
 
             var (role, dept, uid) = await GetCtx(user, db);
             var vis = visibility == "department" && !string.IsNullOrEmpty(dept) ? "department" : "public";
+            var actor = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
 
             Directory.CreateDirectory(UploadDir());
             var storedName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
@@ -52,15 +54,16 @@ public static class FileEndpoints
                 FileName = storedName, OriginalName = file.FileName,
                 ContentType = file.ContentType ?? "application/octet-stream",
                 Size = file.Length, Visibility = vis, Department = vis == "department" ? dept : null,
-                UploaderId = uid, UploaderName = user.FindFirstValue(ClaimTypes.Name) ?? "unknown"
+                UploaderId = uid, UploaderName = actor
             };
             db.SharedFiles.Add(sf);
             await db.SaveChangesAsync();
+            log.Info("files", $"File uploaded: {file.FileName} ({file.Length} bytes) by {actor}", $"{{\"visibility\":\"{vis}\",\"id\":{sf.Id}}}");
             return Results.Ok(new { sf.Id, sf.OriginalName, sf.Size, sf.Visibility });
         }).DisableAntiforgery();
 
         // Download
-        g.MapGet("/{id:int}/download", async (int id, ClaimsPrincipal user, AppDbContext db) =>
+        g.MapGet("/{id:int}/download", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log) =>
         {
             var (role, dept, _) = await GetCtx(user, db);
             var f = await db.SharedFiles.FindAsync(id);
@@ -70,20 +73,24 @@ public static class FileEndpoints
 
             var path = Path.Combine(UploadDir(), f.FileName);
             if (!File.Exists(path)) return Results.Problem("File missing", statusCode: 404);
+            var actor = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
+            log.Info("files", $"File downloaded: {f.OriginalName} by {actor}");
             return Results.File(path, f.ContentType, f.OriginalName);
         });
 
         // Delete (staff only)
-        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db) =>
+        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log) =>
         {
             var (role, _, _) = await GetCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
             var f = await db.SharedFiles.FindAsync(id);
             if (f is null) return Results.Problem("Not found", statusCode: 404);
+            var actor = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
             var path = Path.Combine(UploadDir(), f.FileName);
             try { if (File.Exists(path)) File.Delete(path); } catch { }
             db.SharedFiles.Remove(f);
             await db.SaveChangesAsync();
+            log.Warn("files", $"File deleted: {f.OriginalName} by {actor}");
             return Results.Ok(new { success = true });
         });
     }

@@ -63,6 +63,7 @@ builder.Services.AddCors(options =>
 // ── JSON: force UTC on all DateTime serialization ──
 builder.Services.ConfigureHttpJsonOptions(opts =>
 {
+    opts.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     opts.SerializerOptions.Converters.Add(new TeamPortal.Json.UtcDateTimeConverter());
 });
 
@@ -85,6 +86,7 @@ builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<FlightService>();
 builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
+builder.Services.AddScoped<MaterialService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddSingleton<LogService>();
@@ -177,6 +179,7 @@ app.MapFlightEndpoints();
 app.MapSearchEndpoints();
 app.MapTrashEndpoints();
 app.MapFinanceEndpoints();
+app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
 
 app.Run();
@@ -197,6 +200,14 @@ static void MigrateExistingTables(AppDbContext db)
 
         // PilotProfiles.FlightTypes — added after initial table creation
         MigrateSql(conn, "ALTER TABLE PilotProfiles ADD COLUMN FlightTypes TEXT",
+            "duplicate column");
+
+        // BatteryRecords.IncidentDate — replaces CycleCount/CapacityMAh/LastUsedDate
+        MigrateSql(conn, "ALTER TABLE BatteryRecords ADD COLUMN IncidentDate TEXT DEFAULT (datetime('now'))",
+            "duplicate column");
+
+        // Notifications.TargetRole — role-based notification filtering
+        MigrateSql(conn, "ALTER TABLE Notifications ADD COLUMN TargetRole TEXT NULL",
             "duplicate column");
 
         // ── New tables (Phase 10+: profiles, flights, batteries, incidents, trash) ──
@@ -245,31 +256,11 @@ static void MigrateExistingTables(AppDbContext db)
         """);
 
         MigrateSql(conn, """
-            CREATE TABLE IF NOT EXISTS FlightRecords (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                PilotUserId INTEGER NOT NULL,
-                AircraftModel TEXT,
-                TakeoffTime TEXT DEFAULT (datetime('now')),
-                LandingTime TEXT,
-                DurationMinutes REAL,
-                Location TEXT,
-                Weather TEXT,
-                Notes TEXT,
-                LogFileName TEXT,
-                BatteryNumber TEXT,
-                CreatedAt TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (PilotUserId) REFERENCES Users(Id) ON DELETE CASCADE
-            )
-        """);
-
-        MigrateSql(conn, """
             CREATE TABLE IF NOT EXISTS BatteryRecords (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 BatteryNumber TEXT NOT NULL,
-                CycleCount INTEGER DEFAULT 0,
-                CapacityMAh REAL,
                 Health TEXT DEFAULT '正常',
-                LastUsedDate TEXT,
+                IncidentDate TEXT DEFAULT (datetime('now')),
                 Notes TEXT,
                 CreatedAt TEXT DEFAULT (datetime('now'))
             )
@@ -282,11 +273,9 @@ static void MigrateExistingTables(AppDbContext db)
                 Severity TEXT DEFAULT '一般',
                 Description TEXT NOT NULL,
                 Date TEXT DEFAULT (datetime('now')),
-                RelatedFlightId INTEGER,
                 Resolution TEXT,
                 ReportedBy TEXT,
-                CreatedAt TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY (RelatedFlightId) REFERENCES FlightRecords(Id) ON DELETE SET NULL
+                CreatedAt TEXT DEFAULT (datetime('now'))
             )
         """);
 
@@ -326,6 +315,18 @@ static void MigrateExistingTables(AppDbContext db)
             )
         """);
 
+        // InventoryItem new columns (Phase: material grading)
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN Grade TEXT DEFAULT 'C'",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN UnitPrice REAL DEFAULT 0",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN DepartmentId INTEGER NULL REFERENCES Departments(Id) ON DELETE SET NULL",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN ProjectTag TEXT",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN LocationCode TEXT",
+            "duplicate column");
+
         MigrateSql(conn, """
             CREATE TABLE IF NOT EXISTS TrashItems (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -336,6 +337,90 @@ static void MigrateExistingTables(AppDbContext db)
                 DeletedByUserId INTEGER NOT NULL,
                 DeletedByName TEXT,
                 DeletedAt TEXT DEFAULT (datetime('now'))
+            )
+        """);
+
+        // ── Material grading: new tables ──
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS CheckoutRequests (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                InventoryItemId INTEGER NOT NULL,
+                RequesterUserId INTEGER NOT NULL,
+                Quantity INTEGER NOT NULL,
+                Grade TEXT NOT NULL DEFAULT 'C',
+                Status TEXT NOT NULL DEFAULT 'pending_dept',
+                DeptApproverUserId INTEGER,
+                AdminApproverUserId INTEGER,
+                Note TEXT,
+                RejectReason TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                ApprovedAt TEXT,
+                ReturnedAt TEXT,
+                FOREIGN KEY (InventoryItemId) REFERENCES InventoryItems(Id) ON DELETE CASCADE,
+                FOREIGN KEY (RequesterUserId) REFERENCES Users(Id) ON DELETE CASCADE,
+                FOREIGN KEY (DeptApproverUserId) REFERENCES Users(Id) ON DELETE SET NULL,
+                FOREIGN KEY (AdminApproverUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS CheckinRecords (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                CheckoutRequestId INTEGER NOT NULL UNIQUE,
+                Condition TEXT NOT NULL DEFAULT 'normal',
+                HasPhoto INTEGER NOT NULL DEFAULT 0,
+                TestNotes TEXT,
+                PhotoUrl TEXT,
+                CheckedByUserId INTEGER NOT NULL,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (CheckoutRequestId) REFERENCES CheckoutRequests(Id) ON DELETE CASCADE,
+                FOREIGN KEY (CheckedByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS Stocktakes (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Type TEXT NOT NULL DEFAULT 'weekly',
+                Grade TEXT NOT NULL DEFAULT 'A',
+                Status TEXT NOT NULL DEFAULT 'in_progress',
+                StartedAt TEXT DEFAULT (datetime('now')),
+                CompletedAt TEXT,
+                CreatedByUserId INTEGER NOT NULL,
+                FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS StocktakeItems (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                StocktakeId INTEGER NOT NULL,
+                InventoryItemId INTEGER NOT NULL,
+                SystemQty INTEGER NOT NULL DEFAULT 0,
+                ActualQty INTEGER,
+                Difference INTEGER,
+                Note TEXT,
+                CheckedByUserId INTEGER,
+                FOREIGN KEY (StocktakeId) REFERENCES Stocktakes(Id) ON DELETE CASCADE,
+                FOREIGN KEY (InventoryItemId) REFERENCES InventoryItems(Id) ON DELETE CASCADE,
+                FOREIGN KEY (CheckedByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS DamageReports (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                InventoryItemId INTEGER NOT NULL,
+                UserId INTEGER NOT NULL,
+                Type TEXT NOT NULL DEFAULT 'damage',
+                Description TEXT NOT NULL,
+                IsApprovedTest INTEGER NOT NULL DEFAULT 0,
+                Liability TEXT NOT NULL DEFAULT 'pending',
+                CompensationAmount REAL,
+                Resolution TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (InventoryItemId) REFERENCES InventoryItems(Id) ON DELETE CASCADE,
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
             )
         """);
     }

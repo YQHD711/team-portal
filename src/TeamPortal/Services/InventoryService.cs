@@ -9,6 +9,14 @@ public class InventoryService
 {
     public const int LowStockThreshold = 3;
 
+    /// <summary>根据单价自动判定物料等级：≥1000→A, 100~999→B, ＜100→C</summary>
+    public static string CalcGrade(decimal unitPrice) => unitPrice switch
+    {
+        >= 1000 => "A",
+        >= 100 => "B",
+        _ => "C"
+    };
+
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly LogService _log;
@@ -37,15 +45,16 @@ public class InventoryService
         return await _db.InventoryItems.FindAsync(id);
     }
 
-    public async Task<InventoryItem> Create(string name, string category, int quantity, string location, string status)
+    public async Task<InventoryItem> Create(string name, string category, int quantity,
+        string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? projectTag = null, string? locationCode = null)
     {
         var item = new InventoryItem
         {
-            Name = name,
-            Category = category,
-            Quantity = quantity,
-            Location = location,
-            Status = status,
+            Name = name, Category = category, Quantity = quantity,
+            Status = "available",
+            Grade = unitPrice > 0 ? CalcGrade(unitPrice) : grade,
+            UnitPrice = unitPrice, DepartmentId = departmentId,
+            ProjectTag = projectTag, LocationCode = locationCode,
             UpdatedAt = DateTime.UtcNow,
         };
         _db.InventoryItems.Add(item);
@@ -63,14 +72,19 @@ public class InventoryService
         return item;
     }
 
-    public async Task<InventoryItem?> Update(int id, int? quantity, string? location, string? status)
+    public async Task<InventoryItem?> Update(int id,
+        string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? projectTag = null, string? locationCode = null)
     {
         var item = await _db.InventoryItems.FindAsync(id);
         if (item is null) return null;
-
-        if (quantity.HasValue) item.Quantity = quantity.Value;
-        if (location is not null) item.Location = location;
-        if (status is not null) item.Status = status;
+        if (unitPrice.HasValue) item.UnitPrice = unitPrice.Value;
+        if (unitPrice.HasValue && grade is null)
+            item.Grade = CalcGrade(unitPrice.Value);
+        else if (grade is not null)
+            item.Grade = grade;
+        if (departmentId.HasValue) item.DepartmentId = departmentId.Value;
+        if (projectTag is not null) item.ProjectTag = projectTag;
+        if (locationCode is not null) item.LocationCode = locationCode;
         item.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -113,7 +127,7 @@ public class InventoryService
             var name = item.GetProperty("name").GetString() ?? "";
             var category = item.GetProperty("category").GetString() ?? "";
             var quantity = item.GetProperty("quantity").GetInt32();
-            var location = item.GetProperty("location").GetString() ?? "";
+            var locationCode = item.TryGetProperty("locationCode", out var lc) ? lc.GetString() : null;
             var status = item.GetProperty("status").GetString() ?? "available";
 
             _db.InventoryItems.Add(new InventoryItem
@@ -121,7 +135,7 @@ public class InventoryService
                 Name = name,
                 Category = category,
                 Quantity = quantity,
-                Location = location,
+                LocationCode = locationCode,
                 Status = status,
                 UpdatedAt = DateTime.UtcNow,
             });

@@ -10,7 +10,7 @@ import { GlobalSearch } from "./GlobalSearch";
 import { useSidebar } from "./SidebarContext";
 
 const pageTitles: Record<string, string> = {
-  "/": "仪表盘", "/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志",
+  "/": "仪表盘", "/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志", "/incidents": "事故安全",
 };
 
 export function Topbar() {
@@ -33,7 +33,7 @@ export function Topbar() {
         {title && <h1 className="text-sm font-medium text-muted hidden sm:block">{title}</h1>}
       </div>
 
-      <div className="flex items-center gap-2 flex-1 justify-end">
+      <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-end">
         <GlobalSearch />
         <NotificationBell />
         <ThemeToggle />
