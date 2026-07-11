@@ -32,15 +32,12 @@ public static class SystemAgentEndpoints
                 var history = await conv.GetContext(sessionId);
                 var historyTuples = history.Select(m => (m.Role, m.Content)).ToList();
 
-                var aiKey = config.GetValue<string>("AiService:DeepSeekKey") ?? "";
-                var aiUrl = config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
-                using var aiClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-                await conv.AddMessage(sessionId, username, "user", req.Task, aiClient, aiKey, aiUrl);
+                await conv.AddMessage(sessionId, username, "user", req.Task);
 
                 var result = await svc.RunAgent(req.Task, username, historyTuples);
 
                 if (!string.IsNullOrWhiteSpace(result))
-                    await conv.AddMessage(sessionId, username, "assistant", result, aiClient, aiKey, aiUrl);
+                    await conv.AddMessage(sessionId, username, "assistant", result);
 
                 var stats = await conv.GetSessionStats(sessionId);
                 return Results.Ok(new { result, sessionId, stats });

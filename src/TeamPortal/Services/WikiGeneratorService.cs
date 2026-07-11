@@ -485,8 +485,9 @@ public class WikiGeneratorService
 
         var iteration = 0;
 
-        while (true)
+        while (iteration < 50)
         {
+            iteration++;
             var payload = new
             {
                 model,

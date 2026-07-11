@@ -1,7 +1,9 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
@@ -70,6 +72,49 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
 // ── ProblemDetails for consistent error responses ──
 builder.Services.AddProblemDetails();
 
+// ── HTTP Resilience (Polly: retry + circuit breaker + timeout) ──
+builder.Services.ConfigureHttpClientDefaults(options =>
+{
+    options.AddStandardResilienceHandler();
+});
+
+// ── Graceful shutdown ──
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.ShutdownTimeout = TimeSpan.FromSeconds(15);
+});
+
+// ── Health checks (DB + AI Service) ──
+builder.Services.AddHealthChecks()
+    .AddCheck<DbHealthCheck>("database", failureStatus: HealthStatus.Unhealthy)
+    .AddCheck<AiServiceHealthCheck>("ai-service", failureStatus: HealthStatus.Degraded);
+
+// ── Rate limiting ──
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("default", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromSeconds(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 10
+            }));
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromSeconds(60),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+});
+
 // ── Services ──
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
@@ -79,14 +124,15 @@ builder.Services.AddHttpClient<AiProxyService>();
 builder.Services.AddHttpClient<FlightLogService>();
 builder.Services.AddHttpClient<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
-builder.Services.AddScoped<WikiGeneratorService>();
-builder.Services.AddScoped<SystemAgentService>();
+builder.Services.AddHttpClient<WikiGeneratorService>();
+builder.Services.AddHttpClient<SystemAgentService>();
 builder.Services.AddScoped<BaiduNetdiskService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<FlightService>();
 builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<MaterialService>();
+builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddSingleton<LogService>();
@@ -98,6 +144,18 @@ builder.Services.AddSingleton<MaintenanceService>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// ── Auto-recovery: check DB health before migration ──
+using (var scope = app.Services.CreateScope())
+{
+    var backup = scope.ServiceProvider.GetRequiredService<BackupService>();
+    var log = scope.ServiceProvider.GetRequiredService<LogService>();
+    var recoveryResult = backup.CheckAndRecoverOnStartup();
+    if (recoveryResult.Recovered)
+        log.Warn("system", recoveryResult.Message);
+    else
+        log.Info("system", recoveryResult.Message);
+}
 
 // ── Migrate & seed ──
 using (var scope = app.Services.CreateScope())
@@ -132,6 +190,7 @@ using (var scope = app.Services.CreateScope())
 
 // ── Middleware pipeline ──
 app.UseTeamPortalExceptionHandler();
+app.UseRequestLogging();
 
 // Forwarded Headers：信任来自 nginx 反向代理的 X-Forwarded-* 头
 // Docker 内部网络中所有流量来自可信代理
@@ -153,12 +212,14 @@ else
 }
 
 app.UseStatusCodePages();
+app.UseRateLimiter();
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API" }));
+app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapInventoryEndpoints();
@@ -181,6 +242,7 @@ app.MapTrashEndpoints();
 app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
+app.MapBackupEndpoints();
 
 app.Run();
 

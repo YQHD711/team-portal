@@ -87,7 +87,7 @@ public static class AuthEndpoints
                 return Results.Problem("Invalid username or password", statusCode: 401);
 
             return Results.Ok(new { token });
-        });
+        }).RequireRateLimiting("login");
 
         app.MapGet("/api/auth/me", async (ClaimsPrincipal user, AppDbContext db) =>
         {

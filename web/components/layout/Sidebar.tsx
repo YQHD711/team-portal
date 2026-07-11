@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck
+  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
@@ -42,6 +42,7 @@ const adminNav = [
   { href: "/admin/settings", label: "系统设置", icon: Settings },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
   { href: "/admin/trash", label: "回收站", icon: Trash2 },
+  { href: "/admin/backup", label: "备份恢复", icon: HardDrive },
   { href: "/admin/cloud", label: "云存储", icon: Cloud },
   { href: "/admin/ai-admin", label: "AI 管理员", icon: Brain },
 ];

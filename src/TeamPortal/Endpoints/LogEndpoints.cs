@@ -62,12 +62,5 @@ public static class LogEndpoints
             var deleted = force == true ? await svc.ClearAllLogs() : await svc.CleanupOldLogs();
             return Results.Ok(new { deleted, archivePath, message = archivePath is not null ? $"已清理 {deleted} 条日志，归档到 {archivePath}" : $"已清理 {deleted} 条日志" });
         });
-
-        // System health check
-        log.MapGet("/health", async (LogService svc) =>
-        {
-            var health = await svc.GetHealth();
-            return Results.Ok(health);
-        });
     }
 }

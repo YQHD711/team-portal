@@ -24,7 +24,6 @@ public class SystemAgentService
     public SystemAgentService(HttpClient http, IConfiguration config, AppDbContext db, LogService log, SettingsService settings)
     {
         _http = http;
-        _http.Timeout = TimeSpan.FromMinutes(30); // Per-request timeout managed via CancellationToken
         _db = db;
         _log = log;
         _settings = settings;

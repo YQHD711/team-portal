@@ -67,19 +67,23 @@ async def search(req: SearchRequest):
         return {"sources": sources, "ragPrompt": build_rag_prompt(req.query, sources), "answer": None}
 
     rag_prompt = build_rag_prompt(req.query, sources)
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f"{DEEPSEEK_BASE_URL}/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": rag_prompt}],
-            },
-        )
-        data = resp.json()
-        answer = data["choices"][0]["message"]["content"]
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{DEEPSEEK_BASE_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": rag_prompt}],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            answer = data["choices"][0]["message"]["content"]
+    except Exception as e:
+        return {"sources": sources, "answer": None, "error": f"AI query failed: {str(e)}"}
 
     return {"sources": sources, "answer": answer}

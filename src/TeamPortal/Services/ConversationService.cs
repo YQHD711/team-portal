@@ -15,17 +15,20 @@ namespace TeamPortal.Services;
 public class ConversationService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _config;
     private const int MaxRecentMessages = 30;
     private const int CompressThreshold = 45;
 
-    public ConversationService(IServiceScopeFactory scopeFactory)
+    public ConversationService(IServiceScopeFactory scopeFactory, IHttpClientFactory httpClientFactory, IConfiguration config)
     {
         _scopeFactory = scopeFactory;
+        _httpClientFactory = httpClientFactory;
+        _config = config;
     }
 
     /// <summary>Add a message. Auto-compresses when conversation grows too large.</summary>
-    public async Task AddMessage(string sessionId, string userName, string role, string content,
-        HttpClient? aiClient = null, string? apiKey = null, string? baseUrl = null)
+    public async Task AddMessage(string sessionId, string userName, string role, string content)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -49,9 +52,14 @@ public class ConversationService
         var nonSystemCount = await db.ChatMessages
             .CountAsync(m => m.SessionId == sessionId && m.Role != "system");
 
-        if (nonSystemCount > CompressThreshold && aiClient != null && !string.IsNullOrEmpty(apiKey))
+        if (nonSystemCount > CompressThreshold)
         {
-            await CompressMemory(db, sessionId, aiClient, apiKey, baseUrl ?? "https://api.deepseek.com");
+            var apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
+            var baseUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                await CompressMemory(db, sessionId, apiKey, baseUrl);
+            }
         }
     }
 
@@ -61,7 +69,7 @@ public class ConversationService
     /// stores the summary as a system message, deletes originals.
     /// </summary>
     private async Task CompressMemory(AppDbContext db, string sessionId,
-        HttpClient aiClient, string apiKey, string baseUrl)
+        string apiKey, string baseUrl)
     {
         var oldMessages = await db.ChatMessages
             .Where(m => m.SessionId == sessionId && m.Role != "system")
@@ -94,7 +102,8 @@ public class ConversationService
             };
             req.Headers.Add("Authorization", $"Bearer {apiKey}");
 
-            var resp = await aiClient.SendAsync(req);
+            var client = _httpClientFactory.CreateClient();
+            var resp = await client.SendAsync(req);
             if (resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();

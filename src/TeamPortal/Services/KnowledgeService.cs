@@ -77,7 +77,7 @@ public class KnowledgeService
         var dir = Path.GetDirectoryName(fullPath);
         if (dir is not null) Directory.CreateDirectory(dir);
 
-        // Version history backup
+        // Version history backup before overwrite
         if (File.Exists(fullPath))
         {
             var historyDir = Path.Combine(_basePath, ".history", Path.GetDirectoryName(relativePath) ?? "");
@@ -87,7 +87,10 @@ public class KnowledgeService
             File.Copy(fullPath, backupPath, overwrite: true);
         }
 
-        File.WriteAllText(fullPath, content);
+        // Atomic write: write to temp file, then rename
+        var tmpPath = fullPath + ".tmp";
+        File.WriteAllText(tmpPath, content);
+        File.Move(tmpPath, fullPath, overwrite: true);
         _log.Info("knowledge", $"File written: {relativePath}");
     }
 
@@ -97,7 +100,10 @@ public class KnowledgeService
         if (fullPath is null) throw new InvalidOperationException("Invalid path");
         var dir = Path.GetDirectoryName(fullPath);
         if (dir is not null) Directory.CreateDirectory(dir);
-        File.WriteAllBytes(fullPath, data);
+        // Atomic write: write to temp file, then rename
+        var tmpPath = fullPath + ".tmp";
+        File.WriteAllBytes(tmpPath, data);
+        File.Move(tmpPath, fullPath, overwrite: true);
         _log.Info("knowledge", $"Binary file written: {relativePath}");
     }
 
