@@ -7,6 +7,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using ModelContextProtocol.AspNetCore;
 using TeamPortal.Endpoints;
 using TeamPortal.Middleware;
 using TeamPortal.Services;
@@ -141,6 +142,12 @@ builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<ConversationService>();
 builder.Services.AddSingleton<MaintenanceService>();
 
+// ── MCP Server for external AI agents ──
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMcpServer()
+    .WithToolsFromAssembly()
+    .WithHttpTransport(options => options.Stateless = true);
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -243,6 +250,7 @@ app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
 app.MapBackupEndpoints();
+app.MapMcp("/mcp").RequireAuthorization();
 
 app.Run();
 
