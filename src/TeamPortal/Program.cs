@@ -396,6 +396,8 @@ static void MigrateExistingTables(AppDbContext db)
             "duplicate column");
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN LocationCode TEXT",
             "duplicate column");
+        // Old Location column was NOT NULL but model dropped it — make nullable
+        MakeColumnNullable(conn, "InventoryItems", "Location");
 
         MigrateSql(conn, """
             CREATE TABLE IF NOT EXISTS TrashItems (
@@ -512,4 +514,58 @@ static void MigrateSql(System.Data.Common.DbConnection conn, string sql, string?
     {
         // Expected on subsequent runs
     }
+}
+
+/// <summary>Make a column nullable. SQLite can't ALTER COLUMN, so recreates the table.</summary>
+static void MakeColumnNullable(System.Data.Common.DbConnection conn, string table, string column)
+{
+    try
+    {
+        using var info = conn.CreateCommand();
+        info.CommandText = $"PRAGMA table_info(\"{table}\")";
+        using var r = info.ExecuteReader();
+        while (r.Read())
+        {
+            if (r.GetString(1) == column && !r.IsDBNull(3) && r.GetBoolean(3)) // notnull == 1 → needs fix
+            {
+                r.Close();
+                var temp = $"\"{table}_migrate\"";
+                var ddl = GetCreateSql(conn, table);
+                var newDdl = ddl.Replace($"\"{column}\" TEXT NOT NULL", $"\"{column}\" TEXT NULL")
+                                .Replace($"\"{column}\" INTEGER NOT NULL", $"\"{column}\" INTEGER NULL")
+                                .Replace($"\"{column}\" REAL NOT NULL", $"\"{column}\" REAL NULL")
+                                .Replace($"\"{column}\" BLOB NOT NULL", $"\"{column}\" BLOB NULL");
+                if (newDdl == ddl) return; // no change needed
+                using var tx = conn.BeginTransaction();
+                try
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.Transaction = tx;
+                    cmd.CommandText = $"CREATE TABLE {temp} {newDdl[(newDdl.IndexOf('('))..]}";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = $"INSERT INTO {temp} SELECT * FROM \"{table}\"";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = $"DROP TABLE \"{table}\"";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = $"ALTER TABLE {temp} RENAME TO \"{table}\"";
+                    cmd.ExecuteNonQuery();
+                    tx.Commit();
+                    Console.WriteLine($"[MIGRATE] Made {table}.{column} nullable");
+                }
+                catch { tx.Rollback(); throw; }
+                return;
+            }
+        }
+    }
+    catch (Exception ex) when (ex.Message.Contains("duplicate") || ex.Message.Contains("already exists"))
+    {
+        // Expected on re-run
+    }
+}
+
+static string GetCreateSql(System.Data.Common.DbConnection conn, string table)
+{
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = $"SELECT sql FROM sqlite_master WHERE name='{table}' AND type='table'";
+    return (string?)cmd.ExecuteScalar() ?? "";
 }
