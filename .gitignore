@@ -9,11 +9,16 @@ src/TeamPortal/publish/
 
 # Secrets (local dev only — use env vars in production)
 src/TeamPortal/appsettings.Development.json
+.env
+.env.*
+!.env.example
+*.local
 
 # Database (local dev)
 **/*.db
 **/*.db-shm
 **/*.db-wal
+src/TeamPortal/Data/backups/
 
 # Python
 **/__pycache__/
@@ -24,6 +29,7 @@ data/knowledge/
 data/knowledge/.history/
 data/inventory.xlsx
 data/flightlogs/
+data/baidu-token.json
 
 # IDE
 .vs/
