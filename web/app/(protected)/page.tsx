@@ -3,10 +3,26 @@
 import { useState, useEffect } from "react";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
-import { AlertTriangle, FileText, Sparkles, Bell, ExternalLink, Package, BarChart3, Clock, History, Loader2, User, DollarSign } from "lucide-react";
+import { isStaff as checkIsStaff } from "@/lib/auth";
+import { dotGridPattern } from "@/lib/constants";
+import { AlertTriangle, FileText, Sparkles, Bell, Package, BarChart3, Clock, History, Loader2, User, DollarSign } from "lucide-react";
 import Link from "next/link";
 
-interface DashData { users: number; inventory: number; inventoryTotal: number; departments: number; pendingPurchases: number; monthSpent: number; lowStock: { id:number;name:string;quantity:number;category:string }[]; activeWiki: { id:string;projectName:string;status:string }[]; recentIncidents: { id:number;type:string;severity:string;description:string;date:string }[]; completedWiki: number; }
+interface DashData {
+  users: number;
+  inventory: number;
+  inventoryTotal: number;
+  departments: number;
+  monthNewItems: number;
+  lowStock: { id: number; name: string; quantity: number; category: string }[];
+  activeWiki: { id: string; projectName: string; status: string; createdAt: string }[];
+  recentIncidents: { id: number; type: string; severity: string; description: string; date: string }[];
+  completedWiki: number;
+  // Staff-only fields — backend omits them for regular members
+  pendingPurchases?: number;
+  monthSpent?: number;
+  inventoryValue?: number;
+}
 interface NotifItem { id: number; title: string; message: string; link: string | null; createdAt: string; }
 
 export default function Home() {
@@ -18,25 +34,26 @@ export default function Home() {
 
   useEffect(() => { try { setRecentDocs(JSON.parse(localStorage.getItem("recentDocs") || "[]")); } catch {} }, []);
 
+  useEffect(() => { setIsStaff(checkIsStaff()); }, []);
+
   useEffect(() => {
     Promise.all([
       api.get<DashData>("/api/dashboard").catch(() => null),
       api.get<NotifItem[]>("/api/notifications").catch(() => []),
-      api.get<{ role: string }>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(() => {}),
     ]).then(([d, n]) => {
       if (d) setData(d);
-      setNotifs((n as NotifItem[]).slice(0, 8));
+      setNotifs(n.slice(0, 8));
       setLoaded(true);
     });
   }, []);
 
-  const Skeleton = ({w="w-16",h="h-6"}:{w?:string;h?:string}) => <span className={`inline-block ${w} ${h} bg-slate-200 dark:bg-slate-700 rounded animate-pulse`} />;
+  const Skeleton = ({ w = "w-16", h = "h-6" }: { w?: string; h?: string }) => <span className={`inline-block ${w} ${h} bg-slate-200 dark:bg-slate-700 rounded animate-pulse`} />;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6 sm:p-8 text-white">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
+        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `url(${dotGridPattern()})` }} />
         <div className="relative flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur overflow-hidden">
@@ -56,9 +73,11 @@ export default function Home() {
         {[
           { label: "团队人数", value: data?.users, icon: User, color: "text-blue-600 bg-blue-50 dark:bg-blue-950/30", staffOnly: false },
           { label: "零件库存", value: data?.inventoryTotal, icon: Package, color: "text-amber-600 bg-amber-50 dark:bg-amber-950/30", staffOnly: false },
+          { label: "库存总价值", value: data ? `¥${data.inventoryValue?.toLocaleString() ?? 0}` : null, icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30", staffOnly: true },
           { label: "本月支出", value: data ? `¥${data.monthSpent}` : null, icon: DollarSign, color: "text-red-600 bg-red-50 dark:bg-red-950/30", staffOnly: true },
+          { label: "本月新增零件", value: data?.monthNewItems, icon: Package, color: "text-sky-600 bg-sky-50 dark:bg-sky-950/30", staffOnly: false },
         ].filter(s => !s.staffOnly || isStaff).map((s, i) => (
-          <div key={i} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-center">
+          <div key={s.label} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-center">
             <div className="text-xl font-bold">{loaded ? (s.value ?? "-") : <Skeleton />}</div>
             <div className="text-xs text-zinc-400 mt-0.5">{s.label}</div>
           </div>
@@ -89,7 +108,7 @@ export default function Home() {
                   <div key={i.id} className="flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
                     <span className="font-medium">{i.type}</span>
-                    <span className="text-zinc-500 text-xs">{i.description.slice(0,40)}...</span>
+                    <span className="text-zinc-500 text-xs">{i.description.slice(0, 40)}...</span>
                     <span className="text-zinc-400 text-xs ml-auto">{new Date(i.date).toLocaleDateString("zh-CN")}</span>
                   </div>
                 ))}
@@ -105,7 +124,7 @@ export default function Home() {
                 <div key={n.id} className="flex items-start gap-3 text-sm p-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                   <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-400" />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2"><span className="font-medium truncate">{n.title}</span><span className="text-xs text-zinc-400 shrink-0">{new Date(n.createdAt).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</span></div>
+                    <div className="flex items-center gap-2"><span className="font-medium truncate">{n.title}</span><span className="text-xs text-zinc-400 shrink-0">{new Date(n.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span></div>
                     <div className="text-xs text-zinc-500 mt-0.5">{n.message}</div>
                   </div>
                   {n.link && <Link href={n.link} className="shrink-0 text-xs text-blue-500 hover:underline mt-0.5">查看</Link>}
@@ -139,8 +158,8 @@ export default function Home() {
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
               <div className="flex items-center gap-2 mb-3"><History className="h-4 w-4 text-zinc-500" /><h3 className="font-semibold text-sm">最近浏览</h3></div>
               <div className="space-y-1">
-                {recentDocs.slice(0, 5).map((d, i) => (
-                  <Link key={i} href={`/knowledge/${d.path}`} className="block text-sm p-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-blue-500 truncate">{d.title || d.path}</Link>
+                {recentDocs.slice(0, 5).map(d => (
+                  <Link key={d.path} href={`/knowledge/${d.path}`} className="block text-sm p-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-blue-500 truncate">{d.title || d.path}</Link>
                 ))}
               </div>
             </div>

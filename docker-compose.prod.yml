@@ -9,7 +9,7 @@ services:
     ports: []
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - API_PROXY_URL=http://backend:8080
 
   backend:
     ports: []

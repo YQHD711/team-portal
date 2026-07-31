@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// Server-side env only (rewrites never reach the browser) — non-NEXT_PUBLIC_ to keep it out of the client bundle.
+const apiUrl = process.env.API_PROXY_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["10.106.214.168", "192.168.31.179"],
   async rewrites() {
     return [
       {
