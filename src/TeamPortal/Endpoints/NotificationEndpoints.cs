@@ -24,8 +24,11 @@ public static class NotificationEndpoints
         n.MapGet("/unread-count", async (ClaimsPrincipal user, NotificationService svc) =>
             Results.Ok(new { count = await svc.GetUnreadCount(GetUserId(user), GetUserRole(user)) }));
 
-        n.MapPost("/{id:long}/read", async (long id, NotificationService svc) =>
-            { await svc.MarkRead(id); return Results.Ok(new { success = true }); });
+        n.MapPost("/{id:long}/read", async (long id, ClaimsPrincipal user, NotificationService svc) =>
+        {
+            var ok = await svc.MarkReadIfVisible(id, GetUserId(user), GetUserRole(user));
+            return ok ? Results.Ok(new { success = true }) : Results.NotFound();
+        });
 
         n.MapPost("/read-all", async (ClaimsPrincipal user, NotificationService svc) =>
             { await svc.MarkAllRead(GetUserId(user), GetUserRole(user)); return Results.Ok(new { success = true }); });

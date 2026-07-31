@@ -103,12 +103,23 @@ public class NotificationService
                 (n.TargetRole == "admin" && role == "admin")))));
     }
 
-    public async Task MarkRead(long id)
+    /// <summary>
+    /// Mark a notification read only if it is visible to the given user.
+    /// Returns false when the notification is missing or not visible to them.
+    /// </summary>
+    public async Task<bool> MarkReadIfVisible(long id, int userId, string? role)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var n = await db.Notifications.FindAsync(id);
-        if (n != null) { n.IsRead = true; await db.SaveChangesAsync(); }
+        if (n is null) return false;
+        var visible = n.UserId == userId ||
+            (n.UserId == null && (n.TargetRole == null ||
+                (n.TargetRole == "staff" && (role == "admin" || role == "部长")) ||
+                (n.TargetRole == "admin" && role == "admin")));
+        if (!visible) return false;
+        if (!n.IsRead) { n.IsRead = true; await db.SaveChangesAsync(); }
+        return true;
     }
 
     public async Task MarkAllRead(int userId, string? role)

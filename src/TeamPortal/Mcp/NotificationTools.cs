@@ -17,7 +17,7 @@ public class NotificationTools
     [McpServerTool(Name = "notification_unread_count")]
     public async Task<int> UnreadCount() { var (u, r) = GetUser(); return await _notify.GetUnreadCount(u, r); }
     [McpServerTool(Name = "notification_mark_read")]
-    public async Task MarkRead(long id) => await _notify.MarkRead(id);
+    public async Task MarkRead(long id) { var (u, r) = GetUser(); await _notify.MarkReadIfVisible(id, u, r); }
     [McpServerTool(Name = "notification_mark_all_read")]
     public async Task MarkAllRead() { var (u, r) = GetUser(); await _notify.MarkAllRead(u, r); }
     [McpServerTool(Name = "notification_send")]
