@@ -43,7 +43,7 @@ make clean    # 清理构建产物
 单独测试：
 ```bash
 dotnet test tests/api/          # C# xUnit
-npx vitest run tests/web/       # 前端 Vitest
+cd web && npx vitest run        # 前端 Vitest
 python -m pytest tests/ai/      # Python pytest
 ```
 
@@ -76,7 +76,7 @@ python -m pytest tests/ai/      # Python pytest
 | 端 | 框架 | 目录 | 覆盖要求 |
 |---|---|---|---|
 | C# | xUnit | tests/api/ | Services **必须**测（单元），Endpoints **建议**测（集成） |
-| 前端 | Vitest | tests/web/ | 关键交互**必须**测 |
+| 前端 | Vitest | web/tests/ | 关键交互**必须**测 |
 | Python | pytest | tests/ai/ | 路由**必须**测 |
 
 ## Git 工作流

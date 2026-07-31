@@ -22,7 +22,7 @@ test-csharp:
 	dotnet test tests/api/
 
 test-web:
-	cd web && npx vitest run --config vitest.config.ts 2>/dev/null || cd ../tests/web && npx vitest run
+	cd web && npx vitest run
 
 test-python:
 	python -m pytest tests/ai/

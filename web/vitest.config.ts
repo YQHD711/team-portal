@@ -2,13 +2,18 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
+  // Next.js tsconfig uses "jsx": "preserve" — esbuild must convert JSX for tests
+  esbuild: {
+    jsx: "automatic",
+  },
   test: {
     environment: "jsdom",
     globals: true,
+    include: ["tests/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "../../web"),
+      "@": path.resolve(__dirname),
     },
   },
 });
