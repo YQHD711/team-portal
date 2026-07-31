@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { LogIn, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
@@ -66,7 +67,10 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-muted mt-4">雏鹰之翼航模队 · 内部系统</p>
+        <div className="text-center mt-4 space-y-2">
+          <Link href="/auth/register" className="text-sm text-blue-500 hover:text-blue-600">还没有账号？注册</Link>
+          <p className="text-xs text-muted">雏鹰之翼航模队 · 内部系统</p>
+        </div>
       </div>
     </div>
   );
