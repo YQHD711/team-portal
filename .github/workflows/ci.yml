@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: "24"
       - run: cd web && npm ci
-      - run: cd tests/web && npx vitest run
+      - run: cd web && npx vitest run
 
   test-python:
     runs-on: ubuntu-latest
@@ -36,5 +36,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: cd ai-service && pip install -r requirements.txt
+      - run: cd ai-service && pip install -r requirements-dev.txt
       - run: cd tests/ai && python -m pytest
