@@ -36,36 +36,26 @@ public static class AuthEndpoints
         });
 
         // ── Invite Codes (admin) ──
-        app.MapGet("/api/admin/invite-codes", async (AuthService auth, ClaimsPrincipal user, AppDbContext db) =>
-        {
-            var role = user.FindFirstValue(ClaimTypes.Role);
-            if (role != "admin") return Results.Problem("仅管理员可管理邀请码", statusCode: 403);
-            return Results.Ok(await auth.GetInviteCodes());
-        }).RequireAuthorization();
+        app.MapGet("/api/admin/invite-codes", async (AuthService auth) =>
+            Results.Ok(await auth.GetInviteCodes())
+        ).RequireAuthorization("AdminOnly");
 
-        app.MapPost("/api/admin/invite-codes", async (GenerateInviteReq req, AuthService auth, ClaimsPrincipal user, AppDbContext db) =>
+        app.MapPost("/api/admin/invite-codes", async (GenerateInviteReq req, AuthService auth, ClaimsPrincipal user) =>
         {
-            var role = user.FindFirstValue(ClaimTypes.Role);
-            if (role != "admin") return Results.Problem("仅管理员可生成邀请码", statusCode: 403);
             var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var code = await auth.GenerateInviteCode(uid, req.DepartmentId, req.MaxUses, req.DaysValid);
             return Results.Created($"/api/admin/invite-codes/{code.Id}", code);
-        }).RequireAuthorization();
+        }).RequireAuthorization("AdminOnly");
 
-        app.MapPost("/api/admin/invite-codes/{id:int}/revoke", async (int id, AuthService auth, ClaimsPrincipal user, AppDbContext db) =>
+        app.MapPost("/api/admin/invite-codes/{id:int}/revoke", async (int id, AuthService auth) =>
         {
-            var role = user.FindFirstValue(ClaimTypes.Role);
-            if (role != "admin") return Results.Problem("仅管理员可操作", statusCode: 403);
             await auth.RevokeInviteCode(id);
             return Results.Ok(new { message = "已作废" });
-        }).RequireAuthorization();
+        }).RequireAuthorization("AdminOnly");
 
         // ── CSV Import (admin) ──
-        app.MapPost("/api/admin/users/import-csv", async (HttpRequest req, AuthService auth, ClaimsPrincipal user) =>
+        app.MapPost("/api/admin/users/import-csv", async (HttpRequest req, AuthService auth) =>
         {
-            var role = user.FindFirstValue(ClaimTypes.Role);
-            if (role != "admin") return Results.Problem("仅管理员可导入", statusCode: 403);
-
             var form = await req.ReadFormAsync();
             var file = form.Files.GetFile("file");
             if (file is null) return Results.Problem("请上传CSV文件", statusCode: 400);
@@ -75,7 +65,7 @@ public static class AuthEndpoints
             var count = await auth.BulkImportUsers(csv, req.Query["password"]);
 
             return Results.Ok(new { imported = count, message = $"成功导入 {count} 个用户" });
-        }).RequireAuthorization().DisableAntiforgery();
+        }).RequireAuthorization("AdminOnly").DisableAntiforgery();
 
         app.MapPost("/api/auth/login", async (LoginRequest req, AuthService auth) =>
         {
