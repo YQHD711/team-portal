@@ -63,9 +63,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── JSON: force UTC on all DateTime serialization ──
+// ── JSON: explicit camelCase + forced UTC DateTime serialization ──
 builder.Services.ConfigureHttpJsonOptions(opts =>
 {
+    opts.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     opts.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     opts.SerializerOptions.Converters.Add(new TeamPortal.Json.UtcDateTimeConverter());
 });
@@ -395,6 +396,8 @@ static void MigrateExistingTables(AppDbContext db)
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN ProjectTag TEXT",
             "duplicate column");
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN LocationCode TEXT",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN CreatedAt TEXT DEFAULT (datetime('now'))",
             "duplicate column");
         // Old Location column was NOT NULL but model dropped it — make nullable
         MakeColumnNullable(conn, "InventoryItems", "Location");

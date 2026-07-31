@@ -14,5 +14,6 @@ public class InventoryItem
     public Department? Department { get; set; }
     public string? ProjectTag { get; set; }
     public string? PhotoUrl { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
