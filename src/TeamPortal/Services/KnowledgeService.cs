@@ -36,9 +36,20 @@ public class KnowledgeService
         var nodes = new List<TreeNode>();
         var invisible = GetInvisibleProjects(role, department, userId);
 
-        // Public knowledge — always visible, but filter out invisible wiki projects
+        // Public knowledge — merge from both "公共" and "公共知识库" directories
+        var publicChildren = new List<TreeNode>();
+
+        // Files from "公共" directory
         var publicPath = Path.Combine(_basePath, "公共");
-        var publicChildren = Directory.Exists(publicPath) ? ScanDirectory(publicPath, invisible) : new List<TreeNode>();
+        if (Directory.Exists(publicPath))
+            publicChildren.AddRange(ScanDirectory(publicPath, invisible));
+
+        // Files from "公共知识库" directory (alternative naming, merge into same root node)
+        var publicAltPath = Path.Combine(_basePath, "公共知识库");
+        if (Directory.Exists(publicAltPath))
+            publicChildren.AddRange(ScanDirectory(publicAltPath, invisible));
+
+        // Root-level .md files
         foreach (var file in Directory.GetFiles(_basePath, "*.md").Where(f => !f.EndsWith(".gitkeep")))
             publicChildren.Add(new TreeNode { Name = Path.GetFileNameWithoutExtension(file), Type = "file", Path = Path.GetFileName(file) });
         nodes.Add(new TreeNode { Name = "公共知识库", Type = "folder", Path = "公共", Children = publicChildren });
@@ -49,7 +60,7 @@ public class KnowledgeService
             foreach (var deptDir in Directory.GetDirectories(_basePath).OrderBy(Path.GetFileName))
             {
                 var name = Path.GetFileName(deptDir);
-                if (name == "公共") continue;
+                if (name == "公共" || name == "公共知识库") continue;
                 nodes.Add(new TreeNode { Name = name, Type = "folder", Path = name, Children = ScanDirectory(deptDir, invisible) });
             }
         }
