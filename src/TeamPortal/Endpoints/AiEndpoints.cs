@@ -151,7 +151,15 @@ internal class CaptureStream : Stream
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _disposed = true; _cts.Cancel(); _inner.Dispose(); _buffer.Dispose(); _cts.Dispose(); }
+        if (disposing)
+        {
+            _disposed = true;
+            try { _cts.Cancel(); }
+            catch (ObjectDisposedException) { /* response pipeline may dispose twice */ }
+            _inner.Dispose();
+            _buffer.Dispose();
+            _cts.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

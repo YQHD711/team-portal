@@ -61,8 +61,8 @@ class TestChatRoute:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-    @patch("routes.chat.DEEPSEEK_API_KEY", "")
-    def test_chat_without_key_returns_error(self):
+    @patch("routes.chat.get_api_key", return_value="")
+    def test_chat_without_key_returns_error(self, mock_get_key):
         """Chat without API key should stream error message."""
         # Use stream to read the SSE response
         with client.stream("POST", "/api/ai/chat", json={"question": "test"}) as resp:

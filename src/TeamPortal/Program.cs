@@ -397,8 +397,11 @@ static void MigrateExistingTables(AppDbContext db)
             "duplicate column");
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN LocationCode TEXT",
             "duplicate column");
-        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN CreatedAt TEXT DEFAULT (datetime('now'))",
+        // SQLite forbids ADD COLUMN with a non-constant default — add bare column, then backfill
+        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN CreatedAt TEXT",
             "duplicate column");
+        MigrateSql(conn, "UPDATE InventoryItems SET CreatedAt = UpdatedAt WHERE CreatedAt IS NULL",
+            "no such column"); // harmless on re-run: column already filled
         // Old Location column was NOT NULL but model dropped it — make nullable
         MakeColumnNullable(conn, "InventoryItems", "Location");
 
@@ -501,7 +504,8 @@ static void MigrateExistingTables(AppDbContext db)
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[WARN] DB migration failed: {ex.Message}");
+        // Keep startup alive but surface the failure — will retry on next start
+        Console.WriteLine($"[WARN] DB migration failed, will retry on next start: {ex}");
     }
 }
 
