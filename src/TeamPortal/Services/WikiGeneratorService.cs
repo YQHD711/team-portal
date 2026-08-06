@@ -44,6 +44,24 @@ public class WikiGeneratorService
         _options = WikiSettingsStore.Load().Options;
     }
 
+    /// <summary>Get DeepSeek API key: DB SystemSettings first, then config, then env var.</summary>
+    private async Task<string> GetApiKey()
+    {
+        var setting = await _db.SystemSettings.FindAsync("AI:DeepSeekKey");
+        if (setting is not null && !string.IsNullOrEmpty(setting.Value)) return setting.Value;
+        return _config["AiService:DeepSeekKey"]
+            ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY")
+            ?? "";
+    }
+
+    /// <summary>Get DeepSeek base URL: DB SystemSettings first, then config.</summary>
+    private async Task<string> GetBaseUrl()
+    {
+        var setting = await _db.SystemSettings.FindAsync("AI:DeepSeekBaseUrl");
+        if (setting is not null && !string.IsNullOrEmpty(setting.Value)) return setting.Value;
+        return _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+    }
+
     public WikiGeneratorOptions GetOptions() => _options;
     public void UpdateOptions(WikiGeneratorOptions opts) { _options = opts; var s = new WikiSettingsStore { Options = opts }; s.Save(); }
 
@@ -137,8 +155,8 @@ public class WikiGeneratorService
             task.Status = "translating"; await _db.SaveChangesAsync();
             var total = mdFiles.Count;
             var done = 0;
-            var aiKey = _config["AiService:DeepSeekKey"] ?? "";
-            var aiUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+            var aiKey = await GetApiKey();
+            var aiUrl = await GetBaseUrl();
             if (string.IsNullOrEmpty(aiKey)) throw new InvalidOperationException("AI API key not configured");
 
             var catalog = new List<object>();
@@ -473,8 +491,8 @@ public class WikiGeneratorService
 
     private async Task<string> CallDeepSeekWithTools(string systemPrompt, string userMessage, List<ToolDef> tools, string taskDesc)
     {
-        var apiKey = _config["AiService:DeepSeekKey"] ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY") ?? "";
-        var baseUrl = _config["AiService:DeepSeekBaseUrl"] ?? "https://api.deepseek.com";
+        var apiKey = await GetApiKey();
+        var baseUrl = await GetBaseUrl();
         var model = _options.ContentModel;
 
         var messages = new List<object>
@@ -795,8 +813,8 @@ README:
 请返回修复后的完整 Markdown 文档：";
 
                 var system = "你是一个文档审查专家。只修复问题，不重写。直接返回修复后的 Markdown 文档。";
-                var aiKey = _config["AiService:DeepSeekKey"] ?? "";
-                var aiUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+                var aiKey = await GetApiKey();
+                var aiUrl = await GetBaseUrl();
 
                 var payload = new
                 {
