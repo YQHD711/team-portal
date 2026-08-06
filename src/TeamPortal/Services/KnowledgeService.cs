@@ -81,6 +81,12 @@ public class KnowledgeService
         return File.ReadAllText(fullPath);
     }
 
+    public bool FileExists(string relativePath)
+    {
+        var fullPath = ResolvePath(relativePath);
+        return fullPath is not null && File.Exists(fullPath);
+    }
+
     public void WriteFile(string relativePath, string content)
     {
         var fullPath = ResolvePath(relativePath);

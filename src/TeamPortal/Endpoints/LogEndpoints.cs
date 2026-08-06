@@ -9,9 +9,10 @@ public static class LogEndpoints
         var log = app.MapGroup("/api/admin/logs").RequireAuthorization("StaffOnly");
 
         // List logs with optional date range filter + keyword search
-        log.MapGet("/", async (string? level, string? category, int page, DateTime? from, DateTime? to, string? keyword, LogService svc) =>
+        log.MapGet("/", async (string? level, string? category, int? page, int? size, DateTime? from, DateTime? to, string? keyword, LogService svc) =>
         {
-            var logs = await svc.GetLogs(level, category, page == 0 ? 1 : page, 50, from, to, keyword);
+            var p = page ?? 1;
+            var logs = await svc.GetLogs(level, category, p == 0 ? 1 : p, size ?? 50, from, to, keyword);
             return Results.Ok(logs.Select(l => new
             {
                 l.Id, l.Level, l.Category, l.Message, l.Detail, l.UserName, l.CreatedAt

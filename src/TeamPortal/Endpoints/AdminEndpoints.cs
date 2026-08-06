@@ -17,8 +17,8 @@ public static class AdminEndpoints
 
     public static void MapAdminEndpoints(this WebApplication app)
     {
-        // Stats — accessible to all authenticated users (dashboard)
-        app.MapGet("/api/admin/stats", async (AdminService svc) => Results.Ok(await svc.GetStats())).RequireAuthorization();
+        // Stats — staff only (admin & 部长), same policy as the rest of /api/admin
+        app.MapGet("/api/admin/stats", async (AdminService svc) => Results.Ok(await svc.GetStats())).RequireAuthorization("StaffOnly");
 
         var admin = app.MapGroup("/api/admin").RequireAuthorization("StaffOnly");
 
@@ -153,6 +153,7 @@ public static class AdminEndpoints
                 notify.Notify("文档上传完成", $"{actor} 上传了 {file.FileName} 到 {targetFolder}", $"/knowledge/{path.Replace(".md","")}", targetRole: "staff");
                 return Results.Ok(new { success = true, path, cloudUrl });
             }
+            catch (DocumentConflictException e) { return Results.Problem(e.Message, statusCode: 409); }
             catch (UnauthorizedAccessException) { return Results.Problem("Access denied", statusCode: 403); }
             catch (Exception e) { log.Error("knowledge", $"Document upload failed: {file.FileName}", e.Message); return Results.Problem(e.Message, statusCode: 500); }
             finally { if (File.Exists(tmpPath)) File.Delete(tmpPath); }

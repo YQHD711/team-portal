@@ -25,7 +25,14 @@ public class DocumentService
         // Determine target path
         var fileName = Path.GetFileName(file.FileName);
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        var mdName = Path.GetFileNameWithoutExtension(fileName) + ".md";
+        // TXT keeps its original extension (plain text needs no conversion); MD/PDF/DOCX are stored as .md for AI RAG
+        var targetName = ext is ".txt" or ".md" ? fileName : Path.GetFileNameWithoutExtension(fileName) + ".md";
+        var targetPath = $"{targetFolder}/{targetName}".TrimStart('/');
+
+        // Reject overwrite of an existing knowledge file
+        if (_knowledge.FileExists(targetPath))
+            throw new DocumentConflictException("同名文件已存在");
+
         // Preserve original extension for AI service format detection
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}{ext}");
 
@@ -56,26 +63,37 @@ public class DocumentService
                 content = doc.RootElement.GetProperty("text").GetString() ?? "";
             }
 
+            // TXT is plain text — save verbatim with its original extension
+            if (ext == ".txt")
+            {
+                _knowledge.WriteFile(targetPath, content);
+                return targetPath;
+            }
+
             // Add title header
             var title = Path.GetFileNameWithoutExtension(fileName);
             var fullContent = $"# {title}\n\n> 上传文件: {fileName}\n\n{content}";
 
             // Save converted .md to knowledge base (for AI RAG)
-            var mdPath = $"{targetFolder}/{mdName}".TrimStart('/');
-            _knowledge.WriteFile(mdPath, fullContent);
+            _knowledge.WriteFile(targetPath, fullContent);
 
-            // Also save the original file for download
-            if (ext is not ".md" and not ".txt")
+            // PDF/DOCX also keep the original file for download
+            if (ext is not ".md")
             {
                 var origPath = $"{targetFolder}/{fileName}".TrimStart('/');
                 _knowledge.WriteFile(origPath, File.ReadAllBytes(tempPath));
             }
 
-            return mdPath;
+            return targetPath;
         }
         finally
         {
             if (File.Exists(tempPath)) File.Delete(tempPath);
         }
     }
+}
+
+public class DocumentConflictException : Exception
+{
+    public DocumentConflictException(string message) : base(message) { }
 }
