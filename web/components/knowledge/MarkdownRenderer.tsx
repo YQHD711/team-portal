@@ -4,36 +4,56 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 
 interface MarkdownRendererProps {
   content: string;
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  const mermaidRef = useRef<HTMLDivElement>(null);
+let mermaidSeq = 0;
+
+// 每个 mermaid 块独立成子组件,渲染结果保存在 state 中,
+// 避免直接改 DOM 后被 React 重渲染覆盖回原文
+function MermaidBlock({ code }: { code: string }) {
+  const [svg, setSvg] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const idRef = useRef(`mermaid-${++mermaidSeq}`);
 
   useEffect(() => {
-    if (!mermaidRef.current) return;
+    let cancelled = false;
     mermaid.initialize({ startOnLoad: false, theme: "neutral" });
+    mermaid
+      .render(idRef.current, code)
+      .then(({ svg }) => {
+        if (!cancelled) setSvg(svg);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
-    const blocks = mermaidRef.current.querySelectorAll(".mermaid");
-    blocks.forEach(async (block, i) => {
-      if (block.getAttribute("data-processed")) return;
-      const id = `mermaid-${Date.now()}-${i}`;
-      try {
-        const { svg } = await mermaid.render(id, block.textContent ?? "");
-        block.innerHTML = svg;
-      } catch {
-        block.innerHTML = `<div class="text-sm text-red-500 p-3 border border-red-200 rounded-lg">图表渲染失败，请检查语法</div>`;
-      }
-      block.setAttribute("data-processed", "true");
-    });
-  }, [content]);
+  if (failed) {
+    return (
+      <div className="mermaid my-4 text-sm text-red-500 p-3 border border-red-200 rounded-lg">
+        图表渲染失败，请检查语法
+      </div>
+    );
+  }
 
+  if (svg === null) {
+    return <div className="mermaid my-4">{code}</div>;
+  }
+
+  return <div className="mermaid my-4" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div ref={mermaidRef} className="prose prose-sm sm:prose-base prose-zinc dark:prose-invert max-w-none overflow-x-auto">
+    <div className="prose prose-sm sm:prose-base prose-zinc dark:prose-invert max-w-none overflow-x-auto">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -42,7 +62,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             const codeStr = String(children).replace(/\n$/, "");
 
             if (match && match[1] === "mermaid") {
-              return <div className="mermaid my-4">{codeStr}</div>;
+              return <MermaidBlock code={codeStr} />;
             }
 
             if (!match) {
