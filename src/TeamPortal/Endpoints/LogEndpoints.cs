@@ -26,6 +26,37 @@ public static class LogEndpoints
             return Results.Ok(stats);
         });
 
+        // ── 操作日志(业务审计,与请求日志分离)──
+
+        // 分页查询操作日志:可按操作人/操作类型/时间范围筛选
+        log.MapGet("/operations", async (int? page, int? size, string? user, string? action, DateTime? from, DateTime? to, LogService svc) =>
+        {
+            var p = Math.Max(1, page ?? 1);
+            var (items, total) = await svc.GetOperations(user, action, from, to, p, size ?? 50);
+            return Results.Ok(new
+            {
+                total,
+                items = items.Select(o => new
+                {
+                    o.Id, o.UserId, o.UserName, o.Action, o.TargetType, o.TargetId, o.Data, o.IpAddress, o.CreatedAt
+                })
+            });
+        });
+
+        // 操作日志统计:总数 + 按操作类型分组
+        log.MapGet("/operations/stats", async (LogService svc) =>
+        {
+            var stats = await svc.GetOperationStats();
+            return Results.Ok(stats);
+        });
+
+        // 操作日志 CSV 导出
+        log.MapGet("/operations/export", async (string? user, string? action, DateTime? from, DateTime? to, LogService svc) =>
+        {
+            var csv = await svc.ExportOperationsCsv(user, action, from, to);
+            return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"operations-{DateTime.UtcNow:yyyyMMdd}.csv");
+        });
+
         // Export logs as CSV
         log.MapGet("/export", async (string? level, DateTime? from, DateTime? to, LogService svc) =>
         {

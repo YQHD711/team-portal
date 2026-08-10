@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
@@ -17,6 +17,7 @@ const mainNav = [
   { href: "/", label: "仪表盘", icon: LayoutDashboard },
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
+  { href: "/webtools", label: "日志分析", icon: Activity },
   { href: "/incidents", label: "事故安全", icon: ShieldAlert },
   { href: "/files", label: "资源共享", icon: Upload },
   { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
@@ -25,6 +26,7 @@ const mainNav = [
 
 const materialNav = [
   { href: "/inventory", label: "零件库存", icon: Package },
+  { href: "/inventory/layout", label: "物料布局", icon: LayoutGrid },
   { href: "/inventory/checkout", label: "领用管理", icon: ArrowLeftRight },
   { href: "/inventory/stocktake", label: "盘点", icon: ClipboardCheck },
   { href: "/finance", label: "采购申请", icon: BarChart3 },
@@ -37,8 +39,8 @@ const staffNav = [
 ];
 
 const adminNav = [
-  { href: "/admin/users", label: "队员管理", icon: Users },
-  { href: "/admin/departments", label: "部门管理", icon: Building2 },
+  { href: "/admin/organization", label: "组织架构", icon: Users },
+  { href: "/admin/exams", label: "考核管理", icon: ClipboardCheck },
   { href: "/admin/invites", label: "邀请码", icon: Ticket },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
   { href: "/admin/settings", label: "系统设置", icon: Settings },

@@ -7,6 +7,8 @@ import { Plus, Pencil, Trash2, Building2, X } from "lucide-react";
 interface Dept { id: number; name: string; description: string; createdAt: string; }
 
 export default function DepartmentsPage() {
+  // 已合并至组织架构页 /admin/organization
+  useEffect(() => { window.location.replace("/admin/organization"); }, []);
   const [depts, setDepts] = useState<Dept[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editDept, setEditDept] = useState<Dept | null>(null);

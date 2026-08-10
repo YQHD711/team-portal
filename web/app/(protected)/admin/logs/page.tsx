@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import {
   RefreshCw, Info, AlertTriangle, XCircle, Download, Trash2,
-  Activity, ShieldCheck, Clock
+  Activity, ShieldCheck, Clock, History, ChevronDown, ChevronRight
 } from "lucide-react";
 
+/* ── 请求日志(SystemLog)── */
 interface LogEntry { id: number; level: string; category: string; message: string; detail: string | null; userName: string | null; createdAt: string; }
 interface LogStats { total: number; errors24h: number; warns24h: number; recentErrors: { category: string; message: string; createdAt: string }[]; }
+
+/* ── 操作日志(OperationLog)── */
+interface OperationEntry { id: number; userId: number | null; userName: string; action: string; targetType: string | null; targetId: string | null; data: string | null; ipAddress: string | null; createdAt: string; }
+interface OperationPage { total: number; items: OperationEntry[]; }
 
 const levelColors: Record<string, string> = {
   info: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
@@ -24,7 +29,178 @@ const levelIcons: Record<string, React.ReactNode> = {
 
 const categories = ["all", "auth", "wiki", "knowledge", "inventory", "admin", "system", "baidu", "ai"];
 
-export default function LogsPage() {
+/* 操作类型中文映射 */
+const actionLabels: Record<string, string> = {
+  login: "登录", register: "注册", logout: "登出", "change-password": "修改密码",
+  checkout: "领用申请", checkin: "归还", "damage-report": "报损", stocktake: "盘点",
+  reject: "驳回", approve: "审批", backup: "备份", restore: "恢复",
+  import: "导入", create: "创建", update: "修改", delete: "删除",
+  settings: "系统设置", invite: "邀请", upload: "上传",
+};
+
+const actionColors: Record<string, string> = {
+  login: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  register: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  "change-password": "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  create: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  import: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  upload: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  update: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
+  settings: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
+  delete: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  reject: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  backup: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  restore: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  checkout: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  checkin: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400",
+  "damage-report": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  stocktake: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
+  invite: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
+};
+
+const actionLabel = (a: string) => actionLabels[a] ?? a;
+
+/* ── 操作日志面板 ── */
+function OperationLogsPanel() {
+  const [items, setItems] = useState<OperationEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState("");
+  const [action, setAction] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const pageSize = 50;
+
+  const fetchOps = useCallback(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (user) params.set("user", user);
+    if (action) params.set("action", action);
+    if (from) params.set("from", from + "T00:00:00Z");
+    if (to) params.set("to", to + "T23:59:59Z");
+    params.set("page", String(page));
+    api.get<OperationPage>(`/api/admin/logs/operations?${params}`)
+      .then(res => { setItems(res.items); setTotal(res.total); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user, action, from, to, page]);
+
+  useEffect(() => { fetchOps(); }, [fetchOps]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    if (user) params.set("user", user);
+    if (action) params.set("action", action);
+    if (from) params.set("from", from + "T00:00:00Z");
+    if (to) params.set("to", to + "T23:59:59Z");
+    window.open(`/api/admin/logs/operations/export?${params}`, "_blank");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <History className="h-4 w-4" />
+          共 {total.toLocaleString()} 条操作记录
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+            <Download className="h-4 w-4" />导出
+          </button>
+          <button onClick={fetchOps} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+            <RefreshCw className="h-5 w-5 text-muted" />
+          </button>
+        </div>
+      </div>
+
+      {/* 筛选 */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <input type="text" placeholder="操作人..." value={user} onChange={e => { setUser(e.target.value); setPage(1); }}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm w-32" />
+        <select value={action} onChange={e => { setAction(e.target.value); setPage(1); }}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm">
+          <option value="">全部操作类型</option>
+          {Object.entries(actionLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <div className="flex items-center gap-1 text-sm text-muted">
+          <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+          <span>—</span>
+          <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+        </div>
+      </div>
+
+      {/* 表格 */}
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
+              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-36 hidden md:table-cell">时间</th>
+              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-24">操作人</th>
+              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-24">操作类型</th>
+              <th className="px-4 py-3 text-left font-medium text-zinc-500">目标</th>
+              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-32 hidden sm:table-cell">来源IP</th>
+              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-8"></th>
+            </tr></thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {loading && items.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-zinc-400">加载中...</td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
+                  <History className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无操作记录
+                </td></tr>
+              ) : items.map(o => (
+                <tr key={o.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer align-top"
+                  onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
+                  <td className="px-4 py-2.5 text-zinc-400 text-xs hidden md:table-cell whitespace-nowrap">{new Date(o.createdAt).toLocaleString("zh-CN")}</td>
+                  <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{o.userName}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${actionColors[o.action] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>
+                      {actionLabel(o.action)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-zinc-500 text-xs">
+                    <span className="font-mono">{o.targetType ?? "—"}</span>
+                    {o.targetId && <span className="ml-1 font-mono">#{o.targetId}</span>}
+                    {o.data && (
+                      <div className="mt-1">
+                        {expanded === o.id ? (
+                          <pre className="p-2 rounded bg-zinc-50 dark:bg-zinc-950 text-[11px] text-zinc-500 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{o.data}</pre>
+                        ) : (
+                          <span className="text-zinc-400 truncate block max-w-xs">{o.data}</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-zinc-400 text-xs font-mono hidden sm:table-cell">{o.ipAddress || "—"}</td>
+                  <td className="px-4 py-2.5 text-zinc-400">
+                    {o.data ? (expanded === o.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="flex justify-center gap-2">
+        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+          className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">上一页</button>
+        <span className="px-3 py-1 text-sm text-zinc-500">第 {page} / {totalPages} 页</span>
+        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+          className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">下一页</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 请求日志面板(原系统日志)── */
+function RequestLogsPanel() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState<LogStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +213,7 @@ export default function LogsPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
 
-  const fetchLogs = () => {
+  const fetchLogs = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
     if (level) params.set("level", level);
@@ -50,22 +226,22 @@ export default function LogsPage() {
       .then(setLogs)
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [level, category, keyword, page, from, to]);
 
-  const fetchStats = () => {
+  const fetchStats = useCallback(() => {
     api.get<LogStats>("/api/admin/logs/stats")
       .then(setStats)
       .catch(() => {});
-  };
+  }, []);
 
   useEffect(() => {
     fetchLogs();
     fetchStats();
     const t = setInterval(fetchStats, 30000);
     return () => clearInterval(t);
-  }, [level, category, page, from, to]);
+  }, [fetchLogs, fetchStats]);
 
-  const handleExport = async () => {
+  const handleExport = () => {
     const params = new URLSearchParams();
     if (level) params.set("level", level);
     if (from) params.set("from", from + "T00:00:00Z");
@@ -94,12 +270,8 @@ export default function LogsPage() {
   };
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">系统日志</h1>
-          <p className="text-sm text-muted">记录系统运行状态和操作历史</p>
-        </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
             <Download className="h-4 w-4" />导出
@@ -248,6 +420,35 @@ export default function LogsPage() {
         <button onClick={() => setPage(p => p + 1)} disabled={logs.length < 50}
           className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">下一页</button>
       </div>
+    </div>
+  );
+}
+
+export default function LogsPage() {
+  const [tab, setTab] = useState<"operation" | "request">("operation");
+
+  return (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">系统日志</h1>
+          <p className="text-sm text-muted">操作审计与系统运行日志分离查看</p>
+        </div>
+      </div>
+
+      {/* Tab 切换 */}
+      <div className="flex gap-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-1 w-fit">
+        <button onClick={() => setTab("operation")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${tab === "operation" ? "bg-white dark:bg-zinc-800 shadow-sm text-zinc-900 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+          <History className="h-4 w-4" />操作日志
+        </button>
+        <button onClick={() => setTab("request")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${tab === "request" ? "bg-white dark:bg-zinc-800 shadow-sm text-zinc-900 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+          <Activity className="h-4 w-4" />请求日志
+        </button>
+      </div>
+
+      {tab === "operation" ? <OperationLogsPanel /> : <RequestLogsPanel />}
     </div>
   );
 }

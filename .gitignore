@@ -24,12 +24,14 @@ src/TeamPortal/Data/backups/
 **/__pycache__/
 ai-service/.venv/
 
-# Data (mounted at runtime)
-data/knowledge/
-data/knowledge/.history/
-data/inventory.xlsx
-data/flightlogs/
-data/baidu-token.json
+# Runtime data (uploads, baidu token, flight logs — never commit)
+data/
+!data/.gitkeep
+
+# Test / recovery artifacts
+*.bak-test
+*.corrupted
+tmp_*.cs
 
 # IDE
 .vs/
@@ -49,4 +51,3 @@ Thumbs.db
 certbot/
 deploy/nginx.prod.generated.conf
 deploy/nginx.temp.conf
-data/files/

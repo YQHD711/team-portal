@@ -1,3 +1,5 @@
+using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -15,9 +17,21 @@ using TeamPortal.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Validate required secrets ──
+// Jwt:Key 优先来自环境变量 JWT__KEY(生产必须配置);开发环境缺失时运行时生成随机密钥,
+// 不再使用任何硬编码可猜字符串。随机密钥重启后失效(已签发 token 全部作废),见启动 WARN 日志。
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
-    throw new InvalidOperationException("Jwt:Key 未配置或长度不足32字符，请在环境变量 JWT__KEY 中设置");
+var jwtKeyGenerated = false;
+if (string.IsNullOrEmpty(jwtKey))
+{
+    jwtKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    jwtKeyGenerated = true;
+    // 写回配置:AuthService 等后续通过 IConfiguration 读 Jwt:Key 的地方必须拿到同一密钥
+    builder.Configuration["Jwt:Key"] = jwtKey;
+}
+else if (jwtKey.Length < 32)
+{
+    throw new InvalidOperationException("Jwt:Key 长度不足32字符，请在环境变量 JWT__KEY 中设置");
+}
 
 var adminUser = builder.Configuration["Admin:Username"];
 var adminPwd = builder.Configuration["Admin:Password"];
@@ -130,6 +144,8 @@ builder.Services.AddHttpClient<WikiGeneratorService>();
 builder.Services.AddHttpClient<SystemAgentService>();
 builder.Services.AddScoped<BaiduNetdiskService>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<CertificationService>();
+builder.Services.AddScoped<ExamService>();
 builder.Services.AddScoped<FlightService>();
 builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
@@ -152,6 +168,9 @@ builder.Services.AddMcpServer()
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+if (jwtKeyGenerated)
+    app.Logger.LogWarning("未配置 JWT__KEY,已生成随机密钥。重启后所有已签发 token 失效;生产环境必须设置环境变量 JWT__KEY(≥32字符)。");
 
 // ── Auto-recovery: check DB health before migration ──
 using (var scope = app.Services.CreateScope())
@@ -194,21 +213,69 @@ using (var scope = app.Services.CreateScope())
         );
         db.SaveChanges();
     }
+
+    // Seed default storage room layouts if empty (B2冯如楼)
+    if (!db.StorageLayouts.Any())
+    {
+        db.StorageLayouts.AddRange(
+            new StorageLayout { RoomCode = "1030", RoomName = "库房", Floor = 1, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "航模器材库房" },
+            new StorageLayout { RoomCode = "1011", RoomName = "展厅", Floor = 1, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "作品展示与参观" },
+            new StorageLayout { RoomCode = "1012", RoomName = "机械制造加工", Floor = 1, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "机械加工与制造" },
+            new StorageLayout { RoomCode = "6010", RoomName = "会议室", Floor = 6, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "会议与办公" },
+            new StorageLayout { RoomCode = "6011", RoomName = "电子电路/无人机试飞", Floor = 6, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "电子电路与无人机试飞" },
+            new StorageLayout { RoomCode = "6012", RoomName = "办公室", Floor = 6, CabinetCount = 4, ShelfCount = 4, PositionCount = 8, Description = "日常办公" }
+        );
+        db.SaveChanges();
+    }
+
+    // 平面图模式：为尚无 LayoutJson 的房间（含旧数据）回填默认平面图（四周墙 + 居中 1 个货架）
+    var layoutBackfilled = false;
+    foreach (var l in db.StorageLayouts.Where(l => l.LayoutJson == null))
+    {
+        l.LayoutJson = DefaultRoomLayoutJson(l.RoomCode);
+        layoutBackfilled = true;
+    }
+    if (layoutBackfilled) db.SaveChanges();
 }
 
 // ── Middleware pipeline ──
 app.UseTeamPortalExceptionHandler();
 app.UseRequestLogging();
 
-// Forwarded Headers：信任来自 nginx 反向代理的 X-Forwarded-* 头
-// Docker 内部网络中所有流量来自可信代理
-var fho = new ForwardedHeadersOptions
+// Forwarded Headers：只信任显式配置的代理网段，默认不信任任何代理（直接模式）。
+// 未配置时忽略所有 X-Forwarded-* 头，防止攻击者伪造 X-Forwarded-For 绕过
+// 基于 RemoteIpAddress 的限流/审计。部署在 nginx/docker 之后时配置环境变量，如：
+//   ForwardedHeaders__KnownNetworks=172.16.0.0/12;127.0.0.1
+// 格式：分号分隔的 CIDR 或单 IP；KnownProxies 为分号分隔的单 IP（可选）。
+var knownNetworksCfg = builder.Configuration["ForwardedHeaders:KnownNetworks"];
+var knownProxiesCfg = builder.Configuration["ForwardedHeaders:KnownProxies"];
+var useForwardedHeaders = !string.IsNullOrWhiteSpace(knownNetworksCfg) || !string.IsNullOrWhiteSpace(knownProxiesCfg);
+if (useForwardedHeaders)
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-};
-fho.KnownProxies.Clear();
-fho.KnownIPNetworks.Clear();
-app.UseForwardedHeaders(fho);
+    // 配置了可信代理网段时才处理 X-Forwarded-* 头（部署在 nginx/docker 之后时设置，如：
+    //   ForwardedHeaders__KnownNetworks=172.16.0.0/12;127.0.0.1
+    // 格式：分号分隔的 CIDR 或单 IP；KnownProxies 为分号分隔的单 IP（可选）。）
+    // 注意：KnownProxies 与 KnownIPNetworks 为空时中间件会信任所有代理（伪造 XFF 可绕过
+    // 基于 RemoteIpAddress 的限流），因此未配置时绝不注册该中间件。
+    var fho = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    };
+    foreach (var entry in (knownNetworksCfg ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        var parts = entry.Split('/');
+        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out var prefix))
+            fho.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(ip, prefix));
+        else if (IPAddress.TryParse(entry, out var single))
+            fho.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+                single, single.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? 128 : 32));
+    }
+    foreach (var proxy in (knownProxiesCfg ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        if (IPAddress.TryParse(proxy, out var pip)) fho.KnownProxies.Add(pip);
+    }
+    app.UseForwardedHeaders(fho);
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -225,6 +292,13 @@ app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// ── WebTools 静态站：直接托管 G:\ardupilot_log_analysis\WebTools 目录（自定义中间件）。
+//    相比反向代理（:8123）：路径天然正确，无 Next rewrite 尾斜杠循环；
+//    无尾斜杠目录请求直接返回 index.html（不发 301，避免 iframe 跳成跨源）；
+//    HTML 相对资源路径改写为 /webtools/... 绝对路径；iframe 与主站同源，File System Access API 可用。
+//    前端守卫已拦未登录，故此处无需额外鉴权。
+app.UseWebToolsStatic();
 
 app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API" }));
 app.MapHealthChecks("/health");
@@ -244,12 +318,15 @@ app.MapSettingsEndpoints();
 app.MapChatEndpoints();
 app.MapMaintenanceEndpoints();
 app.MapProfileEndpoints();
+app.MapCertificationEndpoints();
+app.MapExamEndpoints();
 app.MapFlightEndpoints();
 app.MapSearchEndpoints();
 app.MapTrashEndpoints();
 app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
+app.MapStorageEndpoints();
 app.MapBackupEndpoints();
 app.MapMcp("/mcp").RequireAuthorization();
 
@@ -271,6 +348,10 @@ static void MigrateExistingTables(AppDbContext db)
 
         // PilotProfiles.FlightTypes — added after initial table creation
         MigrateSql(conn, "ALTER TABLE PilotProfiles ADD COLUMN FlightTypes TEXT",
+            "duplicate column");
+
+        // PilotProfiles.Skills — 技能标签(逗号分隔),组织架构/队员档案卡片展示
+        MigrateSql(conn, "ALTER TABLE PilotProfiles ADD COLUMN Skills TEXT",
             "duplicate column");
 
         // BatteryRecords.IncidentDate — replaces CycleCount/CapacityMAh/LastUsedDate
@@ -501,6 +582,89 @@ static void MigrateExistingTables(AppDbContext db)
                 FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
             )
         """);
+
+        // ── Room storage layouts (Phase: storage visualization) ──
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS StorageLayouts (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoomCode TEXT NOT NULL UNIQUE,
+                RoomName TEXT NOT NULL,
+                Floor INTEGER NOT NULL,
+                CabinetCount INTEGER NOT NULL DEFAULT 4,
+                ShelfCount INTEGER NOT NULL DEFAULT 4,
+                PositionCount INTEGER NOT NULL DEFAULT 8,
+                Description TEXT,
+                UpdatedAt TEXT DEFAULT (datetime('now'))
+            )
+        """);
+
+        // StorageLayouts.LayoutJson — 平面图 JSON（可视化编辑器），空则回退旧网格模式
+        MigrateSql(conn, "ALTER TABLE StorageLayouts ADD COLUMN LayoutJson TEXT",
+            "duplicate column");
+
+        // ── OperationLogs(操作审计日志,与 SystemLogs 分离)— 全新表,EnsureCreated 对已有库不会创建,需手动建
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS OperationLogs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER,
+                UserName TEXT NOT NULL,
+                Action TEXT NOT NULL,
+                TargetType TEXT,
+                TargetId TEXT,
+                Data TEXT,
+                IpAddress TEXT,
+                CreatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_UserName_CreatedAt ON OperationLogs (UserName, CreatedAt)");
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_Action_CreatedAt ON OperationLogs (Action, CreatedAt)");
+
+        // ── 组织考核认证:个人技能认证 + 部门考核(组织架构改造新增)— 全新表,EnsureCreated 对已有库不生效
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS SkillCertifications (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                CertName TEXT NOT NULL,
+                Level TEXT DEFAULT '',
+                Status TEXT DEFAULT 'pending',
+                CertDate TEXT,
+                Notes TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SkillCertifications_UserId ON SkillCertifications (UserId)");
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS DepartmentExams (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                DepartmentId INTEGER NOT NULL,
+                Title TEXT NOT NULL,
+                ExamType TEXT DEFAULT 'theory',
+                Status TEXT DEFAULT 'ongoing',
+                ExamDate TEXT,
+                CreatedByUserId INTEGER NOT NULL,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (DepartmentId) REFERENCES Departments(Id) ON DELETE CASCADE
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DepartmentExams_DepartmentId ON DepartmentExams (DepartmentId)");
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS DepartmentExamResults (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ExamId INTEGER NOT NULL,
+                UserId INTEGER NOT NULL,
+                Passed INTEGER NOT NULL DEFAULT 0,
+                Score REAL,
+                Notes TEXT,
+                CreatedAt TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (ExamId) REFERENCES DepartmentExams(Id) ON DELETE CASCADE,
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE,
+                UNIQUE (ExamId, UserId)
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DepartmentExamResults_ExamId ON DepartmentExamResults (ExamId)");
     }
     catch (Exception ex)
     {
@@ -576,3 +740,20 @@ static string GetCreateSql(System.Data.Common.DbConnection conn, string table)
     cmd.CommandText = $"SELECT sql FROM sqlite_master WHERE name='{table}' AND type='table'";
     return (string?)cmd.ExecuteScalar() ?? "";
 }
+
+/// <summary>默认平面图：900×600 画布，四周墙 + 居中一个货架占位（locCode 随房间号）</summary>
+static string DefaultRoomLayoutJson(string roomCode) => $$"""
+    {
+      "width": 900, "height": 600,
+      "walls": [
+        { "id": "w1", "x": 20, "y": 20, "w": 860, "h": 10, "rotation": 0 },
+        { "id": "w2", "x": 20, "y": 570, "w": 860, "h": 10, "rotation": 0 },
+        { "id": "w3", "x": 20, "y": 20, "w": 10, "h": 560, "rotation": 0 },
+        { "id": "w4", "x": 870, "y": 20, "w": 10, "h": 560, "rotation": 0 }
+      ],
+      "doors": [], "windows": [],
+      "items": [
+        { "id": "it1", "type": "shelf", "name": "A货架", "x": 330, "y": 240, "w": 240, "h": 120, "rotation": 0, "locCode": "{{roomCode}}-A", "shelfCount": 4, "positionCount": 8 }
+      ]
+    }
+    """;

@@ -16,7 +16,7 @@ const statusOpts = [
   { value: "broken", label: "损坏" },
 ];
 const categoryOpts = ["电子元器件", "结构材料", "工具设备", "耗材", "动力系统", "飞控系统", "通信设备", "电池电源", "其他"];
-const roomOpts = ["1012", "1013", "1014", "1015", "201", "202", "203"];
+const FALLBACK_ROOMS = ["1012", "1013", "1014", "1015", "201", "202", "203"];
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -45,6 +45,7 @@ export default function InventoryPage() {
   const [importMsg, setImportMsg] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [role, setRole] = useState("");
+  const [roomOpts, setRoomOpts] = useState<string[]>(FALLBACK_ROOMS);
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
   const [txItem, setTxItem] = useState<InventoryItem | null>(null);
@@ -103,6 +104,12 @@ export default function InventoryPage() {
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
   useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
   useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
+  // 房间下拉从库位布局动态获取，失败回退硬编码列表
+  useEffect(() => {
+    api.get<{ roomCode: string }[]>("/api/storage/layouts")
+      .then(ls => { const rooms = ls.map(l => l.roomCode); if (rooms.length) setRoomOpts(rooms); })
+      .catch(() => {});
+  }, []);
 
   const fetchItems = async () => {
     setLoading(true);

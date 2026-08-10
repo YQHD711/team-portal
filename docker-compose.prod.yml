@@ -13,10 +13,14 @@ services:
 
   backend:
     ports: []
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - Cors__Origins=https://${DOMAIN:-localhost}
+      # 信任 docker 内网代理(nginx)的 X-Forwarded-* 头;直接模式(无代理)勿配置此项
+      - ForwardedHeaders__KnownNetworks=172.16.0.0/12
 
   ai-service:
     ports: []

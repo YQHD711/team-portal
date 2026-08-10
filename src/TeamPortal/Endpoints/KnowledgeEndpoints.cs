@@ -68,7 +68,7 @@ public static class KnowledgeEndpoints
 
         // Write/delete — staff only
         var kbWrite = app.MapGroup("/api/knowledge").RequireAuthorization("StaffOnly");
-        kbWrite.MapDelete("/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log) =>
+        kbWrite.MapDelete("/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
             path = Uri.UnescapeDataString(path);
@@ -79,11 +79,15 @@ public static class KnowledgeEndpoints
             {
                 svc.DeleteFile(path);
                 log.Warn("knowledge", $"Deleted: [{path}] by user=[{user.FindFirstValue(ClaimTypes.NameIdentifier)}]");
+                log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "knowledge", targetId: path,
+                    data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Ok(new { message = $"Deleted: {path}" });
             }
             catch (InvalidOperationException ex)
             {
                 log.Error("knowledge", $"Delete failed: [{path}]", ex.Message);
+                log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "knowledge", targetId: path,
+                    data: new { success = false, error = ex.Message }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Problem(ex.Message, statusCode: 404);
             }
         });

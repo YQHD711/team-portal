@@ -17,12 +17,14 @@ public static class SettingsEndpoints
         });
 
         // Batch update settings
-        settings.MapPut("/", async (Dictionary<string, string> updates, SettingsService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        settings.MapPut("/", async (Dictionary<string, string> updates, SettingsService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var userName = user.Identity?.Name ?? "unknown";
             var changedKeys = string.Join(", ", updates.Keys);
             await svc.BatchUpdate(updates);
             log.Warn("settings", $"Settings updated by {userName}: {changedKeys}");
+            log.Audit("settings", userName, targetType: "settings",
+                data: new { keys = updates.Keys, count = updates.Count }, ipAddress: LogService.ClientIp(ctx));
             notify.Notify("系统设置已更改", $"{userName} 修改了 {updates.Count} 项设置", "/admin/settings", targetRole: "staff");
             return Results.Ok(new { success = true });
         });

@@ -113,15 +113,16 @@ export default function KnowledgeAdminPage() {
               <button onClick={() => handleDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-red-500" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>
             </div>
           ) : (
-            <button onClick={() => {
+            <div role="button" tabIndex={0} onClick={() => {
               const ext = (n.path ?? "").split(".").pop()?.toLowerCase() ?? "";
               if ([".md", ".txt", ".csv", ".json", ".xml"].some(e => (n.path ?? "").toLowerCase().endsWith(e))) loadFile(n.path!);
               else window.open(`/api/knowledge/download?path=${encodeURIComponent(n.path!)}`, "_blank");
-            }} className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 group", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
+            }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
+              className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 group cursor-pointer", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
               <FileText className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
               <span className="truncate">{n.name}</span>
               <button onClick={(e) => { e.stopPropagation(); handleDelete(n.path ?? n.name); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-red-500 shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>
-            </button>
+            </div>
           )}
           {n.type !== "wiki" && n.children && renderTree(n.children, level + 1)}
         </li>

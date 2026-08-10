@@ -177,7 +177,7 @@ export default function Home() {
                 { href: "/finance", label: "采购申请", icon: DollarSign, color: "bg-purple-50 text-purple-600" },
                 { href: "/profile", label: "我的档案", icon: User, color: "bg-sky-50 text-sky-600" },
                 ...(isStaff ? [
-                  { href: "/admin/users", label: "队员管理", icon: User, color: "bg-purple-50 text-purple-600" },
+                  { href: "/admin/organization", label: "组织架构", icon: User, color: "bg-purple-50 text-purple-600" },
                   { href: "/admin/profiles", label: "队员档案", icon: User, color: "bg-indigo-50 text-indigo-600" },
                   { href: "/wiki/import", label: "Wiki 导入", icon: FileText, color: "bg-green-50 text-green-600" },
                   { href: "/admin/settings", label: "系统设置", icon: FileText, color: "bg-zinc-100 text-zinc-600" },

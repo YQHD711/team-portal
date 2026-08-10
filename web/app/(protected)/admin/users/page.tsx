@@ -9,6 +9,8 @@ interface Dept { id: number; name: string; }
 interface InviteCode { id: number; code: string; departmentId: number | null; department: { name: string } | null; maxUses: number; usedCount: number; isRevoked: boolean; expiresAt: string; createdAt: string; }
 
 export default function UsersPage() {
+  // 已合并至组织架构页 /admin/organization
+  useEffect(() => { window.location.replace("/admin/organization"); }, []);
   const [tab, setTab] = useState<string>("users");
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);

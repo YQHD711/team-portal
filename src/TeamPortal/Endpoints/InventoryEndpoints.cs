@@ -18,6 +18,10 @@ public static class InventoryEndpoints
 
     private static bool IsStaff(string? role) => role == "admin" || role == "部长";
 
+    private static readonly string[] UnsafeNameFragments = ["<script", "<img", "onerror=", "javascript:"];
+    private static bool HasUnsafeName(string name) =>
+        UnsafeNameFragments.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase));
+
     public static void MapInventoryEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
@@ -34,20 +38,29 @@ public static class InventoryEndpoints
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
 
-        group.MapPost("/", async (CreateItemRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db) =>
+        group.MapPost("/", async (CreateItemRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可创建零件", statusCode: 403);
 
             if (string.IsNullOrWhiteSpace(req.Name))
                 return Results.Problem("Name is required", statusCode: 400);
+            if (req.Quantity < 0 || req.Quantity > 1_000_000)
+                return Results.Problem(req.Quantity < 0 ? "数量不能为负数" : "数量超出合理范围(上限1000000)", statusCode: 400);
+            if (req.UnitPrice is < 0)
+                return Results.Problem("价格不能为负数", statusCode: 400);
+            if (HasUnsafeName(req.Name))
+                return Results.Problem("名称包含非法字符", statusCode: 400);
 
             var item = await svc.Create(req.Name, req.Category ?? "", req.Quantity,
                 req.Grade ?? "C", req.UnitPrice ?? 0, req.DepartmentId, req.ProjectTag, req.LocationCode);
+            log.Info("inventory", $"Part added: {item.Name} (qty {item.Quantity}) by {user.Identity?.Name}");
+            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "item", targetId: item.Id.ToString(),
+                data: new { name = item.Name, quantity = item.Quantity, category = req.Category, grade = req.Grade }, ipAddress: LogService.ClientIp(ctx));
             return Results.Created($"/api/inventory/{item.Id}", item);
         });
 
-        group.MapPost("/import", async (ImportRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db) =>
+        group.MapPost("/import", async (ImportRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可导入零件", statusCode: 403);
@@ -56,13 +69,19 @@ public static class InventoryEndpoints
                 return Results.Problem("FilePath is required", statusCode: 400);
 
             var count = await svc.ImportFromExcel(req.FilePath);
+            log.Info("inventory", $"Parts imported from {req.FilePath}: {count} items by {user.Identity?.Name}");
+            log.Audit("import", user.Identity?.Name ?? "unknown", targetType: "item",
+                data: new { imported = count, filePath = req.FilePath }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(new { imported = count });
         });
 
-        group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
+        group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
+
+            if (req.UnitPrice is < 0)
+                return Results.Problem("价格不能为负数", statusCode: 400);
 
             var item = await svc.Update(id,
                 req.Grade, req.UnitPrice, req.DepartmentId, req.ProjectTag, req.LocationCode);
@@ -70,20 +89,30 @@ public static class InventoryEndpoints
             {
                 var actor = user.Identity?.Name ?? "unknown";
                 log.Info("inventory", $"Part updated: {item.Name} by {actor}");
+                log.Audit("update", actor, targetType: "item", targetId: id.ToString(),
+                    data: new { name = item.Name, grade = req.Grade, unitPrice = req.UnitPrice, locationCode = req.LocationCode },
+                    ipAddress: LogService.ClientIp(ctx));
                 if (item.Quantity > 0 && item.Quantity <= 3)
                     notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件", "/inventory");
             }
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
 
-        group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
+        group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除零件", statusCode: 403);
 
             var item = await svc.GetById(id);
             var deleted = await svc.Delete(id);
-            if (deleted) { var actor = user.Identity?.Name ?? "unknown"; log.Warn("inventory", $"Part deleted: {item?.Name} (#{id}) by {actor}"); notify.Notify("零件已删除", $"{actor} 删除了 {item?.Name}"); }
+            if (deleted)
+            {
+                var actor = user.Identity?.Name ?? "unknown";
+                log.Warn("inventory", $"Part deleted: {item?.Name} (#{id}) by {actor}");
+                log.Audit("delete", actor, targetType: "item", targetId: id.ToString(),
+                    data: new { name = item?.Name }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("零件已删除", $"{actor} 删除了 {item?.Name}");
+            }
             return deleted ? Results.Ok(new { deleted = true }) : Results.Problem("Not found", statusCode: 404);
         });
 
@@ -124,7 +153,7 @@ public static class InventoryEndpoints
         }).DisableAntiforgery();
 
         // Check-out items (reduce quantity + log transaction) — atomic UPDATE for concurrency safety
-        group.MapPost("/{id:int}/checkout", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        group.MapPost("/{id:int}/checkout", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可借出零件", statusCode: 403);
@@ -151,13 +180,15 @@ public static class InventoryEndpoints
             await db.SaveChangesAsync();
 
             log.Info("inventory", $"Checkout: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
+            log.Audit("checkout", userName, targetType: "item", targetId: id.ToString(),
+                data: new { name = item.Name, quantity = req.Quantity, remaining = newQty }, ipAddress: LogService.ClientIp(ctx));
             if (newQty >= 0 && newQty <= InventoryService.LowStockThreshold)
                 notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {newQty} 件（{userName} 借出 {req.Quantity} 个）", "/inventory");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已借出 {req.Quantity} 个 {item.Name}" });
         });
 
         // Check-in items (increase quantity + log transaction) — atomic UPDATE for concurrency safety
-        group.MapPost("/{id:int}/checkin", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        group.MapPost("/{id:int}/checkin", async (int id, TransactionRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可归还零件", statusCode: 403);
@@ -183,6 +214,8 @@ public static class InventoryEndpoints
             await db.SaveChangesAsync();
 
             log.Info("inventory", $"Checkin: {item.Name} +{req.Quantity} by {userName} (now {newQty})");
+            log.Audit("checkin", userName, targetType: "item", targetId: id.ToString(),
+                data: new { name = item.Name, quantity = req.Quantity, total = newQty }, ipAddress: LogService.ClientIp(ctx));
             if (newQty > 3)
                 notify.Notify("库存恢复", $"零件「{item.Name}」库存已恢复至 {newQty} 件", "/inventory");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已归还 {req.Quantity} 个 {item.Name}" });

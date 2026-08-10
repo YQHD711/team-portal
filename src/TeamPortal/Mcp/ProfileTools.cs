@@ -14,7 +14,7 @@ public class ProfileTools
     [McpServerTool(Name = "profile_get")]
     public async Task<object?> Get() => await _profile.GetFullProfile(GetUserId());
     [McpServerTool(Name = "profile_update")]
-    public async Task<bool> Update(string? level = null, double? flightHours = null, string? bio = null, string? emergencyContact = null, string? emergencyPhone = null, string? flightTypes = null) => await _profile.UpdateProfile(GetUserId(), level, flightHours, null, bio, emergencyContact, emergencyPhone, flightTypes);
+    public async Task<bool> Update(string? level = null, double? flightHours = null, string? bio = null, string? emergencyContact = null, string? emergencyPhone = null, string? flightTypes = null, string? skills = null) => await _profile.UpdateProfile(GetUserId(), level, flightHours, null, bio, emergencyContact, emergencyPhone, flightTypes, skills);
     [McpServerTool(Name = "profile_training_list")]
     public async Task<object> TrainingList() => await _profile.GetTrainingRecords(GetUserId());
     [McpServerTool(Name = "profile_training_add")]

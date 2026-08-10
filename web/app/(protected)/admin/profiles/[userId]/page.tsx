@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { ArrowLeft, User, GraduationCap, Trophy, Save, Loader2, Plus, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, User, GraduationCap, Trophy, Save, Loader2, Plus, Trash2, Pencil, BadgeCheck, Tag } from "lucide-react";
+import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
 
 const LEVELS = ["学员", "初级", "中级", "高级", "教练"];
 const FLIGHT_TYPES = ["固定翼", "多旋翼", "穿越机", "凤凰飞行器", "龙飞行器", "直升机", "其他"];
@@ -18,7 +19,7 @@ const LEVEL_COLORS: Record<string, string> = {
 interface FullProfile {
   id: number; userId: number; username: string; role: string; department: string | null;
   level: string; totalFlightHours: number; firstFlightDate: string | null;
-  bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; updatedAt: string;
+  bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; skills: string | null; updatedAt: string;
   trainingRecords: TrainingRecord[]; competitionRecords: CompetitionRecord[];
 }
 interface TrainingRecord { id: number; courseName: string; score: number | null; examDate: string; examiner: string | null; notes: string | null; createdAt: string; }
@@ -31,7 +32,7 @@ export default function AdminProfileDetailPage() {
 
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"info" | "training" | "competitions">("info");
+  const [tab, setTab] = useState<"info" | "training" | "competitions" | "certifications">("info");
   const [editInfo, setEditInfo] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +44,7 @@ export default function AdminProfileDetailPage() {
   const [emergencyContact, setEmergencyContact] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [flightTypes, setFlightTypes] = useState<string[]>([]);
+  const [skills, setSkills] = useState("");
 
   // Training form
   const [showTrainingForm, setShowTrainingForm] = useState(false);
@@ -63,6 +65,10 @@ export default function AdminProfileDetailPage() {
   const [compNotes, setCompNotes] = useState("");
   const [editCompId, setEditCompId] = useState<number | null>(null);
 
+  // 团队认证(考核通过记录,只读)
+  const [certItems, setCertItems] = useState<ExamPassView[]>([]);
+  const [certsLoading, setCertsLoading] = useState(false);
+
   const fetchProfile = () => {
     api.get<FullProfile>(`/api/admin/profiles/${userId}`).then(data => {
       setProfile(data);
@@ -73,10 +79,21 @@ export default function AdminProfileDetailPage() {
       setEmergencyContact(data.emergencyContact || "");
       setEmergencyPhone(data.emergencyPhone || "");
       setFlightTypes(data.flightTypes ? data.flightTypes.split(",").filter(Boolean) : []);
+      setSkills(data.skills || "");
     }).catch(() => router.push("/admin/profiles")).finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchProfile(); }, [userId]);
+
+  // 切换认证 tab 时拉取该队员的考核通过记录(管理端全部,前端按 userId 过滤)
+  useEffect(() => {
+    if (tab !== "certifications") return;
+    setCertsLoading(true);
+    api.get<ExamPassView[]>("/api/admin/exams/passes")
+      .then(all => setCertItems(all.filter(p => p.userId === userId)))
+      .catch(() => setCertItems([]))
+      .finally(() => setCertsLoading(false));
+  }, [tab, userId]);
 
   // Save profile info
   const saveInfo = async () => {
@@ -85,7 +102,8 @@ export default function AdminProfileDetailPage() {
       level, flightHours: parseFloat(flightHours) || 0,
       firstFlight: firstFlight || null, bio: bio || null,
       emergencyContact: emergencyContact || null, emergencyPhone: emergencyPhone || null,
-      flightTypes: flightTypes.join(",") || null
+      flightTypes: flightTypes.join(",") || null,
+      skills: skills || null
     });
     setEditInfo(false); setSaving(false);
     fetchProfile();
@@ -178,6 +196,7 @@ export default function AdminProfileDetailPage() {
           { key: "info", label: "基本信息", icon: User },
           { key: "training", label: `培训 (${profile.trainingRecords.length})`, icon: GraduationCap },
           { key: "competitions", label: `参赛 (${profile.competitionRecords.length})`, icon: Trophy },
+          { key: "certifications", label: "技能认证", icon: BadgeCheck },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-white dark:bg-zinc-700 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
@@ -212,6 +231,7 @@ export default function AdminProfileDetailPage() {
                   })}
                 </div>
               </div>
+              <div><label className="block text-sm font-medium mb-1">技能标签</label><input value={skills} onChange={e => setSkills(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="逗号分隔,如: STM32,焊接,PCB设计" /></div>
               <div><label className="block text-sm font-medium mb-1">简介</label><textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setEditInfo(false)} className="px-4 py-2 rounded-lg text-sm border">取消</button>
@@ -235,6 +255,16 @@ export default function AdminProfileDetailPage() {
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {profile.flightTypes.split(",").filter(Boolean).map(ft => (
                       <span key={ft} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{ft}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {profile.skills && (
+                <div>
+                  <span className="text-zinc-500 text-sm">技能标签</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {profile.skills.split(",").map(s => s.trim()).filter(Boolean).map(s => (
+                      <span key={s} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"><Tag className="h-3 w-3 opacity-60" />{s}</span>
                     ))}
                   </div>
                 </div>
@@ -335,6 +365,11 @@ export default function AdminProfileDetailPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Tab: Certifications */}
+      {tab === "certifications" && (
+        <CertificationPanel items={certItems} loading={certsLoading} />
       )}
     </div>
   );

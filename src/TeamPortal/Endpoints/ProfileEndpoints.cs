@@ -41,7 +41,7 @@ public static class ProfileEndpoints
             {
                 profile.Id, profile.UserId, profile.Level, profile.TotalFlightHours,
                 profile.FirstFlightDate, profile.Bio, profile.EmergencyContact,
-                profile.EmergencyPhone, profile.FlightTypes, profile.UpdatedAt,
+                profile.EmergencyPhone, profile.FlightTypes, profile.Skills, profile.UpdatedAt,
                 TrainingRecords = training,
                 CompetitionRecords = competitions
             });
@@ -53,7 +53,7 @@ public static class ProfileEndpoints
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
 
             var ok = await svc.UpdateProfile(userId.Value, req.Level, req.FlightHours, req.FirstFlight,
-                req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes);
+                req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes, req.Skills);
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("档案不存在", statusCode: 404);
         });
 
@@ -94,7 +94,7 @@ public static class ProfileEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
             var ok = await svc.UpdateProfile(userId, req.Level, req.FlightHours, req.FirstFlight,
-                req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes);
+                req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes, req.Skills);
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("档案不存在", statusCode: 404);
         });
 
@@ -163,7 +163,8 @@ public record UpdateProfileRequest(
     string? Bio,
     string? EmergencyContact,
     string? EmergencyPhone,
-    string? FlightTypes
+    string? FlightTypes,
+    string? Skills = null
 );
 
 public record AddTrainingRequest(

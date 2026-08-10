@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<WikiTask> WikiTasks => Set<WikiTask>();
     public DbSet<SharedFile> SharedFiles => Set<SharedFile>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
+    public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CodeProposal> CodeProposals => Set<CodeProposal>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
@@ -31,6 +32,10 @@ public class AppDbContext : DbContext
     public DbSet<Stocktake> Stocktakes => Set<Stocktake>();
     public DbSet<StocktakeItem> StocktakeItems => Set<StocktakeItem>();
     public DbSet<DamageReport> DamageReports => Set<DamageReport>();
+    public DbSet<StorageLayout> StorageLayouts => Set<StorageLayout>();
+    public DbSet<SkillCertification> SkillCertifications => Set<SkillCertification>();
+    public DbSet<DepartmentExam> DepartmentExams => Set<DepartmentExam>();
+    public DbSet<DepartmentExamResult> DepartmentExamResults => Set<DepartmentExamResult>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -267,6 +272,62 @@ public class AppDbContext : DbContext
             entity.HasOne(d => d.User)
                 .WithMany()
                 .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StorageLayout>(entity =>
+        {
+            entity.HasIndex(l => l.RoomCode).IsUnique();
+            entity.Property(l => l.RoomCode).IsRequired().HasMaxLength(10);
+            entity.Property(l => l.RoomName).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<OperationLog>(entity =>
+        {
+            entity.HasIndex(o => new { o.UserName, o.CreatedAt });
+            entity.HasIndex(o => new { o.Action, o.CreatedAt });
+            entity.Property(o => o.UserName).IsRequired().HasMaxLength(50);
+            entity.Property(o => o.Action).IsRequired().HasMaxLength(50);
+            entity.Property(o => o.TargetType).HasMaxLength(50);
+            entity.Property(o => o.TargetId).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<SkillCertification>(entity =>
+        {
+            entity.HasIndex(s => s.UserId);
+            entity.Property(s => s.CertName).IsRequired().HasMaxLength(100);
+            entity.Property(s => s.Level).HasMaxLength(20);
+            entity.Property(s => s.Status).HasMaxLength(20);
+            entity.Property(s => s.Notes).HasMaxLength(500);
+            entity.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DepartmentExam>(entity =>
+        {
+            entity.HasIndex(e => e.DepartmentId);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ExamType).HasMaxLength(20);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.HasOne(e => e.Department)
+                .WithMany()
+                .HasForeignKey(e => e.DepartmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DepartmentExamResult>(entity =>
+        {
+            entity.HasIndex(r => new { r.ExamId, r.UserId }).IsUnique();
+            entity.Property(r => r.Notes).HasMaxLength(500);
+            entity.HasOne(r => r.Exam)
+                .WithMany()
+                .HasForeignKey(r => r.ExamId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
