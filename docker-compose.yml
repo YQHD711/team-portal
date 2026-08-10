@@ -27,6 +27,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
@@ -51,8 +53,8 @@ services:
     ports:
       - "9001:9001"
     environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_API_KEY=${AISERVICE__DEEPSEEKKEY:-}
+      - DEEPSEEK_BASE_URL=${AISERVICE__DEEPSEEKBASEURL:-https://api.deepseek.com}
       - TEAMPORTAL_DB_PATH=/data/teamportal.db
     volumes:
       - ./data:/data
