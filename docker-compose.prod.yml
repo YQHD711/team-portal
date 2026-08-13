@@ -6,6 +6,12 @@
 services:
   # ── 覆盖：移除对外端口暴露，仅内部访问 ──
   frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: prod
+      args:
+        API_PROXY_URL: http://backend:8080
     ports: []
     environment:
       - NODE_ENV=production

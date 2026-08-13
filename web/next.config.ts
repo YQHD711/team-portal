@@ -4,6 +4,8 @@ import type { NextConfig } from "next";
 const apiUrl = process.env.API_PROXY_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  allowedDevOrigins: ["192.168.1.10"],
   // 关闭尾斜杠重定向：WebTools 代理需要保留 /webtools/xxx/ 的尾斜杠
   // （否则页面内 ../modules 相对路径解析错误，且 301 重定向会与 Next 的 308 循环）
   skipTrailingSlashRedirect: true,

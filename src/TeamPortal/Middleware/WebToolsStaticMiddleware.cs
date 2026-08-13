@@ -14,7 +14,7 @@ namespace TeamPortal.Middleware;
 /// </summary>
 public static class WebToolsStaticMiddleware
 {
-    private const string WebToolsRoot = @"G:\ardupilot_log_analysis\WebTools";
+    private const string DefaultWebToolsRoot = @"G:\ardupilot_log_analysis\WebTools";
 
     private static readonly Regex AttrRegex = new(
         @"\b(src|href)=(""([^""]*)""|'([^']*)')",
@@ -22,7 +22,8 @@ public static class WebToolsStaticMiddleware
 
     public static void UseWebToolsStatic(this WebApplication app)
     {
-        if (!Directory.Exists(WebToolsRoot))
+        var webToolsRoot = app.Configuration["WebTools:Root"] ?? DefaultWebToolsRoot;
+        if (!Directory.Exists(webToolsRoot))
         {
             return;
         }
@@ -46,9 +47,10 @@ public static class WebToolsStaticMiddleware
             if (needsIndex) rel = rel.TrimEnd('/') + "/index.html";
             else if (rel.EndsWith("/")) rel += "index.html";
 
-            var full = Path.GetFullPath(Path.Combine(WebToolsRoot, rel.Replace('/', Path.DirectorySeparatorChar)));
+            var full = Path.GetFullPath(Path.Combine(webToolsRoot, rel.Replace('/', Path.DirectorySeparatorChar)));
             // 防目录穿越
-            if (!full.StartsWith(WebToolsRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+            if (!full.StartsWith(Path.GetFullPath(webToolsRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || !File.Exists(full))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 await context.Response.WriteAsync("Not Found");
@@ -58,28 +60,11 @@ public static class WebToolsStaticMiddleware
             var bytes = await File.ReadAllBytesAsync(full, context.RequestAborted);
             var ext = Path.GetExtension(full).ToLowerInvariant();
 
-            // ── 鉴权：仅校验 HTML 文档请求 ──
-            // 浏览器内 iframe 导航与页面内资源请求(js/css/json/fetch)一律携带本站 Referer
-            // (前端 origin,即 Cors:Origins 配置),故带本站 Referer 的请求直接放行——
-            // 保证 WebTools 19 个工具及目录选择器在 iframe 内正常加载(它们不带 JWT)。
-            // 无本站 Referer 的 HTML 文档请求(如直连 :8080/webtools 裸访问、curl)
-            // 必须携带有效 JWT 才放行,否则 401。
-            // 局限：Referer 可伪造,此校验防的是"浏览器裸访问后端"这一主场景,
-            // 不能替代前端守卫;生产环境还应保持 :8080 不对外暴露
-            // (docker-compose.prod.yml 已配置 ports: [])。
-            if (ext == ".html")
-            {
-                var referer = context.Request.Headers.Referer.ToString();
-                var origins = app.Configuration["Cors:Origins"]?
-                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
-                var trustedReferer = origins.Any(o => IsTrustedReferer(referer, o));
-                if (!trustedReferer && context.User.Identity?.IsAuthenticated != true)
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsync("Unauthorized: /webtools 需登录后经前端门户访问");
-                    return;
-                }
-            }
+            // WebTools 由已受保护的 Next.js /webtools 页面以同源 iframe 加载。
+            // iframe 的 localStorage 不会向后端静态请求附加 JWT，且 Next rewrite
+            // 不保证转发 Referer，因此这里不能用 Referer/JWT 拦截 HTML，否则 iframe
+            // 会得到 401、页面表现为白屏。生产环境不暴露 backend 端口，访问入口仍由
+            // 前端路由守卫保护；局域网配置同样不映射 backend 端口。
 
             context.Response.StatusCode = StatusCodes.Status200OK;
             context.Response.Headers["Cache-Control"] = "no-store";

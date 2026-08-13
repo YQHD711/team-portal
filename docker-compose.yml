@@ -3,6 +3,7 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "3000:3000"
     environment:
@@ -33,10 +34,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - AI_SERVICE_URL=http://ai-service:9001
+      - AiService__BaseUrl=http://ai-service:9001
+      - WebTools__Root=/webtools-content
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
       - Cors__Origins=http://localhost:3000
     volumes:
       - ./data:/data
+      - ../ardupilot_log_analysis/WebTools:/webtools-content:ro
     depends_on:
       - ai-service
     restart: unless-stopped
@@ -61,7 +65,7 @@ services:
       - ./ai-service:/app
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9001/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
