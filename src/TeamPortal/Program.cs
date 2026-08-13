@@ -188,11 +188,14 @@ using (var scope = app.Services.CreateScope())
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate(); // EF Core Migrations：全新库由 InitialCreate 建全 29 表
 
-    // ── Auto-migrate: add missing columns on existing tables ──
-    // EnsureCreated() only creates new tables; it does NOT alter existing ones.
-    // When models gain new fields after initial creation, we must add columns manually.
+    // ── 兼容历史库的幂等迁移(手写 ALTER/CREATE,逐步淘汰) ──
+    // 2026-08 从 EnsureCreated 切换到 EF Migrations。历史库(无 __EFMigrationsHistory 表)
+    // 需先执行 deploy/ef-baseline.sql 标记 InitialCreate 已应用,否则上方 Migrate() 会因
+    // 表已存在而失败。baseline 后历史库跳过 InitialCreate,由下方幂等语句兜底补齐列/表;
+    // 全新库由 InitialCreate 建表后,下方语句因 IF NOT EXISTS / duplicate column 容错全部跳过。
+    // 后续 schema 变更应新增 EF 迁移,不再向本函数添加语句。
     MigrateExistingTables(db);
 
     var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
