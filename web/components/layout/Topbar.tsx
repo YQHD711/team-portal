@@ -8,6 +8,7 @@ import { UserMenu } from "./UserMenu";
 import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { useSidebar } from "./SidebarContext";
+import { useBrand } from "@/lib/brand";
 
 const pageTitles: Record<string, string> = {
   "/": "仪表盘", "/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志", "/incidents": "事故安全",
@@ -15,6 +16,7 @@ const pageTitles: Record<string, string> = {
 
 export function Topbar() {
   const { setOpen } = useSidebar();
+  const { teamName } = useBrand();
   const pathname = usePathname();
   const title = pageTitles[pathname] || (pathname.startsWith("/knowledge") ? "知识库" : null);
 
@@ -28,7 +30,7 @@ export function Topbar() {
           <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white">
             <Sparkles className="h-3.5 w-3.5" />
           </div>
-          <span className="font-semibold text-sm gradient-text">雏鹰之翼</span>
+          <span className="font-semibold text-sm gradient-text">{teamName}</span>
         </Link>
         {title && <h1 className="text-sm font-medium text-muted hidden sm:block">{title}</h1>}
       </div>

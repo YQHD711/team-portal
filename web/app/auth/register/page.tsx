@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { UserPlus, ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useBrand } from "@/lib/brand";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { teamName } = useBrand();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -30,7 +32,7 @@ export default function RegisterPage() {
     <div className="flex min-h-[80vh] items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">雏鹰之翼</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">{teamName}</h1>
           <p className="text-sm text-muted mt-1">队员注册</p>
         </div>
 

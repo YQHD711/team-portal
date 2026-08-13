@@ -35,5 +35,13 @@ public static class SettingsEndpoints
             var value = await svc.Get(key);
             return Results.Ok(new { key, value });
         });
+
+        // Public brand config — anonymous, consumed by frontend BrandProvider
+        var pub = app.MapGroup("/api/public");
+        pub.MapGet("/brand", async (SettingsService svc) =>
+        {
+            var brand = await svc.GetBrandConfig();
+            return Results.Ok(brand);
+        });
     }
 }

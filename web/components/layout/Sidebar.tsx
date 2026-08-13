@@ -6,10 +6,10 @@ import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
   Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSidebar } from "./SidebarContext";
-import { api } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { useBrand } from "@/lib/brand";
+import { useCurrentUser } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { dotGridPattern } from "@/lib/constants";
 
@@ -53,16 +53,13 @@ const adminNav = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { teamName, teamSubtitle } = useBrand();
   const { open, setOpen } = useSidebar();
   const [adminOpen, setAdminOpen] = useState(false);
   const [materialOpen, setMaterialOpen] = useState(false);
-  const [role, setRole] = useState<string | null>(null);
+  const { user } = useCurrentUser();
 
-  useEffect(() => {
-    if (!getToken()) return;
-    api.get<{ role: string; department: string | null }>("/api/auth/me").then(u => setRole(u.role)).catch(() => setRole(null));
-  }, []);
-
+  const role = user?.role ?? null;
   const isStaff = role === "admin" || role === "部长";
   const isAdmin = role === "admin";
 
@@ -81,11 +78,11 @@ export function Sidebar() {
           <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `url(${dotGridPattern(0.05)})` }} />
           <Link href="/" className="relative flex items-center gap-3 text-white" onClick={() => setOpen(false)}>
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur overflow-hidden">
-              <img src="/logo.png" alt="雏鹰之翼" className="w-7 h-7 object-contain" />
+              <img src="/logo.png" alt={teamName} className="w-7 h-7 object-contain" />
             </div>
             <div>
-              <div className="font-bold text-base leading-tight">雏鹰之翼</div>
-              <div className="text-[10px] text-white/60 leading-tight">队员协作平台</div>
+              <div className="font-bold text-base leading-tight">{teamName}</div>
+              <div className="text-[10px] text-white/60 leading-tight">{teamSubtitle}</div>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden absolute right-2 top-3 p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10">
@@ -195,7 +192,7 @@ export function Sidebar() {
         <div className="px-4 py-3 border-t border-white/5">
           <div className="flex items-center gap-2 text-[10px] text-slate-600">
             <Sparkles className="h-3 w-3" />
-            <span>雏鹰之翼 © 2026 · 内部系统</span>
+            <span>{teamName} © 2026 · 内部系统</span>
           </div>
         </div>
       </aside>

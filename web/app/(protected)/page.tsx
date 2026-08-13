@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
 import { isStaff as checkIsStaff } from "@/lib/auth";
+import { useBrand } from "@/lib/brand";
+import { useNotifications } from "@/lib/hooks";
 import { dotGridPattern } from "@/lib/constants";
 import { AlertTriangle, FileText, Sparkles, Bell, Package, BarChart3, Clock, History, Loader2, User, DollarSign } from "lucide-react";
 import Link from "next/link";
@@ -23,11 +25,10 @@ interface DashData {
   monthSpent?: number;
   inventoryValue?: number;
 }
-interface NotifItem { id: number; title: string; message: string; link: string | null; createdAt: string; }
-
 export default function Home() {
+  const { teamName, teamSubtitle } = useBrand();
   const [data, setData] = useState<DashData | null>(null);
-  const [notifs, setNotifs] = useState<NotifItem[]>([]);
+  const { notifications: notifs, loading: notifLoading } = useNotifications();
   const [recentDocs, setRecentDocs] = useState<{ path: string; title: string; time: number }[]>([]);
   const [isStaff, setIsStaff] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -37,14 +38,10 @@ export default function Home() {
   useEffect(() => { setIsStaff(checkIsStaff()); }, []);
 
   useEffect(() => {
-    Promise.all([
-      api.get<DashData>("/api/dashboard").catch(() => null),
-      api.get<NotifItem[]>("/api/notifications").catch(() => []),
-    ]).then(([d, n]) => {
-      if (d) setData(d);
-      setNotifs(n.slice(0, 8));
-      setLoaded(true);
-    });
+    api.get<DashData>("/api/dashboard")
+      .then(setData)
+      .catch(() => null)
+      .finally(() => setLoaded(true));
   }, []);
 
   const Skeleton = ({ w = "w-16", h = "h-6" }: { w?: string; h?: string }) => <span className={`inline-block ${w} ${h} bg-slate-200 dark:bg-slate-700 rounded animate-pulse`} />;
@@ -57,10 +54,10 @@ export default function Home() {
         <div className="relative flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur overflow-hidden">
-              <img src="/logo.png" alt="雏鹰之翼" className="w-10 h-10 object-contain" />
+              <img src="/logo.png" alt={teamName} className="w-10 h-10 object-contain" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">雏鹰之翼 · 航模队</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">{teamName} · {teamSubtitle}</h1>
               <p className="text-blue-200/80 text-sm mt-1">队员协作平台 — 知识共享 · 库存追踪 · 安全护航</p>
             </div>
           </div>
@@ -120,7 +117,7 @@ export default function Home() {
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div className="flex items-center gap-2 mb-3"><Bell className="h-4 w-4 text-zinc-500" /><h3 className="font-semibold text-sm">团队动态</h3></div>
             <div className="space-y-1">
-              {notifs.map(n => (
+              {notifs.slice(0, 8).map(n => (
                 <div key={n.id} className="flex items-start gap-3 text-sm p-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                   <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-400" />
                   <div className="flex-1 min-w-0">
@@ -130,7 +127,7 @@ export default function Home() {
                   {n.link && <Link href={n.link} className="shrink-0 text-xs text-blue-500 hover:underline mt-0.5">查看</Link>}
                 </div>
               ))}
-              {notifs.length === 0 && <div className="text-sm text-zinc-400 py-6 text-center">{loaded ? "暂无团队动态" : "加载中..."}</div>}
+              {notifs.length === 0 && <div className="text-sm text-zinc-400 py-6 text-center">{notifLoading ? "加载中..." : "暂无团队动态"}</div>}
             </div>
           </div>
 
