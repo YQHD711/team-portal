@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/lib/auth", () => ({
   isStaff: vi.fn(),
+  getToken: vi.fn(),
 }));
 vi.mock("@/components/ai/ChatPanel", () => ({
   ChatPanel: () => null,
