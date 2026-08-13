@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
 using TeamPortal.Services;
@@ -45,10 +46,21 @@ public class MaterialServiceTests
 {
     private AppDbContext CreateContext()
     {
+        // MaterialService uses relational ExecuteSqlInterpolatedAsync for atomic stock updates.
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
         var opts = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseSqlite(connection)
             .Options;
-        return new AppDbContext(opts);
+        var context = new AppDbContext(opts);
+        context.Database.EnsureCreated();
+        context.Users.AddRange(
+            new User { Id = 1, Username = "requester", PasswordHash = "test", Role = "member" },
+            new User { Id = 10, Username = "dept-head", PasswordHash = "test", Role = "部长" },
+            new User { Id = 20, Username = "admin", PasswordHash = "test", Role = "admin" }
+        );
+        context.SaveChanges();
+        return context;
     }
 
     [Fact]
@@ -63,7 +75,8 @@ public class MaterialServiceTests
 
         Assert.Equal("approved", req.Status);
         Assert.Equal("C", req.Grade);
-        // 库存已扣
+        // 原子 SQL 更新绕过 EF 已跟踪实体，清除缓存后读取真实库存
+        db.ChangeTracker.Clear();
         var item = await db.InventoryItems.FindAsync(1);
         Assert.Equal(90, item!.Quantity);
     }
@@ -112,7 +125,8 @@ public class MaterialServiceTests
         var result = await svc.ApproveDept(req.Id, 10);
         Assert.NotNull(result);
         Assert.Equal("approved", result!.Status);
-        // 库存此时才扣
+        // 库存此时才扣；原子 SQL 更新绕过了原先的跟踪实体
+        db.ChangeTracker.Clear();
         var item = await db.InventoryItems.FindAsync(1);
         Assert.Equal(17, item!.Quantity);
     }
@@ -148,6 +162,7 @@ public class MaterialServiceTests
         var result = await svc.ApproveAdmin(req.Id, 20);
         Assert.NotNull(result);
         Assert.Equal("approved", result!.Status);
+        db.ChangeTracker.Clear();
         var item = await db.InventoryItems.FindAsync(1);
         Assert.Equal(4, item!.Quantity);
     }
