@@ -2,20 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { Search, AlertTriangle, Package, Filter, Plus, Pencil, Trash2, X, Upload, Minus, Plus as PlusIcon, History, Loader2 } from "lucide-react";
+import { AlertTriangle, Plus, Upload } from "lucide-react";
+import InventoryFilters from "@/components/inventory/InventoryFilters";
+import InventoryTable from "@/components/inventory/InventoryTable";
+import InventoryFormModal from "@/components/inventory/InventoryFormModal";
+import InventoryTxModal from "@/components/inventory/InventoryTxModal";
+import InventoryHistoryPanel from "@/components/inventory/InventoryHistoryPanel";
+import { LOW_THRESHOLD, type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
 
-interface InventoryItem { id: number; name: string; category: string; quantity: number; locationCode?: string; status: string; grade: string; unitPrice: number; departmentId?: number; department?: { id: number; name: string }; projectTag?: string; updatedAt: string; photoUrl?: string; }
-interface Department { id: number; name: string; }
-interface Transaction { id: number; type: string; quantity: number; userName: string; note: string | null; createdAt: string; }
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
-const LOW_THRESHOLD = 3;
-const statusOpts = [
-  { value: "available", label: "可用" },
-  { value: "in_use", label: "使用中" },
-  { value: "broken", label: "损坏" },
-];
-const categoryOpts = ["电子元器件", "结构材料", "工具设备", "耗材", "动力系统", "飞控系统", "通信设备", "电池电源", "其他"];
 const FALLBACK_ROOMS = ["1012", "1013", "1014", "1015", "201", "202", "203"];
 
 export default function InventoryPage() {
@@ -25,7 +22,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
-  const [form, setForm] = useState({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" });
+  const [form, setForm] = useState<InventoryFormState>({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" });
   const [locRoom, setLocRoom] = useState("");
   const [locCabinet, setLocCabinet] = useState("");
   const [locShelf, setLocShelf] = useState("");
@@ -44,7 +41,8 @@ export default function InventoryPage() {
   };
   const [importMsg, setImportMsg] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [role, setRole] = useState("");
+  const { user } = useCurrentUser();
+  const role = user?.role ?? "";
   const [roomOpts, setRoomOpts] = useState<string[]>(FALLBACK_ROOMS);
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
@@ -103,7 +101,6 @@ export default function InventoryPage() {
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
   useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
-  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
   // 房间下拉从库位布局动态获取，失败回退硬编码列表
   useEffect(() => {
     api.get<{ roomCode: string }[]>("/api/storage/layouts")
@@ -157,6 +154,10 @@ export default function InventoryPage() {
     finally { e.target.value = ""; }
   };
 
+  // 领用/消耗与归还的统一入口（原表格内联逻辑抽为回调）
+  const handleTake = (item: InventoryItem) => { setTxItem(item); setTxMode(item.grade === "C" ? "consume" : "checkout"); setTxQty(1); setTxNote(""); };
+  const handleReturn = (item: InventoryItem) => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); };
+
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))];
   const chartData = categories.map(cat => ({ name: cat || "未分类", value: items.filter(i => i.category === cat).reduce((s, i) => s + i.quantity, 0) }));
   const lowItems = items.filter(i => i.quantity < LOW_THRESHOLD);
@@ -183,87 +184,11 @@ export default function InventoryPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <input type="text" placeholder="搜索零件..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <select value={category} onChange={e => setCategory(e.target.value)} className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-          <option value="">全部分类</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
+      <InventoryFilters search={search} onSearch={setSearch} category={category} onCategory={setCategory} categories={categories} />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-border bg-surface">
-          {/* Mobile cards */}
-          <div className="sm:hidden divide-y divide-border">
-            {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="p-3"><div className="h-16 shimmer rounded-lg" /></div>) :
-             items.length === 0 ? <div className="p-8 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2" />暂无零件</div> :
-             items.map(item => (
-              <div key={item.id} className={`p-3 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="font-medium text-sm">{item.name}</div>
-                    <div className="text-xs text-muted">{item.category} · {item.locationCode || "—"}</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setTxItem(item); setTxMode(item.grade === "C" ? "consume" : "checkout"); setTxQty(1); setTxNote(""); }}
-                      className={`p-1 rounded-lg ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
-                      title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
-                    <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
-                    <button onClick={() => fetchHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
-                    {(role === "admin" || role === "部长") && <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4 text-muted" /></button>}
-                    {(role === "admin" || role === "部长") && <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>{statusOpts.find(s => s.value === item.status)?.label || item.status}</span>
-                  <span className={`text-lg font-bold ${item.quantity === 0 ? "text-red-500" : item.quantity < LOW_THRESHOLD ? "text-amber-500" : ""}`}>{item.quantity}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* Desktop table */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-border bg-slate-50 dark:bg-slate-900"><th className="px-4 py-3 text-left font-medium text-muted">名称</th><th className="px-4 py-3 text-left font-medium text-muted hidden sm:table-cell">分类</th><th className="px-4 py-3 text-center font-medium text-muted w-12">等级</th><th className="px-4 py-3 text-right font-medium text-muted">数量</th><th className="px-4 py-3 text-left font-medium text-muted hidden md:table-cell">位置</th><th className="px-4 py-3 text-left font-medium text-muted">状态</th><th className="px-4 py-3 text-right font-medium text-muted">操作</th></tr></thead>
-              <tbody className="divide-y divide-border">
-                {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 shimmer rounded" /></td>)}</tr>) :
-                 items.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
-                 items.map(item => (
-                  <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
-                    <td className="px-4 py-3"><span className="font-medium">{item.name}</span><span className="block text-xs text-zinc-400 sm:hidden">{item.category}</span></td>
-                    <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">{item.category}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${item.grade === "A" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : item.grade === "B" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"}`}>{item.grade || "C"}</span>
-                    </td>
-                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${item.quantity === 0 ? "text-red-600" : item.quantity < LOW_THRESHOLD ? "text-amber-600" : ""}`}>{item.quantity}</td>
-                    <td className="px-4 py-3 text-zinc-500 hidden md:table-cell text-xs font-mono">{item.locationCode || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
-                        {statusOpts.find(s => s.value === item.status)?.label || item.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => { setTxItem(item); setTxMode(item.grade === "C" ? "consume" : "checkout"); setTxQty(1); setTxNote(""); }}
-                          className={`p-1 rounded ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
-                          title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => { setTxItem(item); setTxMode("checkin"); setTxQty(1); setTxNote(""); }} className={`p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => fetchHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
-                        {(role === "admin" || role === "部长") && <>
-                          <button onClick={() => openEdit(item)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => handleDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                        </>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <InventoryTable items={items} loading={loading} role={role}
+          onTake={handleTake} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete} />
 
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <h3 className="font-medium text-sm mb-3">分类分布</h3>
@@ -276,121 +201,22 @@ export default function InventoryPage() {
 
       {/* Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editItem ? "编辑零件" : "添加零件"}</h2><button onClick={() => setShowForm(false)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button></div>
-            <form onSubmit={handleSave} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium mb-1">名称</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required disabled={!!editItem} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">分类</label>
-                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-                    <option value="">选择分类...</option>
-                    {categoryOpts.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-              </div>
-              {!editItem && <div><label className="block text-sm font-medium mb-1">初始数量</label><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /><p className="text-xs text-zinc-400 mt-1">仅新建时填写，后续通过盘点或采购入库调整</p></div>}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">等级</label>
-                  <select value={form.grade} onChange={e => setForm({ ...form, grade: e.target.value })}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 font-bold ${
-                      form.grade === "A" ? "border-red-300 bg-red-50 dark:bg-red-950 text-red-700" :
-                      form.grade === "B" ? "border-amber-300 bg-amber-50 dark:bg-amber-950 text-amber-700" :
-                      "border-zinc-300 bg-white dark:bg-zinc-950"}`}>
-                    <option value="A">A — 关键管控 (≥¥1000)</option>
-                    <option value="B">B — 常规管理 (¥100-999)</option>
-                    <option value="C">C — 自主领用 (&lt;¥100)</option>
-                  </select>
-                </div>
-                <div><label className="block text-sm font-medium mb-1">单价 ¥</label>
-                  <input type="number" step="0.01" min="0"
-                    value={form.unitPrice}
-                    onChange={e => {
-                      const price = Number(e.target.value);
-                      setForm({ ...form, unitPrice: price, grade: price > 0 ? calcGrade(price) : form.grade });
-                    }}
-                    placeholder="填写后自动判定等级"
-                    className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                  {form.unitPrice > 0 && (
-                    <p className="text-xs text-zinc-400 mt-1">自动判定: {calcGrade(form.unitPrice)} 级 {calcGrade(form.unitPrice) !== form.grade ? "(已手动修改)" : ""}</p>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium mb-1">归属部门</label><select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value={0}>— 无 —</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-                <div><label className="block text-sm font-medium mb-1">项目标签</label><input value={form.projectTag} onChange={e => setForm({ ...form, projectTag: e.target.value })} placeholder="如: CADC2026" className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" /></div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">库位编码 <span className="text-zinc-400 text-xs">室-架-层-位</span></label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  <select value={locRoom} onChange={e => setLocRoom(e.target.value)}
-                    className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-                    <option value="">室</option>
-                    {roomOpts.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <input type="number" min={1} max={99} value={locCabinet} onChange={e => setLocCabinet(e.target.value)}
-                    placeholder="架" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                  <input type="number" min={1} max={9} value={locShelf} onChange={e => setLocShelf(e.target.value)}
-                    placeholder="层" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                  <input type="number" min={1} max={99} value={locPos} onChange={e => setLocPos(e.target.value)}
-                    placeholder="位" className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                </div>
-                {(locRoom || locCabinet) && <p className="text-xs text-zinc-400 mt-1">编码: {buildLocCode(locRoom, locCabinet, locShelf, locPos) || "—"}</p>}
-              </div>
-              <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{editItem ? "保存修改" : "添加零件"}</button>
-            </form>
-          </div>
-        </div>
+        <InventoryFormModal editItem={editItem} form={form} setForm={setForm}
+          locRoom={locRoom} setLocRoom={setLocRoom} locCabinet={locCabinet} setLocCabinet={setLocCabinet}
+          locShelf={locShelf} setLocShelf={setLocShelf} locPos={locPos} setLocPos={setLocPos}
+          roomOpts={roomOpts} departments={departments} buildLocCode={buildLocCode} calcGrade={calcGrade}
+          onClose={() => setShowForm(false)} onSubmit={handleSave} />
       )}
 
       {/* Checkout/Checkin Modal */}
       {txItem && txMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setTxItem(null); setTxMode(null); }}>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">{txMode === "consume" ? "消耗登记" : txMode === "checkout" ? "领用零件" : "归还零件"}</h3>
-              <button onClick={() => { setTxItem(null); setTxMode(null); }}><X className="h-5 w-5 text-zinc-400" /></button>
-            </div>
-            <p className="text-sm text-zinc-500 mb-4">
-                {txItem.name} · {txItem.grade}级 · 库存 {txItem.quantity}
-                {txMode === "consume" && <span className="block text-purple-500 text-xs mt-1">C级耗材，直接消耗不入归还流程。批量消耗请通过盘点补货。</span>}
-              </p>
-            <div className="space-y-3">
-              <div><label className="block text-sm font-medium mb-1">数量</label><input type="number" min={1} max={txMode === "checkin" ? 999 : txItem.quantity} value={txQty} onChange={e => setTxQty(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
-              <div><label className="block text-sm font-medium mb-1">{txMode === "consume" ? "用途" : "备注"}</label><input value={txNote} onChange={e => setTxNote(e.target.value)} placeholder={txMode === "consume" ? "用了做什么..." : "借用人/用途..."} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm" /></div>
-              <button onClick={handleTransaction} className={`w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white ${txMode === "consume" ? "bg-purple-500 hover:bg-purple-600" : txMode === "checkout" ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-500 hover:bg-emerald-600"}`}>
-                {txMode === "consume" ? `确认消耗 ${txQty} 个` : txMode === "checkout" ? `确认领用 ${txQty} 个` : `确认归还 ${txQty} 个`}
-              </button>
-            </div>
-          </div>
-        </div>
+        <InventoryTxModal item={txItem} mode={txMode} qty={txQty} onQty={setTxQty} note={txNote} onNote={setTxNote}
+          onClose={() => { setTxItem(null); setTxMode(null); }} onSubmit={handleTransaction} />
       )}
 
       {/* Transaction History Panel */}
       {showHistory && txItem && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/40" onClick={() => setShowHistory(false)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-md max-h-[70vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">出入库记录 — {txItem.name}</h3>
-              <button onClick={() => setShowHistory(false)}><X className="h-5 w-5 text-zinc-400" /></button>
-            </div>
-            {txHistory.length === 0 ? <p className="text-sm text-zinc-500 text-center py-4">暂无记录</p> :
-              <div className="space-y-2">
-                {txHistory.map(t => (
-                  <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-sm">
-                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${t.type === "checkout" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{t.type === "checkout" ? "借出" : "归还"}</span>
-                    <span className="font-medium">{t.quantity}</span>
-                    <span className="text-zinc-500 flex-1">{t.userName}{t.note ? ` · ${t.note}` : ""}</span>
-                    <span className="text-xs text-zinc-400">{new Date(t.createdAt).toLocaleString("zh-CN")}</span>
-                  </div>
-                ))}
-              </div>
-            }
-          </div>
-        </div>
+        <InventoryHistoryPanel item={txItem} history={txHistory} onClose={() => setShowHistory(false)} />
       )}
     </div>
   );

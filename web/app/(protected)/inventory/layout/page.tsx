@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { ArrowLeft, LayoutGrid, Pencil } from "lucide-react";
 import type { MaterialItem } from "@/components/inventory/layoutTypes";
 import { parseLayout } from "@/components/inventory/layoutTypes";
@@ -17,7 +18,8 @@ const LOW_THRESHOLD = 3;
 export default function StorageLayoutPage() {
   const [layouts, setLayouts] = useState<RoomLayoutRow[]>([]);
   const [items, setItems] = useState<MaterialItem[]>([]);
-  const [role, setRole] = useState("");
+  const { user } = useCurrentUser();
+  const role = user?.role ?? "";
   const [selected, setSelected] = useState<RoomLayoutRow | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -34,7 +36,6 @@ export default function StorageLayoutPage() {
   useEffect(() => {
     fetchData().then(([ls, it]) => { setLayouts(ls); setItems(it); setLoading(false); });
   }, [fetchData]);
-  useEffect(() => { api.get<{ role: string }>("/api/auth/me").then(u => setRole(u.role)).catch(() => {}); }, []);
 
   const roomItems = (roomCode: string) => items.filter(i => (i.locationCode || "").split("-")[0] === roomCode);
   const stats = (roomCode: string) => {

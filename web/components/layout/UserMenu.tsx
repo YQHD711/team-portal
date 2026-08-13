@@ -3,24 +3,21 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { User, LogOut, Key, X } from "lucide-react";
-import { getToken, removeToken } from "@/lib/auth";
+import { removeToken } from "@/lib/auth";
 import { api } from "@/lib/api";
-
-interface UserInfo { id: number; username: string; role: string; }
+import { useCurrentUser } from "@/lib/hooks";
 
 export function UserMenu() {
   const router = useRouter();
-  const [user, setUser] = useState<UserInfo | null>(null);
+  const { user, loading } = useCurrentUser();
   const [open, setOpen] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [pwd, setPwd] = useState({ current: "", newPwd: "" });
   const [pwdMsg, setPwdMsg] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!getToken()) return;
-    api.get<UserInfo>("/api/auth/me").then(setUser).catch(() => removeToken());
-  }, []);
+  // 加载失败时按原逻辑清除 token（未登录时 removeToken 为无操作）
+  useEffect(() => { if (!loading && !user) removeToken(); }, [loading, user]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -28,7 +25,7 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const handleLogout = () => { removeToken(); setUser(null); router.push("/auth/login"); };
+  const handleLogout = () => { removeToken(); router.push("/auth/login"); };
 
   const handleChangePwd = async (e: React.FormEvent) => {
     e.preventDefault();

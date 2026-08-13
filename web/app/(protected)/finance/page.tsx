@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { Plus, Check, X, ShoppingCart, PackageCheck, Loader2, TrendingUp, FileText } from "lucide-react";
 
 interface PurchaseReq { id: number; itemName: string; quantity: number; estimatedPrice: number; actualPrice: number | null; reason: string; status: string; requester: { username: string } | null; approver: { username: string } | null; approvedAt: string | null; purchasedAt: string | null; receivedAt: string | null; rejectReason: string | null; createdAt: string; }
@@ -20,9 +21,9 @@ export default function FinancePage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [report, setReport] = useState<MonthlyReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState("");
-  const [isStaff, setIsStaff] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
+  const isAdmin = user?.role === "admin";
 
   // Form
   const [showForm, setShowForm] = useState(false);
@@ -32,10 +33,7 @@ export default function FinancePage() {
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
 
-  useEffect(() => {
-    api.get<{role:string}>("/api/auth/me").then(u => { setRole(u.role); setIsStaff(u.role==="admin"||u.role==="部长"); setIsAdmin(u.role==="admin"); }).catch(()=>{});
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = () => {
     setLoading(true);

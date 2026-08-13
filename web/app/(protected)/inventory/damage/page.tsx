@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { AlertTriangle, Plus, ShieldAlert, Package } from "lucide-react";
 import Link from "next/link";
 
@@ -23,19 +24,19 @@ export default function DamagePage() {
   const [reports, setReports] = useState<DamageReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [role, setRole] = useState("");
+  const { user } = useCurrentUser();
+  const role = user?.role ?? "";
   const [items, setItems] = useState<Item[]>([]);
   const [form, setForm] = useState({ itemId: 0, type: "damage", description: "", isApprovedTest: false });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [r, me, inv] = await Promise.all([
+      const [r, inv] = await Promise.all([
         api.get<DamageReport[]>("/api/material/damage-report"),
-        api.get<{ role: string }>("/api/auth/me").catch(() => ({ role: "" })),
         api.get<Item[]>("/api/inventory"),
       ]);
-      setReports(r); setRole(me.role); setItems(inv);
+      setReports(r); setItems(inv);
     } catch { }
     setLoading(false);
   };

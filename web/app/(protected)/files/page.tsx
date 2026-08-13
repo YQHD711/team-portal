@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { Upload, Download, Trash2, File, Loader2, Globe, Building2 } from "lucide-react";
 
 interface SharedFile { id: number; originalName: string; contentType: string; size: number; visibility: string; department: string | null; uploaderName: string; createdAt: string; }
@@ -17,11 +18,12 @@ export default function FilesPage() {
   const [uploading, setUploading] = useState(false);
   const [visibility, setVisibility] = useState("public");
   const [msg, setMsg] = useState("");
-  const [isStaff, setIsStaff] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchFiles = () => api.get<SharedFile[]>("/api/files").then(setFiles).catch(() => {});
-  useEffect(() => { fetchFiles(); api.get<{role:string}>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(()=>{}); }, []);
+  useEffect(() => { fetchFiles(); }, []);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();

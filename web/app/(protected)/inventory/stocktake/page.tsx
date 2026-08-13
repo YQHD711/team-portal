@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { ClipboardCheck, Plus, Check, Users, Package, ChevronRight, Loader2, ListChecks } from "lucide-react";
 import Link from "next/link";
 
@@ -28,7 +29,8 @@ export default function StocktakePage() {
   const [myTasks, setMyTasks] = useState<StocktakeItem[]>([]);
   const [members, setMembers] = useState<UserBrief[]>([]);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState("");
+  const { user } = useCurrentUser();
+  const role = user?.role ?? "";
   const [selected, setSelected] = useState<Stocktake | null>(null);
   const [showNew, setShowNew] = useState(false);
   const isStaff = role === "admin" || role === "部长";
@@ -36,22 +38,23 @@ export default function StocktakePage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [stList, me, myT] = await Promise.all([
+      const [stList, myT] = await Promise.all([
         api.get<Stocktake[]>("/api/material/stocktake"),
-        api.get<{ role: string }>("/api/auth/me"),
         api.get<StocktakeItem[]>("/api/material/stocktake/my-tasks"),
       ]);
-      setList(stList); setRole(me.role); setMyTasks(myT);
+      setList(stList); setMyTasks(myT);
       if (!isStaff) setTab("my");
-      if (me.role === "admin" || me.role === "部长") {
-        const users = await api.get<UserBrief[]>("/api/admin/users");
-        setMembers(users.filter(u => u.role !== "admin"));
-      }
     } catch { }
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // 队员名单仅 staff 需要，用户信息就绪后拉取一次
+  useEffect(() => {
+    if (!isStaff) return;
+    api.get<UserBrief[]>("/api/admin/users").then(users => setMembers(users.filter(u => u.role !== "admin"))).catch(() => {});
+  }, [isStaff]);
 
   const startStocktake = async (type: string, grade: string) => {
     try {

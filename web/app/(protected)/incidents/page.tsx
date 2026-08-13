@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { AlertTriangle, Battery, Loader2, Plus, Trash2, Pencil } from "lucide-react";
 
 interface BatteryRec { id: number; batteryNumber: string; health: string; incidentDate: string; notes: string | null; }
@@ -17,7 +18,8 @@ export default function IncidentsPage() {
   const [batteries, setBatteries] = useState<BatteryRec[]>([]);
   const [incidents, setIncidents] = useState<IncidentRec[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isStaff, setIsStaff] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
 
   // Battery form
   const [showBatForm, setShowBatForm] = useState(false); const [editBatId, setEditBatId] = useState<number | null>(null);
@@ -27,10 +29,7 @@ export default function IncidentsPage() {
   const [showIncForm, setShowIncForm] = useState(false); const [editIncId, setEditIncId] = useState<number | null>(null);
   const [iType, setIType] = useState("设备故障"); const [iSev, setISev] = useState("一般"); const [iDesc, setIDesc] = useState(""); const [iDate, setIDate] = useState(new Date().toISOString().slice(0, 10)); const [iRes, setIRes] = useState(""); const [iReporter, setIReporter] = useState("");
 
-  useEffect(() => {
-    api.get<{role:string}>("/api/auth/me").then(u => { setIsStaff(u.role === "admin" || u.role === "部长"); }).catch(()=>{});
-    fetchAll();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = () => {
     setLoading(true);

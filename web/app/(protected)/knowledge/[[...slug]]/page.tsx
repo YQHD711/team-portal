@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { TreeView } from "@/components/knowledge/TreeView";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { ChevronLeft, ChevronRight, BookOpen, Pencil, Save, X, Search, Loader2 } from "lucide-react";
@@ -19,7 +20,8 @@ export default function KnowledgePage() {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [role, setRole] = useState<string | null>(null);
+  const { user } = useCurrentUser();
+  const role = user?.role ?? null;
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
@@ -56,7 +58,6 @@ export default function KnowledgePage() {
     setSearchQuery("");
   };
 
-  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setRole(u.role)).catch(()=>{}); }, []);
   const canEdit = role === "admin" || role === "部长";
 
   useEffect(() => {
