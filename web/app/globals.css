@@ -95,13 +95,14 @@
   --border-subtle: rgba(0, 0, 0, 0.05);
   --muted: #7a7266;
   --faint: #a39a8d;
-  --primary: #c26a1d;
-  --primary-fg: #d97706;
-  --accent: #d97706;
-  --accent-hover: #e08b2a;
+  /* 主色加深以保证白字按钮 AA 对比度 (≥4.5:1)：原 #c26a1d 仅 3.9:1 */
+  --primary: #9c4d10;
+  --primary-fg: #b25e15;
+  --accent: #b25e15;
+  --accent-hover: #823f08;
   --success: #15803d;
-  --warning: #d97706;
-  --danger: #cf3e2e;
+  --warning: #b25e15;
+  --danger: #b13e1f;
   --info: #0e7490;
   color-scheme: light;
 }

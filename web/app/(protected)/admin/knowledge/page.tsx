@@ -215,7 +215,7 @@ export default function KnowledgeAdminPage() {
                 <input ref={fileRef} type="file" accept=".pdf,.docx,.md,.txt" onChange={handleUpload} className="hidden" />
               </div>
 
-              {uploadMsg && <div className={`text-sm p-2 rounded-lg ${uploadMsg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{uploadMsg}</div>}
+              {uploadMsg && <div className={`text-sm p-2 rounded-lg ${uploadMsg.startsWith("✅") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>{uploadMsg}</div>}
             </div>
           </div>
         </div>

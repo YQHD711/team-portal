@@ -8,7 +8,7 @@ import { AlertTriangle, Battery, Loader2, Plus, Trash2, Pencil } from "lucide-re
 interface BatteryRec { id: number; batteryNumber: string; health: string; incidentDate: string; notes: string | null; }
 interface IncidentRec { id: number; type: string; severity: string; description: string; date: string; resolution: string | null; reportedBy: string | null; }
 
-const SEVERITY_COLORS: Record<string, string> = { "严重": "bg-red-100 text-red-700", "一般": "bg-yellow-100 text-yellow-700", "轻微": "bg-blue-100 text-blue-700" };
+const SEVERITY_COLORS: Record<string, string> = { "严重": "bg-danger/15 text-danger", "一般": "bg-warning/15 text-warning", "轻微": "bg-info/15 text-info" };
 const INCIDENT_TYPES = ["设备故障", "操作失误", "天气原因", "信号干扰", "其他"];
 const SEVERITIES = ["轻微", "一般", "严重"];
 const BATTERY_HEALTH = ["正常", "鼓包", "漏液", "过放", "报废"];

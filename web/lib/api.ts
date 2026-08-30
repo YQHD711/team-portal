@@ -70,4 +70,34 @@ export const api = {
     request<T>(endpoint, { method: "PUT", body: JSON.stringify(body), timeoutMs }),
   delete: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { method: "DELETE", timeoutMs }),
+  /** SSE/流式请求：返回原生 Response，由调用方解析流（保留超时、401 重定向、错误处理） */
+  stream: async (endpoint: string, body: unknown, timeoutMs?: number): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
+    const token = isBrowser() ? localStorage.getItem("token") : null;
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (res.status === 401 && isBrowser()) {
+        localStorage.removeItem("token");
+        window.location.href = "/auth/login";
+        throw new Error("登录已过期，请重新登录");
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("请求超时，请检查网络连接");
+      }
+      throw err;
+    }
+  },
 };

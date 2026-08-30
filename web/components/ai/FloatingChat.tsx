@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Loader2, Plus, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 interface Session { sessionId: string; title: string; messageCount: number; lastMessage: string; }
@@ -21,8 +22,7 @@ export function FloatingChat() {
   // Load sessions on open
   useEffect(() => {
     if (!open || !getToken()) return;
-    fetch("/api/chat/sessions", { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(d => setSessions(d)).catch(() => {});
+    api.get<Session[]>("/api/chat/sessions").then(setSessions).catch(() => {});
   }, [open]);
 
   // Restore last session from localStorage (shared with ChatPanel)
@@ -32,8 +32,8 @@ export function FloatingChat() {
     if (stored) {
       setSessionId(stored);
     } else {
-      fetch("/api/chat/new-session", { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then(r => r.json()).then((d: { sessionId: string }) => {
+      api.get<{ sessionId: string }>("/api/chat/new-session")
+        .then(d => {
           setSessionId(d.sessionId);
           localStorage.setItem("chatSessionId", d.sessionId);
         }).catch(() => {});
@@ -45,11 +45,9 @@ export function FloatingChat() {
   const loadHistory = useCallback(async (sid: string) => {
     if (!sid) return;
     try {
-      const token = getToken();
-      const res = await fetch(`/api/chat/sessions/${sid}`, { headers: { Authorization: `Bearer ${token}` } });
-      const history = await res.json();
+      const history = await api.get<{ role: string; content: string }[]>(`/api/chat/sessions/${sid}`);
       if (Array.isArray(history) && history.length > 0) {
-        setMessages(history.map((m: { role: string; content: string }) => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setMessages(history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })));
       } else {
         setMessages([]);
       }
@@ -66,9 +64,7 @@ export function FloatingChat() {
   const newChat = async () => {
     setMessages([]);
     try {
-      const token = getToken();
-      const res = await fetch("/api/chat/new-session", { headers: { Authorization: `Bearer ${token}` } });
-      const { sessionId: sid } = await res.json();
+      const { sessionId: sid } = await api.get<{ sessionId: string }>("/api/chat/new-session");
       setSessionId(sid);
       localStorage.setItem("chatSessionId", sid);
     } catch { }
@@ -76,8 +72,7 @@ export function FloatingChat() {
 
   const deleteChat = async (sid: string) => {
     try {
-      const token = getToken();
-      await fetch(`/api/chat/sessions/${sid}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      await api.delete(`/api/chat/sessions/${sid}`);
       setSessions(prev => prev.filter(s => s.sessionId !== sid));
       if (sessionId === sid) { setSessionId(""); setMessages([]); localStorage.removeItem("chatSessionId"); }
     } catch { }
@@ -90,12 +85,7 @@ export function FloatingChat() {
     setSending(true);
 
     try {
-      const token = getToken();
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question: q, sessionId }),
-      });
+      const res = await api.stream("/api/ai/chat", { question: q, sessionId });
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No stream");
       const decoder = new TextDecoder();
@@ -121,8 +111,7 @@ export function FloatingChat() {
         });
       }
       // Refresh sessions
-      fetch("/api/chat/sessions", { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then(r => r.json()).then(d => setSessions(d)).catch(() => {});
+      api.get<Session[]>("/api/chat/sessions").then(setSessions).catch(() => {});
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "抱歉，AI 服务暂时不可用" }]);
     } finally {

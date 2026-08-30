@@ -60,7 +60,7 @@ export default function WikiSettingsPage() {
           <button onClick={handleSave} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"><Save className="h-4 w-4" />保存</button>
           <button onClick={() => { setOpts(defaults); handleSave(); }} className="inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm"><RotateCcw className="h-4 w-4" />恢复默认</button>
         </div>
-        {msg && <div className="text-sm p-2 rounded-lg bg-green-50 dark:bg-green-950 text-green-700">{msg}</div>}
+        {msg && <div className="text-sm p-2 rounded-lg bg-success/10 text-success">{msg}</div>}
       </div>
 
       <div className="text-xs text-faint space-y-1">

@@ -67,7 +67,7 @@ export default function FilesPage() {
             {uploading ? "上传中..." : "上传"}
           </button>
         </div>
-        {msg && <div className={`text-sm p-2 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-danger"}`}>{msg}</div>}
+        {msg && <div className={`text-sm p-2 rounded-lg ${msg.startsWith("✅") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>{msg}</div>}
       </form>
 
       <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">

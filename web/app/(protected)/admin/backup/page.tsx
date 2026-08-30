@@ -114,8 +114,8 @@ export default function BackupPage() {
       {msg && (
         <div className={`text-sm p-3 rounded-xl flex items-center gap-2 ${
           msg.type === "success"
-            ? "bg-green-50 dark:bg-green-950 text-green-700"
-            : "bg-red-50 dark:bg-red-950 text-danger"
+            ? "bg-success/10 text-success"
+            : "bg-danger/10 text-danger"
         }`}>
           {msg.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
           {msg.text}
@@ -138,8 +138,8 @@ export default function BackupPage() {
       <BackupTable backups={backups} loading={loading} restoring={restoring} onRestore={handleRestore} onDelete={handleDelete} />
 
       {/* Help text */}
-      <div className="text-xs text-muted space-y-1 bg-amber-50 dark:bg-amber-950/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
-        <p className="font-medium text-amber-700 dark:text-amber-400">⏱️ 自动备份策略</p>
+      <div className="text-xs text-muted space-y-1 bg-warning/10 rounded-xl p-4 border border-warning/30">
+        <p className="font-medium text-warning">⏱️ 自动备份策略</p>
         <p>• 每 6 小时自动备份一次（保留最近 24 个）</p>
         <p>• 每日凌晨 3 点备份并同步至百度网盘</p>
         <p>• 启动时自动检测数据库完整性，异常则从最新备份恢复</p>

@@ -59,7 +59,7 @@ export default function TrashPage() {
         </button>
       </div>
 
-      {actionMsg && <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm">{actionMsg}</div>}
+      {actionMsg && <div className="p-3 rounded-xl bg-success/10 text-success text-sm">{actionMsg}</div>}
 
       <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
         {items.length === 0 ? (
@@ -81,10 +81,10 @@ export default function TrashPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0 ml-4">
-              <button onClick={() => restore(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-green-50 text-green-700 hover:bg-green-100">
+              <button onClick={() => restore(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-success/10 text-success hover:bg-success/20">
                 <RotateCcw className="h-3.5 w-3.5" />恢复
               </button>
-              <button onClick={() => deleteForever(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-red-50 text-danger hover:bg-red-100">
+              <button onClick={() => deleteForever(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-danger/10 text-danger hover:bg-danger/20">
                 <XCircle className="h-3.5 w-3.5" />永久删除
               </button>
             </div>

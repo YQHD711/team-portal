@@ -23,7 +23,7 @@ const THEMES = [
   { key: "indigo", name: "深空靛蓝", dot: "linear-gradient(135deg,#5e6ad2,#7170ff)", light: false },
   { key: "sky", name: "深空天青", dot: "linear-gradient(135deg,#0ea5e9,#38bdf8)", light: false },
   { key: "light", name: "日光蓝", dot: "linear-gradient(135deg,#ffffff,#ffffff)", light: true },
-  { key: "warm", name: "暖白", dot: "linear-gradient(135deg,#c26a1d,#d97706)", light: false },
+  { key: "warm", name: "暖白", dot: "linear-gradient(135deg,#9c4d10,#b25e15)", light: false },
 ];
 
 export default function SettingsPage() {

@@ -11,8 +11,8 @@ interface MonthlyReport { year: number; month: number; totalRequests: number; ap
 
 const STATUS_LABELS: Record<string, string> = { pending: "待审批", approved: "已批准", purchased: "已购买", received: "已入库", rejected: "已拒绝" };
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700", approved: "bg-blue-100 text-blue-700",
-  purchased: "bg-purple-100 text-purple-700", received: "bg-green-100 text-green-700", rejected: "bg-red-100 text-red-700"
+  pending: "bg-warning/15 text-warning", approved: "bg-info/15 text-info",
+  purchased: "bg-primary/15 text-primary", received: "bg-success/15 text-success", rejected: "bg-danger/15 text-danger"
 };
 
 export default function FinancePage() {

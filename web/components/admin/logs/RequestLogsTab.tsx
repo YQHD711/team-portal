@@ -12,9 +12,9 @@ interface LogEntry { id: number; level: string; category: string; message: strin
 interface LogStats { total: number; errors24h: number; warns24h: number; recentErrors: { category: string; message: string; createdAt: string }[]; }
 
 const levelColors: Record<string, string> = {
-  info: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
-  warn: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  error: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  info: "bg-info/15 text-info",
+  warn: "bg-warning/15 text-warning",
+  error: "bg-danger/15 text-danger",
 };
 
 const levelIcons: Record<string, React.ReactNode> = {

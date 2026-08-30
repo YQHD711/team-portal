@@ -95,9 +95,9 @@ export default function DamagePage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{r.item?.name || `#${r.inventoryItemId}`}</span>
-                    <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${r.item?.grade === "A" ? "bg-red-100 text-red-700" : r.item?.grade === "B" ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-muted"}`}>{r.item?.grade || "?"}级</span>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${r.type === "damage" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"}`}>{r.type === "damage" ? "损坏" : "遗失"}</span>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${r.liability === "exempt" ? "bg-green-100 text-green-700" : r.liability === "compensate" ? "bg-red-100 text-red-700" : "bg-zinc-100 text-muted"}`}>{liabilityLabels[r.liability]}</span>
+                    <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${r.item?.grade === "A" ? "bg-danger/15 text-danger" : r.item?.grade === "B" ? "bg-warning/15 text-warning" : "bg-surface-hover text-muted"}`}>{r.item?.grade || "?"}级</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${r.type === "damage" ? "bg-warning/15 text-warning" : "bg-danger/15 text-danger"}`}>{r.type === "damage" ? "损坏" : "遗失"}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${r.liability === "exempt" ? "bg-success/15 text-success" : r.liability === "compensate" ? "bg-danger/15 text-danger" : "bg-surface-hover text-muted"}`}>{liabilityLabels[r.liability]}</span>
                   </div>
                   <div className="text-sm mt-1">{r.description}</div>
                   <div className="text-xs text-muted mt-1">

@@ -227,7 +227,7 @@ export default function CloudPage() {
         )}
       </div>
 
-      {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{msg}</div>}
+      {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>{msg}</div>}
 
       {/* Auth section — only show if explicitly not authed */}
       {authed === false && (

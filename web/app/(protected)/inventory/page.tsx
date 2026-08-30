@@ -175,12 +175,12 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {importMsg && <div className="text-sm p-2 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700">{importMsg}</div>}
+      {importMsg && <div className="text-sm p-2 rounded-lg bg-info/10 text-info">{importMsg}</div>}
 
       {lowItems.length > 0 && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 flex items-center gap-2">
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
-          <span className="text-sm text-amber-800 dark:text-amber-200"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {LOW_THRESHOLD} 件）</span>
+          <span className="text-sm text-warning"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {LOW_THRESHOLD} 件）</span>
         </div>
       )}
 

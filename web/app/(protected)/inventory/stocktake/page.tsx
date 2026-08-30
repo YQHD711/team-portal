@@ -120,7 +120,7 @@ export default function StocktakePage() {
         <div className="flex items-center gap-3">
           <button onClick={() => { setSelected(null); }} className="text-sm text-muted">&larr; 返回</button>
           <h1 className="text-xl font-bold">{selected.type === "semester" ? "学期大盘" : "周盘点"} — {gradeLabel(selected.grade)}</h1>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${selected.status === "completed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${selected.status === "completed" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
             {selected.status === "completed" ? "已完成" : `进行中 ${done}/${total}`}
           </span>
         </div>
@@ -133,7 +133,7 @@ export default function StocktakePage() {
         )}
 
         {diffs.length > 0 && selected.status === "completed" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">{diffs.length} 项差异已调库存</div>
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">{diffs.length} 项差异已调库存</div>
         )}
 
         <div className="rounded-xl border overflow-hidden bg-surface">
@@ -147,7 +147,7 @@ export default function StocktakePage() {
               {selected.items?.map(si => (
                 <tr key={si.inventoryItemId} className={si.difference ? "bg-amber-50/50" : ""}>
                   <td className="px-4 py-3 font-medium">{si.inventoryItem?.name || `#${si.inventoryItemId}`}</td>
-                  <td className="px-4 py-3 text-center"><span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${si.inventoryItem?.grade === "A" ? "bg-red-100 text-red-700" : si.inventoryItem?.grade === "B" ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-muted"}`}>{si.inventoryItem?.grade}</span></td>
+                  <td className="px-4 py-3 text-center"><span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${si.inventoryItem?.grade === "A" ? "bg-danger/15 text-danger" : si.inventoryItem?.grade === "B" ? "bg-warning/15 text-warning" : "bg-surface-hover text-muted"}`}>{si.inventoryItem?.grade}</span></td>
                   <td className="px-4 py-3 text-right tabular-nums">{si.systemQty}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{si.actualQty ?? "—"}</td>
                   <td className={`px-4 py-3 text-right font-medium ${si.difference && si.difference > 0 ? "text-success" : si.difference && si.difference < 0 ? "text-danger" : ""}`}>

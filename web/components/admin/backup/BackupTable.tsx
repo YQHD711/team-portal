@@ -42,7 +42,7 @@ export default function BackupTable({ backups, loading, restoring, onRestore, on
             </thead>
             <tbody className="divide-y divide-border-subtle">
               {backups.map((b) => (
-                <tr key={b.fileName} className="hover:bg-zinc-50 dark:hover:bg-zinc-950">
+                <tr key={b.fileName} className="hover:bg-surface-hover">
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       <FileArchive className="h-4 w-4 text-blue-400 shrink-0" />
@@ -52,10 +52,10 @@ export default function BackupTable({ backups, loading, restoring, onRestore, on
                   <td className="px-4 py-2.5">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       b.tag === "manual"
-                        ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400"
+                        ? "bg-primary/15 text-primary"
                         : b.tag === "daily"
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
-                        : "bg-slate-100 text-muted dark:bg-slate-800 dark:text-faint"
+                        ? "bg-info/15 text-info"
+                        : "bg-surface-hover text-muted"
                     }`}>
                       {b.tag === "manual" ? "手动" : b.tag === "daily" ? "每日" : "自动"}
                     </span>
