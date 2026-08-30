@@ -2,30 +2,25 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { useNotifications } from "@/lib/hooks";
 import { Bell, Check, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
-interface Notif { id: number; title: string; message: string; link: string | null; isRead: boolean; createdAt: string; }
-
 export function NotificationBell() {
-  const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [unread, setUnread] = useState(0);
+  const { notifications: notifs, unreadCount: unread, refresh } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const fetch = () => {
-    api.get<Notif[]>("/api/notifications").then(d => { setNotifs(d); setUnread(d.filter(n => !n.isRead).length); }).catch(() => {});
-  };
-
-  useEffect(() => { fetch(); const t = setInterval(fetch, 15000); return () => clearInterval(t); }, []);
+  // 每 15 秒轮询一次（与原来一致），与页面内的 useNotifications 共享去重
+  useEffect(() => { const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const markRead = async (id: number) => { await api.post(`/api/notifications/${id}/read`, {}); fetch(); };
-  const markAll = async () => { await api.post("/api/notifications/read-all", {}); fetch(); };
+  const markRead = async (id: number) => { await api.post(`/api/notifications/${id}/read`, {}); refresh(); };
+  const markAll = async () => { await api.post("/api/notifications/read-all", {}); refresh(); };
 
   return (
     <div ref={ref} className="relative">

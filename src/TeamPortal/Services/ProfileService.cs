@@ -31,7 +31,7 @@ public class ProfileService
     }
 
     public async Task<bool> UpdateProfile(int userId, string? level, double? flightHours, DateTime? firstFlight,
-        string? bio, string? emergencyContact, string? emergencyPhone, string? flightTypes)
+        string? bio, string? emergencyContact, string? emergencyPhone, string? flightTypes, string? skills)
     {
         var profile = await _db.PilotProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile is null) return false;
@@ -44,6 +44,7 @@ public class ProfileService
         if (emergencyContact is not null && profile.EmergencyContact != emergencyContact) { changes.Add("emergency"); profile.EmergencyContact = emergencyContact; }
         if (emergencyPhone is not null && profile.EmergencyPhone != emergencyPhone) { changes.Add("phone"); profile.EmergencyPhone = emergencyPhone; }
         if (flightTypes is not null && profile.FlightTypes != flightTypes) { changes.Add("flightTypes"); profile.FlightTypes = flightTypes; }
+        if (skills is not null && profile.Skills != skills) { changes.Add($"skills"); profile.Skills = skills; }
         profile.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -159,7 +160,7 @@ public class ProfileService
             {
                 p.Id, p.UserId, Username = p.User!.Username,
                 Department = p.User.Department != null ? p.User.Department.Name : null,
-                p.Level, p.TotalFlightHours, p.FirstFlightDate, p.UpdatedAt
+                p.Level, p.TotalFlightHours, p.FirstFlightDate, p.Skills, p.UpdatedAt
             })
             .ToListAsync<object>();
     }
@@ -182,7 +183,7 @@ public class ProfileService
             Department = profile.User.Department?.Name,
             profile.Level, profile.TotalFlightHours, profile.FirstFlightDate,
             profile.Bio, profile.EmergencyContact, profile.EmergencyPhone,
-            profile.FlightTypes, profile.UpdatedAt,
+            profile.FlightTypes, profile.Skills, profile.UpdatedAt,
             TrainingRecords = training.Select(t => new
             {
                 t.Id, t.CourseName, t.Score, t.ExamDate, t.Examiner, t.Notes, t.CreatedAt

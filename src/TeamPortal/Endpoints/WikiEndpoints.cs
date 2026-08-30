@@ -11,7 +11,7 @@ public static class WikiEndpoints
     {
         var wiki = app.MapGroup("/api/wiki").RequireAuthorization();
 
-        wiki.MapPost("/submit-git", async (GitSubmitRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
+        wiki.MapPost("/submit-git", async (GitSubmitRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -30,10 +30,12 @@ public static class WikiEndpoints
             var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"Git task submitted: {req.ProjectName} (visibility={visibility})");
+            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
+                data: new { projectName = req.ProjectName, visibility, targetFolder }, ipAddress: LogService.ClientIp(ctx), userId: uid);
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         });
 
-        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
+        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -59,11 +61,13 @@ public static class WikiEndpoints
             var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"ZIP task submitted: {projectName} (visibility={vis})");
+            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
+                data: new { projectName, visibility = vis, targetFolder = folder }, ipAddress: LogService.ClientIp(ctx), userId: uid);
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         }).DisableAntiforgery();
 
         // Submit translation task — clone doc repo + AI translate to Chinese
-        wiki.MapPost("/submit-translate", async (TranslateRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge) =>
+        wiki.MapPost("/submit-translate", async (TranslateRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -76,6 +80,8 @@ public static class WikiEndpoints
             var task = await generator.SubmitTranslate(req.Url, req.ProjectName, folder, uid, vis);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"Translate task submitted: {req.ProjectName}");
+            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
+                data: new { projectName = req.ProjectName, visibility = vis, targetFolder = folder, type = "translate" }, ipAddress: LogService.ClientIp(ctx), userId: uid);
             return Results.Ok(new { task.Id, task.Status });
         });
 
@@ -103,32 +109,47 @@ public static class WikiEndpoints
         });
 
         // Delete a wiki task
-        wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
             var ok = await generator.DeleteTask(id, knowledge);
+            var log = app.Services.GetRequiredService<LogService>();
+            if (ok) log.Info("wiki", $"Wiki task {id} deleted by {user.Identity?.Name}");
+            else log.Warn("wiki", $"Wiki task {id} delete failed (not found) by {user.Identity?.Name}");
+            log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
+                data: new { success = ok }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
         });
 
         // Update/review existing documents
-        wiki.MapPost("/tasks/{id}/update", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        wiki.MapPost("/tasks/{id}/update", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可更新", statusCode: 403);
             var ok = await generator.UpdateDocuments(id);
+            var log = app.Services.GetRequiredService<LogService>();
+            if (ok) log.Info("wiki", $"Wiki task {id} document review started by {user.Identity?.Name}");
+            else log.Warn("wiki", $"Wiki task {id} update failed (not found or incomplete) by {user.Identity?.Name}");
+            log.Audit("update", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
+                data: new { success = ok, reason = ok ? null : "任务不存在或未完成" }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { success = true, message = "文档审查已启动，完成后自动更新" })
                       : Results.Problem("任务不存在或未完成", statusCode: 400);
         });
 
         // Change visibility of a wiki task
-        wiki.MapPatch("/tasks/{id}/visibility", async (string id, VisibilityRequest req, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        wiki.MapPatch("/tasks/{id}/visibility", async (string id, VisibilityRequest req, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可修改", statusCode: 403);
             if (req.Visibility is not "public" and not "department" and not "personal")
                 return Results.Problem("Invalid visibility", statusCode: 400);
             var ok = await generator.UpdateVisibility(id, req.Visibility);
+            var log = app.Services.GetRequiredService<LogService>();
+            if (ok) log.Info("wiki", $"Wiki task {id} visibility -> {req.Visibility} by {user.Identity?.Name}");
+            else log.Warn("wiki", $"Wiki task {id} visibility change failed (not found) by {user.Identity?.Name}");
+            log.Audit("update", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
+                data: new { visibility = req.Visibility, success = ok }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
         });
 
@@ -229,11 +250,16 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可查看", statusCode: 403);
             return Results.Ok(generator.GetOptions());
         });
-        wiki.MapPut("/settings", async (WikiGeneratorOptions opts, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        wiki.MapPut("/settings", async (WikiGeneratorOptions opts, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可修改", statusCode: 403);
-            generator.UpdateOptions(opts); return Results.Ok(new { success = true });
+            generator.UpdateOptions(opts);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Info("wiki", $"Wiki settings updated by {user.Identity?.Name}");
+            log.Audit("settings", user.Identity?.Name ?? "unknown", targetType: "wiki-settings",
+                data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new { success = true });
         });
     }
 

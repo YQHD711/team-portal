@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -12,7 +13,26 @@ router = APIRouter(prefix="/api/ai", tags=["chat"])
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+# Backend SQLite DB — fallback source for the AI:DeepSeekKey system setting
+TEAMPORTAL_DB_PATH = os.environ.get("TEAMPORTAL_DB_PATH", "../src/TeamPortal/Data/teamportal.db")
 MAX_RETRIES = 2
+
+
+def _read_db_key() -> str:
+    """Read AI:DeepSeekKey from the backend's SystemSettings table (read-only)."""
+    try:
+        with sqlite3.connect(f"file:{TEAMPORTAL_DB_PATH}?mode=ro", uri=True, timeout=5) as conn:
+            row = conn.execute("SELECT Value FROM SystemSettings WHERE Key = 'AI:DeepSeekKey'").fetchone()
+            return row[0] if row else ""
+    except (sqlite3.Error, OSError):
+        return ""
+
+
+def get_api_key() -> str:
+    """DeepSeek API key — env var first, then the system settings DB."""
+    if DEEPSEEK_API_KEY:
+        return DEEPSEEK_API_KEY
+    return _read_db_key()
 
 
 class ChatRequest(BaseModel):
@@ -23,8 +43,9 @@ class ChatRequest(BaseModel):
 async def chat(req: ChatRequest):
     """Proxy chat requests to DeepSeek API, stream response via SSE."""
     async def stream():
-        if not DEEPSEEK_API_KEY:
-            yield f"data: {json.dumps({'error': 'DEEPSEEK_API_KEY not configured'})}\n\n"
+        api_key = get_api_key()
+        if not api_key:
+            yield f"data: {json.dumps({'error': 'DeepSeek API key not configured. Set the DEEPSEEK_API_KEY environment variable or save AI:DeepSeekKey in the system settings page.'})}\n\n"
             return
 
         for attempt in range(MAX_RETRIES + 1):
@@ -34,7 +55,7 @@ async def chat(req: ChatRequest):
                         "POST",
                         f"{DEEPSEEK_BASE_URL}/v1/chat/completions",
                         headers={
-                            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                            "Authorization": f"Bearer {api_key}",
                             "Content-Type": "application/json",
                         },
                         json={

@@ -6,9 +6,11 @@ import Link from "next/link";
 import { LogIn, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
+import { useBrand } from "@/lib/brand";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { teamName, teamSubtitle } = useBrand();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -32,9 +34,9 @@ export default function LoginPage() {
         {/* Brand */}
         <div className="text-center mb-8">
           <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 via-cyan-500 to-blue-600 shadow-2xl shadow-blue-500/25 mx-auto mb-4 overflow-hidden">
-            <img src="/logo.png" alt="雏鹰之翼" className="w-14 h-14 object-contain relative z-10" />
+            <img src="/logo.png" alt={teamName} className="w-14 h-14 object-contain relative z-10" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">雏鹰之翼</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">{teamName}</h1>
           <p className="text-sm text-muted mt-1">队员协作 · 知识共享 · 飞行分析</p>
         </div>
 
@@ -69,7 +71,7 @@ export default function LoginPage() {
 
         <div className="text-center mt-4 space-y-2">
           <Link href="/auth/register" className="text-sm text-blue-500 hover:text-blue-600">还没有账号？注册</Link>
-          <p className="text-xs text-muted">雏鹰之翼航模队 · 内部系统</p>
+          <p className="text-xs text-muted">{teamName}{teamSubtitle} · 内部系统</p>
         </div>
       </div>
     </div>

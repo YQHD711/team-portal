@@ -32,27 +32,30 @@ public static class FlightEndpoints
 
         bg.MapGet("/", async (FlightService svc) => Results.Ok(await svc.GetBatteries()));
 
-        bg.MapPost("/", async (BatteryRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        bg.MapPost("/", async (BatteryRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
             var b = await svc.CreateBattery(req.BatteryNumber, req.Health, req.IncidentDate, req.Notes);
+            log.Info("flight", $"Battery added: {req.BatteryNumber} by {user.Identity?.Name}");
             return Results.Created($"/api/batteries/{b.Id}", b);
         });
 
-        bg.MapPut("/{id:int}", async (int id, BatteryRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        bg.MapPut("/{id:int}", async (int id, BatteryRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
             var ok = await svc.UpdateBattery(id, req.BatteryNumber, req.Health, req.IncidentDate, req.Notes);
+            if (ok) log.Info("flight", $"Battery #{id} updated: {req.BatteryNumber} by {user.Identity?.Name}");
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("Not found", statusCode: 404);
         });
 
-        bg.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        bg.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除", statusCode: 403);
             await svc.DeleteBattery(id);
+            log.Warn("flight", $"Battery #{id} deleted by {user.Identity?.Name}");
             return Results.Ok(new { message = "已删除" });
         });
 
@@ -61,28 +64,31 @@ public static class FlightEndpoints
 
         ig.MapGet("/", async (int? page, FlightService svc) => Results.Ok(await svc.GetIncidents(page ?? 1)));
 
-        ig.MapPost("/", async (IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        ig.MapPost("/", async (IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
             var inc = await svc.CreateIncident(req.Type, req.Severity, req.Description, req.Date,
                 req.Resolution, req.ReportedBy);
+            log.Info("flight", $"Incident added: {req.Type}/{req.Severity} by {user.Identity?.Name}");
             return Results.Created($"/api/incidents/{inc.Id}", inc);
         });
 
-        ig.MapPut("/{id:int}", async (int id, IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        ig.MapPut("/{id:int}", async (int id, IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
             var ok = await svc.UpdateIncident(id, req.Type, req.Severity, req.Description, req.Date, req.Resolution);
+            if (ok) log.Info("flight", $"Incident #{id} updated: {req.Type} by {user.Identity?.Name}");
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("Not found", statusCode: 404);
         });
 
-        ig.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        ig.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除", statusCode: 403);
             await svc.DeleteIncident(id);
+            log.Warn("flight", $"Incident #{id} deleted by {user.Identity?.Name}");
             return Results.Ok(new { message = "已删除" });
         });
     }

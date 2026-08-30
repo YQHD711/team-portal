@@ -6,11 +6,13 @@ namespace TeamPortal.Services;
 public class FlightLogService
 {
     private readonly HttpClient _http;
+    private readonly IConfiguration _config;
     private readonly string _logDir;
 
     public FlightLogService(HttpClient http, IConfiguration config)
     {
         _http = http;
+        _config = config;
         _logDir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "flightlogs");
     }
 
@@ -32,7 +34,7 @@ public class FlightLogService
         if (!File.Exists(filepath)) return null;
 
         // Try calling Python for detailed parsing
-        var baseUrl = "http://localhost:9001";
+        var baseUrl = _config["AiService:BaseUrl"] ?? "http://localhost:9001";
         try
         {
             var json = JsonSerializer.Serialize(new { filename });

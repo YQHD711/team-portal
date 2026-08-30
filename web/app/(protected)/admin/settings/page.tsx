@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { Save, Server, Shield, Brain, Cloud, Settings2, Loader2 } from "lucide-react";
+import { Save, Server, Shield, Brain, Cloud, Settings2, Loader2, Palette } from "lucide-react";
 
 interface SystemSetting {
   key: string; value: string; category: string; description: string;

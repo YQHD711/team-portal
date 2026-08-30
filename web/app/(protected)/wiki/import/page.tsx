@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { GitBranch, Upload, Loader2, CheckCircle, XCircle, Clock, RefreshCw, Globe, Building2, Lock, Languages, Trash2 } from "lucide-react";
 
 interface TaskInfo {
@@ -24,10 +25,9 @@ export default function WikiImportPage() {
   const [visibility, setVisibility] = useState("public");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const [isStaff, setIsStaff] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
   const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(()=>{}); }, []);
 
   const fetchTasks = () => api.get<TaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
   const deleteTask = async (id: string) => { if (confirm("确定删除？")) { await api.delete(`/api/wiki/tasks/${id}`); fetchTasks(); } };

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import Link from "next/link";
 import { BookOpen, ExternalLink, GitBranch, Package, Trash2 } from "lucide-react";
 
@@ -13,9 +14,8 @@ const visLabel = (v: string) => v === "department" ? "🏢 部门" : v === "pers
 
 export default function WikiBrowsePage() {
   const [projects, setProjects] = useState<TaskInfo[]>([]);
-  const [isStaff, setIsStaff] = useState(false);
-
-  useEffect(() => { api.get<{role:string}>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(()=>{}); }, []);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
 
   const fetchProjects = () => api.get<TaskInfo[]>("/api/wiki/tasks").then(t => setProjects(t.filter(p => p.status === "completed"))).catch(() => {});
   useEffect(() => { fetchProjects(); }, []);

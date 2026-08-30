@@ -10,6 +10,18 @@ public static class FileEndpoints
 {
     private static string UploadDir() => Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "files"));
 
+    /// <summary>上传类型白名单：常见文档/图片/压缩格式。svg 有 XSS 风险已排除；下载统一强制 attachment。</summary>
+    private static readonly HashSet<string> AllowedUploadExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx",
+        ".md", ".txt", ".json",
+        ".zip", ".rar", ".7z",
+        ".jpg", ".jpeg", ".png", ".gif", ".webp"
+    };
+
+    /// <summary>带点号包裹的危险扩展名段(双扩展名混淆检测用)</summary>
+    private static readonly string[] DangerousExtSegments = [".php.", ".asp.", ".aspx.", ".jsp.", ".exe.", ".sh.", ".js.", ".html.", ".htm.", ".svg."];
+
     private static async Task<(string? role, string? dept, int id)> GetCtx(ClaimsPrincipal user, AppDbContext db)
     {
         var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -34,10 +46,27 @@ public static class FileEndpoints
         });
 
         // Upload
-        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db, LogService log) =>
+        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
             if (file.Length > 100 * 1024 * 1024) return Results.Problem("Max 100MB", statusCode: 400);
+
+            // 文件名规范化：拒绝路径分隔符、.. 等危险字符（虽然存储名用 GUID，原始名仍会入库/渲染）
+            var rawName = file.FileName ?? "";
+            if (rawName.Contains('/') || rawName.Contains('\\') || rawName.Contains(".."))
+                return Results.Problem("文件名包含非法字符（路径分隔符或 ..）", statusCode: 400);
+
+            // 扩展名白名单（.html/.svg/.exe 等一律拒绝）
+            var uploadExt = Path.GetExtension(rawName);
+            if (string.IsNullOrEmpty(uploadExt) || !AllowedUploadExtensions.Contains(uploadExt))
+                return Results.Problem(
+                    $"不支持的文件类型 {uploadExt}。允许: pdf/doc/docx/xls/xlsx/csv/ppt/pptx/md/txt/json/zip/rar/7z/jpg/jpeg/png/gif/webp",
+                    statusCode: 415);
+
+            // 双扩展名混淆（shell.php.jpg、a.asp.png 等）:白名单只认最后一个扩展名,需额外拦截
+            // 危险扩展名段必须带点号包裹,避免误伤 doc.v2.docx、2026-08-10.log.pdf 等正常多段文件名
+            if (DangerousExtSegments.Any(s => rawName.Contains(s, StringComparison.OrdinalIgnoreCase)))
+                return Results.Problem("文件名包含非法扩展名组合", statusCode: 400);
 
             var (role, dept, uid) = await GetCtx(user, db);
             var vis = visibility == "department" && !string.IsNullOrEmpty(dept) ? "department" : "public";
@@ -59,6 +88,8 @@ public static class FileEndpoints
             db.SharedFiles.Add(sf);
             await db.SaveChangesAsync();
             log.Info("files", $"File uploaded: {file.FileName} ({file.Length} bytes) by {actor}", $"{{\"visibility\":\"{vis}\",\"id\":{sf.Id}}}");
+            log.Audit("upload", actor, targetType: "file", targetId: sf.Id.ToString(),
+                data: new { name = file.FileName, size = file.Length, visibility = vis }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(new { sf.Id, sf.OriginalName, sf.Size, sf.Visibility });
         }).DisableAntiforgery();
 
@@ -79,7 +110,7 @@ public static class FileEndpoints
         });
 
         // Delete (staff only)
-        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log) =>
+        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             var (role, _, _) = await GetCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
@@ -91,6 +122,8 @@ public static class FileEndpoints
             db.SharedFiles.Remove(f);
             await db.SaveChangesAsync();
             log.Warn("files", $"File deleted: {f.OriginalName} by {actor}");
+            log.Audit("delete", actor, targetType: "file", targetId: id.ToString(),
+                data: new { name = f.OriginalName }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(new { success = true });
         });
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { ChevronRight, ChevronLeft, BookOpen, ExternalLink, ArrowLeft, Loader2, RefreshCw, Globe, Building2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,8 @@ export default function WikiViewerPage() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [isStaff, setIsStaff] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
   const [updating, setUpdating] = useState(false);
   const [lang, setLang] = useState<"zh" | "en">("zh");
   const [toc, setToc] = useState<{ id: string; text: string; level: number }[]>([]);
@@ -51,10 +53,6 @@ export default function WikiViewerPage() {
       }
     }
   };
-
-  useEffect(() => {
-    api.get<{ role: string }>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(() => {});
-  }, []);
 
   useEffect(() => {
     api.get<TaskInfo>(`/api/wiki/tasks/${taskId}`).then(setTask).catch(() => {});

@@ -23,6 +23,8 @@ public static class ExceptionHandlingMiddleware
                 var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
                 var statusCode = exception switch
                 {
+                    // BadHttpRequestException:JSON 请求体反序列化失败(类型不匹配、格式错误)等,属客户端错误
+                    BadHttpRequestException => StatusCodes.Status400BadRequest,
                     InvalidOperationException => StatusCodes.Status400BadRequest,
                     UnauthorizedAccessException => StatusCodes.Status403Forbidden,
                     KeyNotFoundException => StatusCodes.Status404NotFound,

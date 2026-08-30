@@ -1,4 +1,4 @@
-.PHONY: build test dev lint clean health deploy
+.PHONY: build test dev lint clean health deploy quickstart logs logs-prod
 
 # === Build ===
 build: build-csharp build-web build-python
@@ -51,9 +51,18 @@ health:
 	@curl -sf http://localhost:9001/health > /dev/null && echo "✓ ai-service :9001" || echo "✗ ai-service :9001"
 
 # === Deploy ===
+quickstart:
+	bash deploy/quickstart.sh
+
 deploy:
 	docker compose up -d --build
 	@echo "Services starting... Run 'make health' to verify."
+
+logs:
+	docker compose logs -f
+
+logs-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
 deploy-prod:
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

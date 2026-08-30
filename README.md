@@ -70,12 +70,24 @@ team-portal/
 
 ## 生产部署
 
+### 一键部署（推荐）
+
+```bash
+git clone <repo-url> /opt/team-portal
+cd /opt/team-portal
+make quickstart   # 自动检测 Docker → 生成 .env → 生成 JWT 密钥 → 启动 → 健康检查
+```
+
+脚本会引导你完成全部步骤。部署完成后访问 `http://localhost:3000`，管理员初始密码在 `.env` 的 `ADMIN__PASSWORD`（首次登录后请修改）。
+
+### 手动部署
+
 ```bash
 # 1. 克隆并配置
 git clone <repo-url> /opt/team-portal
 cd /opt/team-portal
 cp .env.example .env
-# 编辑 .env — 修改密钥和 API Key
+# 编辑 .env — 修改密钥和 API Key（JWT__KEY 至少 32 字符，可用 openssl rand -base64 48 生成）
 
 # 2. 启动服务
 make deploy    # docker compose up -d --build

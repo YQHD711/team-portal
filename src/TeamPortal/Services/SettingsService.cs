@@ -119,6 +119,12 @@ public class SettingsService
             new() { Key = "Wiki:PollingIntervalSec", Value = "30", Category = "系统参数", Description = "Wiki 任务轮询间隔（秒）" },
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
+            new() { Key = "Brand:TeamName", Value = "雏鹰之翼", Category = "品牌", Description = "团队名称（登录页/侧边栏/仪表盘）" },
+            new() { Key = "Brand:TeamSubtitle", Value = "航模队", Category = "品牌", Description = "团队副标题（显示在队名旁）" },
+            new() { Key = "Brand:SystemTitle", Value = "", Category = "品牌", Description = "系统标题（留空自动用“队名 · 副标题管理系统”）" },
+            new() { Key = "Brand:Description", Value = "", Category = "品牌", Description = "系统描述（留空自动生成）" },
+            new() { Key = "Brand:LogoUrl", Value = "", Category = "品牌", Description = "Logo 图片 URL（留空使用默认 /logo.png）" },
+            new() { Key = "Brand:PrimaryColor", Value = "", Category = "品牌", Description = "品牌主题色（如 #3b82f6，暂未应用到 UI）" },
         };
 
         var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();
@@ -130,6 +136,39 @@ public class SettingsService
         }
     }
 
+    /// <summary>
+    /// Get public brand config for frontend (/api/public/brand).
+    /// 未设置的项自动回退默认值；SystemTitle/Description 留空时由队名 + 副标题拼接。
+    /// </summary>
+    public async Task<BrandConfig> GetBrandConfig()
+    {
+        var teamName = await Get("Brand:TeamName", "雏鹰之翼");
+        var teamSubtitle = await Get("Brand:TeamSubtitle", "航模队");
+        var systemTitle = await Get("Brand:SystemTitle");
+        var description = await Get("Brand:Description");
+        var logoUrl = await Get("Brand:LogoUrl");
+        var primaryColor = await Get("Brand:PrimaryColor");
+
+        if (string.IsNullOrWhiteSpace(systemTitle))
+            systemTitle = $"{teamName} · {teamSubtitle}管理系统";
+        if (string.IsNullOrWhiteSpace(description))
+            description = $"{teamName}{teamSubtitle} — 知识库、零件库存、飞行日志管理与AI助手";
+
+        return new BrandConfig(
+            teamName, teamSubtitle, systemTitle, description,
+            string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl,
+            string.IsNullOrWhiteSpace(primaryColor) ? null : primaryColor);
+    }
+
     /// <summary>Clear cache (call after external DB changes).</summary>
     public void ClearCache() => _cache.Clear();
 }
+
+/// <summary>公开的品牌配置（GET /api/public/brand 返回结构）。</summary>
+public record BrandConfig(
+    string TeamName,
+    string TeamSubtitle,
+    string SystemTitle,
+    string Description,
+    string? LogoUrl,
+    string? PrimaryColor);

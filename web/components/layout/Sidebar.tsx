@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Building2, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSidebar } from "./SidebarContext";
-import { api } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { useBrand } from "@/lib/brand";
+import { useCurrentUser } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { dotGridPattern } from "@/lib/constants";
 
@@ -17,6 +17,7 @@ const mainNav = [
   { href: "/", label: "仪表盘", icon: LayoutDashboard },
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
+  { href: "/webtools", label: "日志分析", icon: Activity },
   { href: "/incidents", label: "事故安全", icon: ShieldAlert },
   { href: "/files", label: "资源共享", icon: Upload },
   { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
@@ -25,6 +26,7 @@ const mainNav = [
 
 const materialNav = [
   { href: "/inventory", label: "零件库存", icon: Package },
+  { href: "/inventory/layout", label: "物料布局", icon: LayoutGrid },
   { href: "/inventory/checkout", label: "领用管理", icon: ArrowLeftRight },
   { href: "/inventory/stocktake", label: "盘点", icon: ClipboardCheck },
   { href: "/finance", label: "采购申请", icon: BarChart3 },
@@ -37,8 +39,8 @@ const staffNav = [
 ];
 
 const adminNav = [
-  { href: "/admin/users", label: "队员管理", icon: Users },
-  { href: "/admin/departments", label: "部门管理", icon: Building2 },
+  { href: "/admin/organization", label: "组织架构", icon: Users },
+  { href: "/admin/exams", label: "考核管理", icon: ClipboardCheck },
   { href: "/admin/invites", label: "邀请码", icon: Ticket },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
   { href: "/admin/settings", label: "系统设置", icon: Settings },
@@ -51,16 +53,13 @@ const adminNav = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { teamName, teamSubtitle } = useBrand();
   const { open, setOpen } = useSidebar();
   const [adminOpen, setAdminOpen] = useState(false);
   const [materialOpen, setMaterialOpen] = useState(false);
-  const [role, setRole] = useState<string | null>(null);
+  const { user } = useCurrentUser();
 
-  useEffect(() => {
-    if (!getToken()) return;
-    api.get<{ role: string; department: string | null }>("/api/auth/me").then(u => setRole(u.role)).catch(() => setRole(null));
-  }, []);
-
+  const role = user?.role ?? null;
   const isStaff = role === "admin" || role === "部长";
   const isAdmin = role === "admin";
 
@@ -79,11 +78,11 @@ export function Sidebar() {
           <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `url(${dotGridPattern(0.05)})` }} />
           <Link href="/" className="relative flex items-center gap-3 text-white" onClick={() => setOpen(false)}>
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur overflow-hidden">
-              <img src="/logo.png" alt="雏鹰之翼" className="w-7 h-7 object-contain" />
+              <img src="/logo.png" alt={teamName} className="w-7 h-7 object-contain" />
             </div>
             <div>
-              <div className="font-bold text-base leading-tight">雏鹰之翼</div>
-              <div className="text-[10px] text-white/60 leading-tight">队员协作平台</div>
+              <div className="font-bold text-base leading-tight">{teamName}</div>
+              <div className="text-[10px] text-white/60 leading-tight">{teamSubtitle}</div>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden absolute right-2 top-3 p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10">
@@ -193,7 +192,7 @@ export function Sidebar() {
         <div className="px-4 py-3 border-t border-white/5">
           <div className="flex items-center gap-2 text-[10px] text-slate-600">
             <Sparkles className="h-3 w-3" />
-            <span>雏鹰之翼 © 2026 · 内部系统</span>
+            <span>{teamName} © 2026 · 内部系统</span>
           </div>
         </div>
       </aside>

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { getToken } from "@/lib/auth";
+import { useBrand } from "@/lib/brand";
 
 interface Message {
   role: "user" | "assistant";
@@ -17,6 +18,7 @@ interface Session {
 }
 
 export function ChatPanel() {
+  const { teamSubtitle } = useBrand();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -192,7 +194,7 @@ export function ChatPanel() {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <Bot className="h-10 w-10 mb-3 text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">问我任何关于航模队的问题</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">问我任何关于{teamSubtitle}的问题</p>
             <p className="text-xs text-zinc-400 mt-1">我会记住对话上下文，并从知识库中查找信息</p>
           </div>
         )}
