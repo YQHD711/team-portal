@@ -72,4 +72,42 @@ public class SettingsServiceTests
         Assert.Equal("https://example.com/logo.png", brand.LogoUrl);
         Assert.Equal("#ff0000", brand.PrimaryColor);
     }
+
+    [Fact]
+    public async Task GetBrandConfig_ThemeDefaultsToIndigo()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+
+        var brand = await svc.GetBrandConfig();
+
+        // 缺省时主题为 indigo（保证 BrandConfig.Theme 非空）
+        Assert.Equal("indigo", brand.Theme);
+    }
+
+    [Fact]
+    public async Task GetBrandConfig_InvalidTheme_FallsBackToIndigo()
+    {
+        var db = CreateContext();
+        db.SystemSettings.Add(new SystemSetting { Key = "Brand:Theme", Value = "rainbow" });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+
+        var brand = await svc.GetBrandConfig();
+
+        Assert.Equal("indigo", brand.Theme);
+    }
+
+    [Fact]
+    public async Task GetBrandConfig_ValidTheme_Preserved()
+    {
+        var db = CreateContext();
+        db.SystemSettings.Add(new SystemSetting { Key = "Brand:Theme", Value = "warm" });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+
+        var brand = await svc.GetBrandConfig();
+
+        Assert.Equal("warm", brand.Theme);
+    }
 }
