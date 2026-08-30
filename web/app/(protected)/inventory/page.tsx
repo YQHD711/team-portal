@@ -1,15 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { AlertTriangle, Plus, Upload } from "lucide-react";
 import InventoryFilters from "@/components/inventory/InventoryFilters";
 import InventoryTable from "@/components/inventory/InventoryTable";
 import InventoryFormModal from "@/components/inventory/InventoryFormModal";
 import InventoryTxModal from "@/components/inventory/InventoryTxModal";
 import InventoryHistoryPanel from "@/components/inventory/InventoryHistoryPanel";
+
+// 性能 #10:recharts(~400KB)懒加载到独立组件
+const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut"), {
+  ssr: false,
+  loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
+});
 import { LOW_THRESHOLD, type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
 
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
@@ -193,7 +199,7 @@ export default function InventoryPage() {
         <div className="rounded-xl border border-border bg-surface p-4">
           <h3 className="font-medium text-sm mb-3">分类分布</h3>
           {chartData.length > 0 ? (
-            <><ResponsiveContainer width="100%" height={220}><PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} dataKey="value" label={({ name, value }) => `${name ?? ""} ${value ?? 0}`} labelLine={false}>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} strokeWidth={2} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+            <><CategoryDonut data={chartData} total={chartData.reduce((s, d) => s + d.value, 0)} height={220} width={220} />
             <div className="flex flex-wrap gap-3 justify-center mt-2">{chartData.map((d, i) => <div key={d.name} className="flex items-center gap-1.5 text-xs text-muted"><span className="w-3 h-3 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} />{d.name}</div>)}</div></>
           ) : <div className="flex items-center justify-center h-[250px] text-faint text-sm">暂无数据</div>}
         </div>

@@ -25,12 +25,14 @@ export function Topbar() {
   const { teamName } = useBrand();
   const pathname = usePathname();
   const title = pageTitles[pathname] || (pathname.startsWith("/knowledge") ? "知识库" : null);
-  const [scheme, setScheme] = useState<"dark" | "light" | null>(() => getStoredScheme());
+  // SSR 一致性:首帧不读 localStorage(否则服务端 null vs 客户端 "light" 引发表单错位)
+  // 初始态为 null,挂载后 useEffect 读 localStorage 同步 class
+  const [scheme, setScheme] = useState<"dark" | "light" | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
-    // 个人明暗覆盖：仅当用户存过偏好才加 class，否则跟随团队主题（data-theme 已定明暗）
     const s = getStoredScheme();
+    setScheme(s);
     root.classList.toggle("dark", s === "dark");
     root.classList.toggle("light", s === "light");
   }, []);
@@ -38,7 +40,6 @@ export function Topbar() {
   function toggleScheme() {
     const root = document.documentElement;
     const isDark = root.classList.contains("dark") || !root.classList.contains("light");
-    // 深色主题（或默认）→ 切浅色；否则切深色
     const next: "dark" | "light" = isDark ? "light" : "dark";
     root.classList.toggle("dark", next === "dark");
     root.classList.toggle("light", next === "light");

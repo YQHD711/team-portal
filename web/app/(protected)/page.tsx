@@ -1,13 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PieChart, Pie, Cell } from "recharts";
+import dynamic from "next/dynamic";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
 import { isStaff as checkIsStaff } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
 import { useNotifications } from "@/lib/hooks";
 import { Users, Package, DollarSign, Receipt, Sparkles, ShieldAlert, AlertTriangle } from "lucide-react";
+
+// 性能 #10:recharts ~400KB 懒加载(登录后首屏)→ 仅在仪表盘渲染时才下载
+const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut"), {
+  ssr: false,
+  loading: () => <div className="w-[160px] h-[150px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
+});
 import Link from "next/link";
 
 interface DashData {
@@ -20,16 +26,15 @@ interface DashData {
   activeWiki: { id: string; projectName: string; status: string; createdAt: string }[];
   recentIncidents: { id: number; type: string; severity: string; description: string; date: string }[];
   completedWiki: number;
+  categoryCounts: { name: string; count: number }[];
   // Staff-only fields — backend omits them for regular members
   pendingPurchases?: number;
   monthSpent?: number;
   inventoryValue?: number;
 }
 
-interface InvItem { id: number; name: string; category: string; quantity: number }
-
 /** 分类环形图调色板（跟随主题 CSS 变量） */
-const DONUT_COLORS = ["var(--accent)", "var(--success)", "var(--info)", "var(--warning)", "var(--danger)"];
+const DONUT_COLORS = ["var(--accent)", "var(--success)", "var(--info)", "var(--warning)", "var(--danger)"]; // 保留兼容:低库存横条渐变备用
 
 /** 库存分级：1→危险, 2~3→警告, 4+→提示 */
 function lowStockTier(qty: number) {
@@ -73,28 +78,18 @@ export default function Home() {
     api.get<DashData>("/api/dashboard").then(setData).catch(() => null).finally(() => setLoaded(true));
   }, []);
 
-  // 拉取库存列表，按真实分类字段聚合为环形图
+  // 性能 #15:环形图数据直接来自 /api/dashboard.categoryCounts,不再拉全量库存列表
   useEffect(() => {
-    api.get<InvItem[]>("/api/inventory/")
-      .then((items) => {
-        const counts = new Map<string, number>();
-        for (const it of items) {
-          const c = it.category?.trim() || "未分类";
-          counts.set(c, (counts.get(c) ?? 0) + 1);
-        }
-        let arr = [...counts.entries()]
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value);
-        if (arr.length > 5) {
-          const head = arr.slice(0, 4);
-          const rest = arr.slice(4);
-          head.push({ name: "其他", value: rest.reduce((s, x) => s + x.value, 0) });
-          arr = head;
-        }
-        setDonut(arr);
-      })
-      .catch(() => {});
-  }, []);
+    if (!data?.categoryCounts) return;
+    let arr = [...data.categoryCounts].sort((a, b) => b.count - a.count);
+    if (arr.length > 5) {
+      const head = arr.slice(0, 4);
+      const rest = arr.slice(4);
+      head.push({ name: "其他", count: rest.reduce((s, x) => s + x.count, 0) } as any);
+      arr = head;
+    }
+    setDonut(arr.map(d => ({ name: d.name, value: d.count })));
+  }, [data?.categoryCounts]);
 
   const hour = new Date().getHours();
   const greeting = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
@@ -160,25 +155,15 @@ export default function Home() {
             <Link href="/inventory" className="text-xs text-primary font-medium">全部 →</Link>
           </div>
           <div className="flex items-center gap-6">
-            <div className="relative shrink-0" style={{ width: 160, height: 150 }}>
-              <PieChart width={160} height={150}>
-                <Pie data={donut} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                  innerRadius={52} outerRadius={70} paddingAngle={2} stroke="none">
-                  {donut.map((_, i) => <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />)}
-                </Pie>
-              </PieChart>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-[26px] font-extrabold tracking-[-0.03em] leading-none">{loaded ? totalMaterial : "-"}</span>
-                <span className="text-[11px] text-muted mt-1">种物料</span>
-              </div>
-            </div>
+            <CategoryDonut data={donut} total={totalMaterial} />
             <div className="flex-1 space-y-2.5">
               {donut.length === 0 && <div className="text-sm text-faint">{loaded ? "暂无物料数据" : <Skeleton />}</div>}
               {donut.map((d, i) => {
                 const pct = totalMaterial ? Math.round((d.value / totalMaterial) * 100) : 0;
+                const color = ["var(--accent)", "var(--success)", "var(--info)", "var(--warning)", "var(--danger)"][i % 5];
                 return (
                   <div key={d.name} className="flex items-center gap-2.5 text-xs">
-                    <span className="w-2 h-2 rounded-[3px] shrink-0" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                    <span className="w-2 h-2 rounded-[3px] shrink-0" style={{ background: color }} />
                     <span className="text-foreground flex-1 truncate">{d.name}</span>
                     <span className="text-foreground font-semibold">{d.value}</span>
                     <span className="text-faint w-8 text-right">{pct}%</span>

@@ -28,6 +28,10 @@ export interface NotificationItem {
   message: string;
   link: string | null;
   isRead: boolean;
+  /** info | success | warning | critical — UI 渲染用 */
+  level: string;
+  /** JSON 扩展数据,客户端可解析后做跳转路由参数等 */
+  payloadJson: string | null;
   createdAt: string;
 }
 
@@ -140,6 +144,67 @@ export function useNotifications() {
       setLoading(false);
     });
   }, []);
+
+  // SSE 实时订阅:SSE 失败/断开时 fallback 到 30s 轮询;新通知自动入列
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let closed = false;
+
+    // 浏览器 EventSource 不支持自定义 Authorization 头,改用 cookie 鉴权?
+    // 当前 JWT 在 localStorage → 用 fetch + ReadableStream 走 SSE
+    const startSse = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (!token) return startPolling();
+        const res = await fetch("/api/notifications/stream", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || !res.body) throw new Error(`SSE ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        while (!closed) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          // 解析 SSE 帧(event:/data:/id: + 空行)
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            const frame = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            const lines = frame.split("\n");
+            const evtLine = lines.find(l => l.startsWith("event: "));
+            const dataLine = lines.find(l => l.startsWith("data: "));
+            if (evtLine?.slice(7) === "notification" && dataLine) {
+              try {
+                const n: NotificationItem = JSON.parse(dataLine.slice(6));
+                if (mounted.current) {
+                  setNotifications(prev => prev.some(p => p.id === n.id) ? prev : [n, ...prev]);
+                }
+              } catch { /* ignore parse */ }
+            }
+          }
+        }
+        // 流结束 → fallback
+        if (!closed) startPolling();
+      } catch {
+        if (!closed) startPolling();
+      }
+    };
+
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = setInterval(() => { if (mounted.current) refresh(); }, 30000);
+    };
+
+    void startSse();
+    return () => {
+      closed = true;
+      if (pollTimer) clearInterval(pollTimer);
+      // fetch 的 ReadableStream 由 reader.read() 抛错自然终止
+    };
+  }, [refresh]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   return { notifications, unreadCount, loading, refresh };
