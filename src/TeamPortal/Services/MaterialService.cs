@@ -246,10 +246,17 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
 
     public async Task AssignStocktakeItems(int stocktakeId, Dictionary<int, int> itemUserMap)
     {
+        // 性能 #3:预加载所有相关项,内存匹配 → 100 项从 100 次查询降为 1 次
+        if (itemUserMap.Count == 0) return;
+        var itemIds = itemUserMap.Keys.ToList();
+        var items = await _db.StocktakeItems
+            .Where(s => s.StocktakeId == stocktakeId && itemIds.Contains(s.InventoryItemId))
+            .ToListAsync();
+        var byItemId = items.ToDictionary(s => s.InventoryItemId);
         foreach (var kv in itemUserMap)
         {
-            var si = await _db.StocktakeItems.FirstOrDefaultAsync(s => s.StocktakeId == stocktakeId && s.InventoryItemId == kv.Key);
-            if (si is not null) si.CheckedByUserId = kv.Value;
+            if (byItemId.TryGetValue(kv.Key, out var si))
+                si.CheckedByUserId = kv.Value;
         }
         await _db.SaveChangesAsync();
     }
@@ -279,13 +286,22 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
 
     public async Task BatchCheckStocktakeItems(int stocktakeId, int userId, List<StocktakeItemResult> results)
     {
-        foreach (var r in results)
+        // 性能 #3:预加载 + 内存匹配 → 100 项从 100 次查询降为 1 次
+        if (results.Count == 0) { /* fall through to count */ }
+        else
         {
-            var si = await _db.StocktakeItems.FirstOrDefaultAsync(s => s.StocktakeId == stocktakeId && s.InventoryItemId == r.ItemId);
-            if (si is null || si.CheckedByUserId != userId) continue;
-            si.ActualQty = r.ActualQty; si.Difference = r.ActualQty - si.SystemQty; si.Note = r.Note;
+            var itemIds = results.Select(r => r.ItemId).ToList();
+            var items = await _db.StocktakeItems
+                .Where(s => s.StocktakeId == stocktakeId && itemIds.Contains(s.InventoryItemId))
+                .ToListAsync();
+            var byItemId = items.ToDictionary(s => s.InventoryItemId);
+            foreach (var r in results)
+            {
+                if (!byItemId.TryGetValue(r.ItemId, out var si) || si.CheckedByUserId != userId) continue;
+                si.ActualQty = r.ActualQty; si.Difference = r.ActualQty - si.SystemQty; si.Note = r.Note;
+            }
+            await _db.SaveChangesAsync();
         }
-        await _db.SaveChangesAsync();
 
         // Check if all items are now submitted
         var totalItems = await _db.StocktakeItems.CountAsync(si => si.StocktakeId == stocktakeId);

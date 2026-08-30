@@ -93,7 +93,7 @@ public static class InventoryEndpoints
                     data: new { name = item.Name, grade = req.Grade, unitPrice = req.UnitPrice, locationCode = req.LocationCode },
                     ipAddress: LogService.ClientIp(ctx));
                 if (item.Quantity > 0 && item.Quantity <= 3)
-                    notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件", "/inventory");
+                    notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件", "/inventory", targetRole: "staff", level: "warning");
             }
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
@@ -111,7 +111,7 @@ public static class InventoryEndpoints
                 log.Warn("inventory", $"Part deleted: {item?.Name} (#{id}) by {actor}");
                 log.Audit("delete", actor, targetType: "item", targetId: id.ToString(),
                     data: new { name = item?.Name }, ipAddress: LogService.ClientIp(ctx));
-                notify.Notify("零件已删除", $"{actor} 删除了 {item?.Name}");
+                notify.Notify("零件已删除", $"{actor} 删除了 {item?.Name}", targetRole: "staff");
             }
             return deleted ? Results.Ok(new { deleted = true }) : Results.Problem("Not found", statusCode: 404);
         });
@@ -148,7 +148,7 @@ public static class InventoryEndpoints
             var photoUrl = $"/api/baidu/view-by-path?path={Uri.EscapeDataString(remotePath)}";
             await svc.SetPhoto(id, photoUrl);
             log.Info("inventory", $"Photo uploaded for part #{id}: {item.Name} by {user.Identity?.Name ?? "unknown"}");
-            notify.Notify("零件照片已上传", $"{item.Name} 的照片已保存到云存储", "/inventory");
+            notify.Notify("零件照片已上传", $"{item.Name} 的照片已保存到云存储", "/inventory", targetRole: "staff");
             return Results.Ok(new { success = true, photoUrl });
         }).DisableAntiforgery();
 
@@ -183,7 +183,7 @@ public static class InventoryEndpoints
             log.Audit("checkout", userName, targetType: "item", targetId: id.ToString(),
                 data: new { name = item.Name, quantity = req.Quantity, remaining = newQty }, ipAddress: LogService.ClientIp(ctx));
             if (newQty >= 0 && newQty <= InventoryService.LowStockThreshold)
-                notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {newQty} 件（{userName} 借出 {req.Quantity} 个）", "/inventory");
+                notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {newQty} 件（{userName} 借出 {req.Quantity} 个）", "/inventory", targetRole: "staff", level: "warning");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已借出 {req.Quantity} 个 {item.Name}" });
         });
 
@@ -217,7 +217,7 @@ public static class InventoryEndpoints
             log.Audit("checkin", userName, targetType: "item", targetId: id.ToString(),
                 data: new { name = item.Name, quantity = req.Quantity, total = newQty }, ipAddress: LogService.ClientIp(ctx));
             if (newQty > 3)
-                notify.Notify("库存恢复", $"零件「{item.Name}」库存已恢复至 {newQty} 件", "/inventory");
+                notify.Notify("库存恢复", $"零件「{item.Name}」库存已恢复至 {newQty} 件", "/inventory", targetRole: "staff");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已归还 {req.Quantity} 个 {item.Name}" });
         });
 
@@ -247,7 +247,7 @@ public static class InventoryEndpoints
             var newQty = item.Quantity - req.Quantity;
             log.Info("inventory", $"Consumed: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
             if (newQty <= InventoryService.LowStockThreshold)
-                notify.Notify("库存预警", $"耗材「{item.Name}」仅剩 {newQty} 件", "/inventory");
+                notify.Notify("库存预警", $"耗材「{item.Name}」仅剩 {newQty} 件", "/inventory", targetRole: "staff", level: "warning");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已消耗 {req.Quantity} 个 {item.Name}" });
         });
 

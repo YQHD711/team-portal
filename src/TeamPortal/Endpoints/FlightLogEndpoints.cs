@@ -54,7 +54,7 @@ public static class FlightLogEndpoints
             }
 
             log.Info("flightlog", $"Flight log uploaded: {file.FileName} ({file.Length} bytes) by {actor}");
-            notify.Notify("飞行日志已上传", $"{actor} 上传了 {file.FileName}", "/flightlog");
+            notify.Notify("飞行日志已上传", $"{actor} 上传了 {file.FileName}", "/flightlog", targetRole: "staff");
             return Results.Ok(new { success = true, fileName = file.FileName, localPath, cloudPath });
         }).DisableAntiforgery();
 

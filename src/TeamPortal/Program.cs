@@ -332,6 +332,7 @@ app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
 app.MapBackupEndpoints();
 app.MapMcp("/mcp").RequireAuthorization();
+app.MapRuntimeStats();
 
 app.Run();
 
@@ -364,6 +365,16 @@ static void MigrateExistingTables(AppDbContext db)
         // Notifications.TargetRole — role-based notification filtering
         MigrateSql(conn, "ALTER TABLE Notifications ADD COLUMN TargetRole TEXT NULL",
             "duplicate column");
+
+        // Notifications.Level — UI tier (info/success/warning/critical),默认 info
+        MigrateSql(conn, "ALTER TABLE Notifications ADD COLUMN Level TEXT NOT NULL DEFAULT 'info'",
+            "duplicate column");
+        // Notifications.PayloadJson — 扩展数据(跳转参数、操作类型等)
+        MigrateSql(conn, "ALTER TABLE Notifications ADD COLUMN PayloadJson TEXT NULL",
+            "duplicate column");
+        // 索引:Level 用于按等级过滤/排序
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_Notifications_Level_CreatedAt ON Notifications (Level, CreatedAt)",
+            "duplicate");
 
         // ── New tables (Phase 10+: profiles, flights, batteries, incidents, trash) ──
         MigrateSql(conn, """
@@ -621,6 +632,16 @@ static void MigrateExistingTables(AppDbContext db)
         """);
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_UserName_CreatedAt ON OperationLogs (UserName, CreatedAt)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_Action_CreatedAt ON OperationLogs (Action, CreatedAt)");
+
+        // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Category_CreatedAt ON SystemLogs (Category, CreatedAt)", "duplicate");
+
+        // ── Notifications 索引(性能 #13:铃铛加载全表扫描)──
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_Notifications_UserId_IsRead_CreatedAt ON Notifications (UserId, IsRead, CreatedAt)", "duplicate");
+
+        // ── WikiTasks 索引(性能 #13:WikiProcessingWorker 每 30s 轮询)──
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_WikiTasks_Status_CreatedAt ON WikiTasks (Status, CreatedAt)", "duplicate");
 
         // ── 组织考核认证:个人技能认证 + 部门考核(组织架构改造新增)— 全新表,EnsureCreated 对已有库不生效
         MigrateSql(conn, """

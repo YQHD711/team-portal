@@ -174,7 +174,16 @@ public class BackupService
     /// </summary>
     public bool DeleteBackup(string fileName)
     {
-        var path = Path.Combine(_backupDir, fileName);
+        // 校验 fileName 解析后在 _backupDir 内（防 ../ 逃逸到上级目录删任意文件）
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
+        var path = Path.GetFullPath(Path.Combine(_backupDir, fileName));
+        var normDir = Path.GetFullPath(_backupDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!normPath.StartsWith(normDir, StringComparison.OrdinalIgnoreCase) || normPath == normDir)
+        {
+            _log.Warn("backup", $"拒绝删除越界备份: {fileName}");
+            return false;
+        }
         if (!File.Exists(path)) return false;
 
         var latest = GetLatestBackup();

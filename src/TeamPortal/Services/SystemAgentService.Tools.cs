@@ -64,13 +64,19 @@ public partial class SystemAgentService
         return JsonSerializer.Serialize(logs.Select(l => new { l.Level, l.Category, l.Message, l.UserName, l.CreatedAt }));
     }
 
+    private static string? ResolveInside(string root, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return null;
+        var full = Path.GetFullPath(Path.Combine(root, relativePath));
+        var normRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normFull = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return normFull.StartsWith(normRoot, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
     private string ReadCodeFile(string path)
     {
-        var full = Path.GetFullPath(Path.Combine(_projectRoot, path));
-        var normalizedRoot = Path.GetFullPath(_projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normalizedFull = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!normalizedFull.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-            return $"{{\"error\": \"Access denied: {path}\"}}";
+        var full = ResolveInside(_projectRoot, path);
+        if (full is null) return $"{{\"error\": \"Access denied: {path}\"}}";
         if (!File.Exists(full)) return $"{{\"error\": \"File not found: {path}\"}}";
         var content = File.ReadAllText(full);
         _readFiles.Add(path);
@@ -114,7 +120,9 @@ public partial class SystemAgentService
     {
         try
         {
-            var searchDir = string.IsNullOrEmpty(subdir) ? _projectRoot : Path.Combine(_projectRoot, subdir);
+            var searchDir = string.IsNullOrEmpty(subdir) ? _projectRoot : ResolveInside(_projectRoot, subdir);
+            if (searchDir is null)
+                return JsonSerializer.Serialize(new { error = $"Access denied: {subdir}" });
             if (!Directory.Exists(searchDir))
                 return JsonSerializer.Serialize(new { error = $"Directory not found: {subdir}" });
 
