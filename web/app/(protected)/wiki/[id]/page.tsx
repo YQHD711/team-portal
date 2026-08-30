@@ -92,7 +92,7 @@ export default function WikiViewerPage() {
   };
 
   const renderTree = (items: CatalogItem[], depth: number = 0) => (
-    <ul className={depth === 0 ? "space-y-0.5" : "space-y-0.5 border-l border-zinc-200 dark:border-zinc-800 ml-3 pl-2"}>
+    <ul className={depth === 0 ? "space-y-0.5" : "space-y-0.5 border-l border-border ml-3 pl-2"}>
       {items.map(item => {
         const hasChildren = item.children && item.children.length > 0;
         const isActive = activePath === item.path;
@@ -103,7 +103,7 @@ export default function WikiViewerPage() {
             {hasChildren ? (
               <>
                 <button onClick={() => toggleExpand(item.path)}
-                  className="flex items-center gap-1 w-full text-left px-2 py-1.5 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">
+                  className="flex items-center gap-1 w-full text-left px-2 py-1.5 rounded text-sm hover:bg-surface-hover text-zinc-600 dark:text-faint font-medium">
                   <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", isOpen && "rotate-90")} />
                   {item.title}
                 </button>
@@ -113,7 +113,7 @@ export default function WikiViewerPage() {
               <button onClick={() => setActivePath(item.path)}
                 className={cn(
                   "flex items-center gap-1 w-full text-left px-2 py-1.5 rounded text-sm transition-colors",
-                  isActive ? "bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-medium" : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                  isActive ? "bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-medium" : "hover:bg-surface-hover text-zinc-600 dark:text-faint"
                 )}>
                 <span className="w-3.5 shrink-0" />
                 {item.title}
@@ -129,25 +129,25 @@ export default function WikiViewerPage() {
     <div className="flex h-[calc(100vh-7rem)] -m-6">
       {/* Sidebar */}
       <div className={cn(
-        "border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col transition-all duration-200",
+        "border-r border-border bg-surface flex flex-col transition-all duration-200",
         sidebarOpen ? "w-64 min-w-[16rem]" : "w-0 min-w-0 overflow-hidden border-r-0"
       )}>
         {/* Project header */}
-        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-          <button onClick={() => router.push("/wiki")} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600 mb-2 transition-colors">
+        <div className="px-4 py-3 border-b border-border">
+          <button onClick={() => router.push("/wiki")} className="flex items-center gap-1 text-xs text-faint hover:text-zinc-600 mb-2 transition-colors">
             <ArrowLeft className="h-3 w-3" /> 返回任务列表
           </button>
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-sky-500 shrink-0" />
             <div className="min-w-0">
               <h2 className="font-semibold text-sm truncate">{task?.projectName || "加载中..."}</h2>
-              <p className="text-xs text-zinc-400">{task?.status === "completed" ? "项目文档" : task?.status || "加载中..."}</p>
+              <p className="text-xs text-faint">{task?.status === "completed" ? "项目文档" : task?.status || "加载中..."}</p>
             </div>
             {task?.type === "translate" && (
               <div className="flex items-center gap-0.5 ml-2">
                 {[{ v: "zh", l: "中" }, { v: "en", l: "EN" }].map(o => (
                   <button key={o.v} onClick={() => setLang(o.v as "zh" | "en")}
-                    className={`px-1.5 py-0.5 text-xs rounded font-medium transition-colors ${lang === o.v ? "bg-sky-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"}`}>
+                    className={`px-1.5 py-0.5 text-xs rounded font-medium transition-colors ${lang === o.v ? "bg-primary text-white" : "bg-surface-subtle text-muted"}`}>
                     {o.l}
                   </button>
                 ))}
@@ -176,7 +176,7 @@ export default function WikiViewerPage() {
                     try { await fetch(`/api/wiki/tasks/${taskId}/visibility`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` }, body: JSON.stringify({ visibility: v }) }); setTask({ ...task, visibility: v }); }
                     catch { }
                   }}
-                  className="ml-1 px-2 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shrink-0"
+                  className="ml-1 px-2 py-1 text-xs rounded-lg border border-border dark:border-zinc-700 bg-surface shrink-0"
                 >
                   <option value="public">🌐 公共</option>
                   <option value="department">🏢 部门</option>
@@ -185,7 +185,7 @@ export default function WikiViewerPage() {
               </>
             )}
             {!isStaff && (
-              <span className="ml-auto text-xs text-zinc-400 shrink-0">
+              <span className="ml-auto text-xs text-faint shrink-0">
                 {task?.visibility === "department" ? "🏢 部门" : task?.visibility === "personal" ? "🔒 个人" : "🌐 公共"}
               </span>
             )}
@@ -194,7 +194,7 @@ export default function WikiViewerPage() {
         {/* Catalog tree */}
         <div className="flex-1 overflow-y-auto p-3">
           {catalog.length > 0 ? renderTree(catalog) : (
-            <div className="text-center text-sm text-zinc-400 py-8">
+            <div className="text-center text-sm text-faint py-8">
               <Loader2 className="h-5 w-5 mx-auto mb-2 animate-spin" />
               加载目录...
             </div>
@@ -204,7 +204,7 @@ export default function WikiViewerPage() {
 
       {/* Toggle */}
       <button onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="shrink-0 flex items-center justify-center w-7 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-200 dark:border-zinc-800 text-zinc-400">
+        className="shrink-0 flex items-center justify-center w-7 hover:bg-surface-hover transition-colors border-r border-border text-faint">
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </button>
 
@@ -214,14 +214,14 @@ export default function WikiViewerPage() {
           <div className="flex-1 min-w-0 p-6 lg:p-10" onClick={handleContentClick}>
             {loading ? (
               <div className="animate-pulse space-y-4">
-                <div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded w-1/3" />
-                <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
-                <div className="h-64 bg-zinc-100 dark:bg-zinc-800 rounded mt-6" />
+                <div className="h-8 bg-surface-hover rounded w-1/3" />
+                <div className="h-4 bg-surface-hover rounded w-2/3" />
+                <div className="h-64 bg-surface-subtle rounded mt-6" />
               </div>
             ) : content ? (
               <MarkdownRenderer content={content} />
             ) : (
-              <div className="text-center py-20 text-zinc-400">
+              <div className="text-center py-20 text-faint">
                 <BookOpen className="h-10 w-10 mx-auto mb-3 text-zinc-300" />
                 选择目录中的文档开始阅读
               </div>
@@ -229,12 +229,12 @@ export default function WikiViewerPage() {
           </div>
           {/* TOC sidebar */}
           {toc.length > 1 && (
-            <div className="hidden xl:block w-56 shrink-0 border-l border-zinc-200 dark:border-zinc-800 p-4 overflow-y-auto sticky top-14 self-start" style={{ maxHeight: "calc(100vh - 7rem)" }}>
-              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">本页目录</h4>
+            <div className="hidden xl:block w-56 shrink-0 border-l border-border p-4 overflow-y-auto sticky top-14 self-start" style={{ maxHeight: "calc(100vh - 7rem)" }}>
+              <h4 className="text-xs font-semibold text-faint uppercase tracking-wider mb-2">本页目录</h4>
               <nav className="space-y-0.5">
                 {toc.map(h => (
                   <a key={h.id} href={`#${h.id}`}
-                    className="block text-xs text-zinc-500 hover:text-sky-600 dark:hover:text-sky-400 truncate py-0.5"
+                    className="block text-xs text-muted hover:text-sky-600 dark:hover:text-sky-400 truncate py-0.5"
                     style={{ paddingLeft: `${(h.level - 1) * 0.75}rem` }}>
                     {h.text}
                   </a>

@@ -50,17 +50,17 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose }:
     });
   };
 
-  const inputCls = "w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500";
+  const inputCls = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-5" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-sm rounded-2xl bg-surface shadow-xl border border-border p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: def.color }} />
             {def.label}属性
           </h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
         </div>
 
         {isItem ? (
@@ -79,7 +79,7 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose }:
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">库位编码 <span className="text-xs text-zinc-400">（如 {roomCode}-A，物料按此前缀挂载）</span></label>
+              <label className="block text-sm font-medium mb-1">库位编码 <span className="text-xs text-faint">（如 {roomCode}-A，物料按此前缀挂载）</span></label>
               <input value={form.locCode} onChange={e => setForm({ ...form, locCode: e.target.value })} placeholder={`${roomCode}-A`} className={inputCls} />
             </div>
             {form.type === "shelf" && (
@@ -96,7 +96,7 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose }:
             )}
           </div>
         ) : (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted">
             {def.label}的尺寸与位置请在画布上直接拖动调整，按住 Shift 边角可旋转。
           </p>
         )}
@@ -104,16 +104,16 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose }:
         <div className="mt-5 flex items-center gap-2">
           {isItem && (
             <button onClick={() => onDelete(element.id)}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950">
+              className="rounded-lg px-3 py-2 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950">
               删除
             </button>
           )}
           <div className="flex-1" />
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-surface-hover">
             取消
           </button>
           <button onClick={handleSave} disabled={!isItem}
-            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-40">
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40">
             保存
           </button>
         </div>

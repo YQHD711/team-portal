@@ -29,7 +29,7 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
         {presets.map(p => (
           <button key={p.label} onClick={() => onRun(p.task)}
             disabled={loading}
-            className="w-full text-left p-3 rounded-xl border border-border hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+            className="w-full text-left p-3 rounded-xl border border-border hover:bg-surface-hover transition-colors disabled:opacity-50">
             <div className="text-sm font-medium">{p.label}</div>
             <div className="text-xs text-muted mt-0.5 truncate">{p.task.substring(0, 50)}...</div>
           </button>
@@ -46,7 +46,7 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
               {memory && memory.summaries > 0 && <span className="text-purple-500 ml-1">({memory.summaries}次压缩)</span>}
             </span>
           </div>
-          <button onClick={onClearMemory} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-muted hover:text-red-500" title="清除记忆">
+          <button onClick={onClearMemory} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-muted hover:text-danger" title="清除记忆">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -61,7 +61,7 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
           {history.filter(m => m.role !== "system").slice(-12).map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : ""}`}>
               <div className={`rounded-2xl px-4 py-2.5 text-sm max-w-[80%] shadow-sm ${
-                msg.role === "user" ? "rounded-br-md bg-gradient-to-br from-purple-500 to-purple-600 text-white" : "rounded-bl-md bg-slate-50 dark:bg-slate-800 border border-border"
+                msg.role === "user" ? "rounded-br-md bg-gradient-to-br from-primary to-accent text-white" : "rounded-bl-md bg-slate-50 dark:bg-slate-800 border border-border"
               }`}>
                 {msg.role === "user" && <div className="font-medium text-xs mb-1 opacity-70">管理员指令</div>}
                 <div className="whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">{msg.content}</div>
@@ -92,8 +92,8 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
         <div className="p-3 border-t border-border">
           <form onSubmit={e => { e.preventDefault(); if (task.trim()) { onRun(task); onTask(""); } }} className="flex gap-2">
             <input value={task} onChange={e => onTask(e.target.value)} placeholder="输入自定义分析指令..."
-              className="flex-1 rounded-xl border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
-            <button type="submit" disabled={loading || !task.trim()} className="rounded-xl bg-purple-500 px-4 py-2 text-white hover:bg-purple-600 disabled:opacity-50"><Send className="h-4 w-4" /></button>
+              className="flex-1 rounded-xl border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            <button type="submit" disabled={loading || !task.trim()} className="rounded-xl bg-primary px-4 py-2 text-white hover:bg-accent-hover disabled:opacity-50"><Send className="h-4 w-4" /></button>
           </form>
         </div>
       </div>

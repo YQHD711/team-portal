@@ -102,7 +102,7 @@ export default function KnowledgePage() {
 
       {/* Tree sidebar */}
       <div
-        className={`border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto transition-all duration-300 ${
+        className={`border-r border-border bg-surface overflow-y-auto transition-all duration-300 ${
           sidebarOpen
             ? "fixed lg:relative z-50 left-0 top-0 h-full w-72 lg:w-64 lg:min-w-[16rem] shadow-2xl lg:shadow-none"
             : "w-0 min-w-0 border-r-0 overflow-hidden"
@@ -111,28 +111,28 @@ export default function KnowledgePage() {
         <div className="p-3" ref={searchRef}>
           {/* Search bar */}
           <div className="relative mb-3">
-            <div className="flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1.5">
-              {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400 shrink-0" /> : <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />}
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5">
+              {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-faint shrink-0" /> : <Search className="h-3.5 w-3.5 text-faint shrink-0" />}
               <input
                 type="text" value={searchQuery} placeholder="搜索文档..."
                 onChange={e => handleSearch(e.target.value)}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-faint"
               />
-              {searchQuery && <button onClick={() => { setSearchQuery(""); setShowResults(false); }} className="text-zinc-400 hover:text-zinc-600"><X className="h-3.5 w-3.5" /></button>}
+              {searchQuery && <button onClick={() => { setSearchQuery(""); setShowResults(false); }} className="text-faint hover:text-zinc-600"><X className="h-3.5 w-3.5" /></button>}
             </div>
             {showResults && searchResults.length > 0 && (
-              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl max-h-80 overflow-y-auto">
+              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-border dark:border-zinc-700 bg-surface shadow-xl max-h-80 overflow-y-auto">
                 {searchResults.map(r => (
                   <button key={r.path} onClick={() => navigateTo(r.path)}
-                    className="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                    className="w-full text-left px-3 py-2 hover:bg-surface-hover border-b border-border last:border-0">
                     <div className="text-sm font-medium truncate">{r.path.replace(/\.md$/, "").replace(/\//g, " / ")}</div>
-                    <div className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{r.snippet.slice(0, 150)}</div>
+                    <div className="text-xs text-muted mt-0.5 line-clamp-2">{r.snippet.slice(0, 150)}</div>
                   </button>
                 ))}
               </div>
             )}
             {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !searching && (
-              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-3 text-sm text-zinc-500 text-center">未找到匹配的文档</div>
+              <div className="absolute z-50 left-3 right-3 mt-1 rounded-lg border border-border dark:border-zinc-700 bg-surface shadow-xl p-3 text-sm text-muted text-center">未找到匹配的文档</div>
             )}
           </div>
           <TreeView nodes={tree} />
@@ -142,7 +142,7 @@ export default function KnowledgePage() {
       {/* Toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="shrink-0 flex items-center justify-center w-8 sm:w-7 min-h-[2rem] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border-r border-zinc-200 dark:border-zinc-800 text-zinc-400"
+        className="shrink-0 flex items-center justify-center w-8 sm:w-7 min-h-[2rem] hover:bg-surface-hover transition-colors border-r border-border text-faint"
         aria-label={sidebarOpen ? "关闭目录" : "打开目录"}
       >
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -153,7 +153,7 @@ export default function KnowledgePage() {
         <div className="p-6 max-w-3xl">
           {filePath && canEdit && !editing && !loading && content && (
             <div className="flex justify-end mb-2">
-              <button onClick={() => { setEditing(true); setEditContent(content); }} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500">
+              <button onClick={() => { setEditing(true); setEditContent(content); }} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-surface-hover text-muted">
                 <Pencil className="h-3 w-3" /> 编辑
               </button>
             </div>
@@ -162,14 +162,14 @@ export default function KnowledgePage() {
           {editing ? (
             <div className="space-y-3">
               <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                className="w-full h-[50vh] p-4 font-mono text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none" />
+                className="w-full h-[50vh] p-4 font-mono text-sm border border-border rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none" />
               <div className="flex gap-2">
                 <button onClick={async () => {
                   setSaving(true);
                   try { await api.post("/api/admin/knowledge/write", { path: filePath + ".md", content: editContent }); setContent(editContent); setEditing(false); }
                   catch { alert("保存失败"); }
                   finally { setSaving(false); }
-                }} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-600">
+                }} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
                   <Save className="h-4 w-4" />{saving?"保存中...":"保存"}
                 </button>
                 <button onClick={() => setEditing(false)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm"><X className="h-4 w-4" />取消</button>
@@ -178,19 +178,19 @@ export default function KnowledgePage() {
           ) : (
             loading ? (
             <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-zinc-200 dark:bg-zinc-800 rounded w-1/3" />
-              <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
-              <div className="h-4 bg-zinc-100 dark:bg-zinc-800 rounded w-1/2" />
+              <div className="h-6 bg-surface-hover rounded w-1/3" />
+              <div className="h-4 bg-surface-hover rounded w-2/3" />
+              <div className="h-4 bg-surface-subtle rounded w-1/2" />
             </div>
           ) : content ? (
             <MarkdownRenderer content={content} />
           ) : filePath ? (
-            <div className="text-center py-16 text-zinc-500">文件未找到</div>
+            <div className="text-center py-16 text-muted">文件未找到</div>
           ) : (
             <div className="text-center py-20">
               <BookOpen className="h-12 w-12 mx-auto mb-3 text-zinc-300 dark:text-zinc-600" />
-              <p className="text-zinc-500 dark:text-zinc-400">请从左侧目录选择文档</p>
-              <p className="text-xs text-zinc-400 mt-1">将 .md 文件放入 data/knowledge/ 目录</p>
+              <p className="text-muted">请从左侧目录选择文档</p>
+              <p className="text-xs text-faint mt-1">将 .md 文件放入 data/knowledge/ 目录</p>
             </div>
           ))}
         </div>

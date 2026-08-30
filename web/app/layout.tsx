@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { BrandProvider } from "@/lib/brand";
 
 // 注意：metadata 是构建期静态导出，无法读取运行时数据库中的品牌配置，SEO 保持默认品牌文案；
@@ -28,10 +27,8 @@ export default function RootLayout({
       className="h-full antialiased touch-manipulation"
       suppressHydrationWarning
     >
-      <body className="min-h-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 font-sans">
-        <BrandProvider>
-          <ThemeProvider>{children}</ThemeProvider>
-        </BrandProvider>
+      <body className="min-h-full bg-background text-foreground font-sans">
+        <BrandProvider>{children}</BrandProvider>
       </body>
     </html>
   );

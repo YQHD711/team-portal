@@ -13,10 +13,10 @@ export default function InventoryFilters({ search, onSearch, category, onCategor
   return (
     <div className="flex flex-wrap gap-3">
       <div className="relative flex-1 min-w-[180px]">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-        <input type="text" placeholder="搜索零件..." value={search} onChange={e => onSearch(e.target.value)} className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-faint" />
+        <input type="text" placeholder="搜索零件..." value={search} onChange={e => onSearch(e.target.value)} className="w-full rounded-lg border border-border bg-surface pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
       </div>
-      <select value={category} onChange={e => onCategory(e.target.value)} className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+      <select value={category} onChange={e => onCategory(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
         <option value="">全部分类</option>
         {categories.map(c => <option key={c} value={c}>{c}</option>)}
       </select>

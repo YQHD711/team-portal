@@ -39,21 +39,21 @@ export function RoomShelfGrid({ layout, items }: RoomShelfGridProps) {
       {Array.from({ length: layout.cabinetCount }, (_, ci) => {
         const cab = String(ci + 1).padStart(2, "0");
         return (
-          <div key={cab} className="shrink-0 w-64 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-            <div className="text-xs font-medium text-zinc-500 mb-2">货架 {cab}</div>
+          <div key={cab} className="shrink-0 w-64 rounded-xl border border-border bg-surface p-3">
+            <div className="text-xs font-medium text-muted mb-2">货架 {cab}</div>
             <div className="space-y-1.5">
               {Array.from({ length: layout.shelfCount }, (_, si) => {
                 const shelf = String(si + 1);
                 return (
                   <div key={shelf} className="flex items-center gap-1.5">
-                    <div className="w-6 shrink-0 text-[10px] text-zinc-400 text-right">{shelf}层</div>
+                    <div className="w-6 shrink-0 text-[10px] text-faint text-right">{shelf}层</div>
                     <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${layout.positionCount}, minmax(0, 1fr))` }}>
                       {Array.from({ length: layout.positionCount }, (_, pi) => {
                         const pos = String(pi + 1).padStart(2, "0");
                         const code = buildLocCode(layout.roomCode, cab, shelf, pos);
                         const cell = byPos.get(code) || [];
                         if (cell.length === 0)
-                          return <div key={pos} className="h-10 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/50" title={`${code} 空位`} />;
+                          return <div key={pos} className="h-10 rounded bg-surface-subtle border border-border dark:border-zinc-700/50" title={`${code} 空位`} />;
                         const total = cell.reduce((s, i) => s + i.quantity, 0);
                         return (
                           <div key={pos}

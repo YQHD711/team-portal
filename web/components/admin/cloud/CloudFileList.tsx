@@ -26,11 +26,11 @@ export default function CloudFileList({ files, loading, currentDir, dragOver, up
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           {currentDir !== "/" && (
-            <button onClick={onGoBack} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"><ArrowLeft className="h-4 w-4 text-muted" /></button>
+            <button onClick={onGoBack} className="p-1 rounded hover:bg-surface-hover"><ArrowLeft className="h-4 w-4 text-muted" /></button>
           )}
           <span className="font-semibold text-sm">文件列表 ({files.length})</span>
         </div>
-        <button onClick={onRefresh} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"><RefreshCw className="h-4 w-4 text-muted" /></button>
+        <button onClick={onRefresh} className="p-1 rounded hover:bg-surface-hover"><RefreshCw className="h-4 w-4 text-muted" /></button>
       </div>
       {/* Breadcrumb */}
       <div className="px-4 py-1.5 text-xs text-muted border-b border-border flex items-center gap-1 flex-wrap">
@@ -48,10 +48,10 @@ export default function CloudFileList({ files, loading, currentDir, dragOver, up
         onDrop={onDrop}>
         {uploading && uploadProgress > 0 && (
           <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-2 text-sm text-blue-600">
+            <div className="flex items-center gap-2 text-sm text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />上传中 {uploadProgress}%
             </div>
-            <div className="h-1.5 rounded-full bg-blue-200 dark:bg-blue-900 mt-1"><div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${uploadProgress}%` }} /></div>
+            <div className="h-1.5 rounded-full bg-blue-200 dark:bg-blue-900 mt-1"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${uploadProgress}%` }} /></div>
           </div>
         )}
         {dragOver && <div className="absolute inset-0 z-10 flex items-center justify-center bg-sky-100/80 dark:bg-sky-900/50 rounded-xl"><p className="text-sky-600 font-medium">释放文件以上传</p></div>}
@@ -60,7 +60,7 @@ export default function CloudFileList({ files, loading, currentDir, dragOver, up
          files.map(f => (
           <div key={f.path}
             onClick={() => f.isDir ? onNavigate(f.path) : undefined}
-            className={`flex items-center gap-3 px-4 py-3 transition-colors ${f.isDir ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
+            className={`flex items-center gap-3 px-4 py-3 transition-colors ${f.isDir ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950" : "hover:bg-surface-hover"}`}>
             {f.isDir ? <Folder className="h-5 w-5 text-amber-500 shrink-0" /> : <File className="h-5 w-5 text-blue-500 shrink-0" />}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{f.name}</div>
@@ -68,9 +68,9 @@ export default function CloudFileList({ files, loading, currentDir, dragOver, up
             </div>
             {!f.isDir && (
               <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                <button onClick={() => onCopyLink(f)} className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-950 text-green-500" title="复制链接"><Link className="h-4 w-4" /></button>
+                <button onClick={() => onCopyLink(f)} className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-950 text-success" title="复制链接"><Link className="h-4 w-4" /></button>
                 <button onClick={() => onDownload(f)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-500" title="下载"><Download className="h-4 w-4" /></button>
-                <button onClick={() => onDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-red-500" title="删除"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => onDelete(f.path)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
               </div>
             )}
           </div>

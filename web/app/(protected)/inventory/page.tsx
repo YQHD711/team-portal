@@ -166,11 +166,11 @@ export default function InventoryPage() {
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">零件库存</h1><p className="text-sm text-zinc-500">{items.length} 种 · 共 {totalItems} 件</p></div>
+        <div><h1 className="text-2xl font-bold">零件库存</h1><p className="text-sm text-muted">{items.length} 种 · 共 {totalItems} 件</p></div>
         <div className="flex gap-2">
           {(role === "admin" || role === "部长") && <>
-            <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-600 shadow-sm"><Plus className="h-4 w-4" />添加零件</button>
-            <label className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>
+            <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover shadow-sm"><Plus className="h-4 w-4" />添加零件</button>
+            <label className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>
           </>}
         </div>
       </div>
@@ -179,7 +179,7 @@ export default function InventoryPage() {
 
       {lowItems.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           <span className="text-sm text-amber-800 dark:text-amber-200"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {LOW_THRESHOLD} 件）</span>
         </div>
       )}
@@ -190,12 +190,12 @@ export default function InventoryPage() {
         <InventoryTable items={items} loading={loading} role={role}
           onTake={handleTake} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete} />
 
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <h3 className="font-medium text-sm mb-3">分类分布</h3>
           {chartData.length > 0 ? (
             <><ResponsiveContainer width="100%" height={220}><PieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} dataKey="value" label={({ name, value }) => `${name ?? ""} ${value ?? 0}`} labelLine={false}>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} strokeWidth={2} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
-            <div className="flex flex-wrap gap-3 justify-center mt-2">{chartData.map((d, i) => <div key={d.name} className="flex items-center gap-1.5 text-xs text-zinc-500"><span className="w-3 h-3 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} />{d.name}</div>)}</div></>
-          ) : <div className="flex items-center justify-center h-[250px] text-zinc-400 text-sm">暂无数据</div>}
+            <div className="flex flex-wrap gap-3 justify-center mt-2">{chartData.map((d, i) => <div key={d.name} className="flex items-center gap-1.5 text-xs text-muted"><span className="w-3 h-3 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} />{d.name}</div>)}</div></>
+          ) : <div className="flex items-center justify-center h-[250px] text-faint text-sm">暂无数据</div>}
         </div>
       </div>
 

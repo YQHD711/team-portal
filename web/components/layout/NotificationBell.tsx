@@ -24,10 +24,10 @@ export function NotificationBell() {
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-xl hover:bg-surface-hover transition-colors">
         <Bell className="h-5 w-5" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4.5 h-4.5 text-[10px] font-bold text-white bg-red-500 rounded-full leading-none">
+          <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4.5 h-4.5 text-[10px] font-bold text-white bg-danger rounded-full leading-none">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -41,7 +41,7 @@ export function NotificationBell() {
               <h3 className="font-semibold text-sm">通知</h3>
               <div className="flex items-center gap-2">
                 {unread > 0 && <button onClick={markAll} className="text-xs text-blue-500 hover:underline">全部已读</button>}
-                <button onClick={() => setOpen(false)} className="lg:hidden p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-zinc-400">✕</button>
+                <button onClick={() => setOpen(false)} className="lg:hidden p-1 rounded hover:bg-surface-hover text-faint">✕</button>
               </div>
             </div>
           <div className="max-h-80 overflow-y-auto divide-y divide-border">

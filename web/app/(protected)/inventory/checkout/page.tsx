@@ -131,7 +131,7 @@ export default function CheckoutPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">领用管理</h1>
-          <p className="text-sm text-zinc-500">物料领用申请与审批</p>
+          <p className="text-sm text-muted">物料领用申请与审批</p>
         </div>
         <Link href="/inventory" className="text-sm text-sky-500 hover:text-sky-600 flex items-center gap-1">
           <Package className="h-4 w-4" /> 返回库存
@@ -143,12 +143,12 @@ export default function CheckoutPage() {
         allItems={allItems} itemSearch={itemSearch} onItemSearch={setItemSearch}
         newForm={newForm} setNewForm={setNewForm} onSubmit={submitNew} />
 
-      <div className="flex gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
-        <button onClick={() => setTab("my")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "my" ? "bg-white dark:bg-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
+        <button onClick={() => setTab("my")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "my" ? "bg-surface shadow-sm" : "text-muted"}`}>
           我的领用 ({my.length})
         </button>
         {isStaff && (
-          <button onClick={() => setTab("pending")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "pending" ? "bg-white dark:bg-zinc-900 shadow-sm" : "text-zinc-500"}`}>
+          <button onClick={() => setTab("pending")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "pending" ? "bg-surface shadow-sm" : "text-muted"}`}>
             待审批 ({pending.length})
           </button>
         )}

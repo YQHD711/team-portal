@@ -155,7 +155,7 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
   });
 
   return (
-    <div ref={wrapRef} className="flex-1 relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white"
+    <div ref={wrapRef} className="flex-1 relative overflow-hidden rounded-xl border border-border bg-white"
       onDragOver={handleDragOver} onDrop={handleDrop} onDragLeave={() => setHoverCell(null)}>
       <Stage
         ref={stageRef} width={size.w} height={size.h}

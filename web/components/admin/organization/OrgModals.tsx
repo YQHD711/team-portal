@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { X } from "lucide-react";
 import { Dept, OrgUser } from "./types";
 
-const inputCls = "w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500";
+const inputCls = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
 
 // ── 部门弹窗 ──
 export function DeptFormModal({ dept, onClose, onSaved }: { dept: Dept | null; onClose: () => void; onSaved: () => void }) {
@@ -21,15 +21,15 @@ export function DeptFormModal({ dept, onClose, onSaved }: { dept: Dept | null; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">{dept ? "编辑部门" : "添加部门"}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={save} className="space-y-3">
           <div><label className="block text-sm font-medium mb-1">名称</label><input value={name} onChange={e => setName(e.target.value)} className={inputCls} required /></div>
           <div><label className="block text-sm font-medium mb-1">描述</label><input value={description} onChange={e => setDescription(e.target.value)} className={inputCls} /></div>
-          <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{dept ? "保存" : "创建"}</button>
+          <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover">{dept ? "保存" : "创建"}</button>
         </form>
       </div>
     </div>
@@ -57,10 +57,10 @@ export function UserFormModal({ user, depts, onClose, onSaved }: { user: OrgUser
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">{user ? "编辑队员" : "添加队员"}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={save} className="space-y-3">
           <div><label className="block text-sm font-medium mb-1">队员名</label><input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} className={inputCls} required disabled={!!user} /></div>
@@ -76,7 +76,7 @@ export function UserFormModal({ user, depts, onClose, onSaved }: { user: OrgUser
               {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
-          <button type="submit" className="w-full rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600">{user ? "保存修改" : "创建队员"}</button>
+          <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover">{user ? "保存修改" : "创建队员"}</button>
         </form>
       </div>
     </div>

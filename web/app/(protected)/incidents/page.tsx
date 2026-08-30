@@ -62,16 +62,16 @@ export default function IncidentsPage() {
     { key: "flight", label: "飞行事故", icon: AlertTriangle },
   ] as const;
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div><h1 className="text-2xl font-bold">事故与安全</h1><p className="text-sm text-zinc-500">电池事故记录、飞行事故记录</p></div>
+      <div><h1 className="text-2xl font-bold">事故与安全</h1><p className="text-sm text-muted">电池事故记录、飞行事故记录</p></div>
 
-      <div className="flex gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-white dark:bg-zinc-700 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}>
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700"}`}>
             <t.icon className="h-4 w-4" />{t.label}
           </button>
         ))}
@@ -82,31 +82,31 @@ export default function IncidentsPage() {
         <div className="space-y-4">
           {isStaff && <button onClick={()=>{resetBatForm();setShowBatForm(true);}} className="inline-flex items-center gap-1 text-sm text-sky-600 font-medium"><Plus className="h-4 w-4"/>记录电池事故</button>}
           {showBatForm && (
-            <div className="rounded-xl border p-4 bg-white dark:bg-zinc-900 space-y-3">
+            <div className="rounded-xl border p-4 bg-surface space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-medium mb-1">电池编号</label><input value={bNum} onChange={e=>setBNum(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="如 BAT-001"/></div>
                 <div><label className="block text-xs font-medium mb-1">状态</label><select value={bHealth} onChange={e=>setBHealth(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">{BATTERY_HEALTH.map(h=><option key={h}>{h}</option>)}</select></div>
                 <div><label className="block text-xs font-medium mb-1">日期</label><input type="date" value={bDate} onChange={e=>setBDate(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm"/></div>
               </div>
               <div><label className="block text-xs font-medium mb-1">备注</label><input value={bNotes} onChange={e=>setBNotes(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="事故描述..."/></div>
-              <div className="flex gap-2 justify-end"><button onClick={resetBatForm} className="px-3 py-1.5 rounded-lg text-sm border">取消</button><button onClick={saveBattery} className="px-3 py-1.5 rounded-lg text-sm bg-sky-500 text-white">{editBatId?"更新":"记录"}</button></div>
+              <div className="flex gap-2 justify-end"><button onClick={resetBatForm} className="px-3 py-1.5 rounded-lg text-sm border">取消</button><button onClick={saveBattery} className="px-3 py-1.5 rounded-lg text-sm bg-primary text-white">{editBatId?"更新":"记录"}</button></div>
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {batteries.map(b => (
-              <div key={b.id} className="rounded-xl border p-4 bg-white dark:bg-zinc-900">
+              <div key={b.id} className="rounded-xl border p-4 bg-surface">
                 <div className="flex justify-between items-start">
                   <div className="font-bold text-lg">{b.batteryNumber}</div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${b.health==="正常"?"bg-green-100 text-green-700":b.health==="报废"?"bg-red-100 text-red-700":"bg-yellow-100 text-yellow-700"}`}>{b.health}</span>
                 </div>
-                <div className="text-sm text-zinc-500 mt-2 space-y-1">
+                <div className="text-sm text-muted mt-2 space-y-1">
                   <div>日期: {b.incidentDate ? new Date(b.incidentDate).toLocaleDateString("zh-CN") : "-"}</div>
-                  {b.notes && <div className="text-zinc-400 text-xs">{b.notes}</div>}
+                  {b.notes && <div className="text-faint text-xs">{b.notes}</div>}
                 </div>
                 {isStaff && <div className="flex gap-1 mt-3"><button onClick={()=>editBattery(b)} className="text-xs text-sky-500">编辑</button><button onClick={async()=>{await api.delete(`/api/batteries/${b.id}`);fetchAll();}} className="text-xs text-red-400 ml-2">删除</button></div>}
               </div>
             ))}
-            {batteries.length === 0 && <div className="col-span-3 p-12 text-center text-zinc-400">暂无电池事故记录</div>}
+            {batteries.length === 0 && <div className="col-span-3 p-12 text-center text-faint">暂无电池事故记录</div>}
           </div>
         </div>
       )}
@@ -116,7 +116,7 @@ export default function IncidentsPage() {
         <div className="space-y-4">
           {isStaff && <button onClick={()=>{resetIncForm();setShowIncForm(true);}} className="inline-flex items-center gap-1 text-sm text-sky-600 font-medium"><Plus className="h-4 w-4"/>记录事故</button>}
           {showIncForm && (
-            <div className="rounded-xl border p-4 bg-white dark:bg-zinc-900 space-y-3">
+            <div className="rounded-xl border p-4 bg-surface space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-medium mb-1">类型</label><select value={iType} onChange={e=>setIType(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">{INCIDENT_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
                 <div><label className="block text-xs font-medium mb-1">严重程度</label><select value={iSev} onChange={e=>setISev(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">{SEVERITIES.map(s=><option key={s}>{s}</option>)}</select></div>
@@ -125,12 +125,12 @@ export default function IncidentsPage() {
               </div>
               <div><label className="block text-xs font-medium mb-1">描述</label><textarea value={iDesc} onChange={e=>setIDesc(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm"/></div>
               <div><label className="block text-xs font-medium mb-1">处理结果</label><input value={iRes} onChange={e=>setIRes(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm"/></div>
-              <div className="flex gap-2 justify-end"><button onClick={resetIncForm} className="px-3 py-1.5 rounded-lg text-sm border">取消</button><button onClick={saveIncident} className="px-3 py-1.5 rounded-lg text-sm bg-sky-500 text-white">{editIncId?"更新":"记录"}</button></div>
+              <div className="flex gap-2 justify-end"><button onClick={resetIncForm} className="px-3 py-1.5 rounded-lg text-sm border">取消</button><button onClick={saveIncident} className="px-3 py-1.5 rounded-lg text-sm bg-primary text-white">{editIncId?"更新":"记录"}</button></div>
             </div>
           )}
-          <div className="rounded-xl border bg-white dark:bg-zinc-900 divide-y">
-            {incidents.length === 0 ? <div className="p-12 text-center text-zinc-400">暂无飞行事故记录</div> : incidents.map(i => (
-              <div key={i.id} className="p-4"><div className="flex items-start justify-between"><div className="flex-1"><div className="flex items-center gap-2"><span className="font-medium">{i.type}</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[i.severity]}`}>{i.severity}</span><span className="text-xs text-zinc-400">{new Date(i.date).toLocaleDateString("zh-CN")}</span></div><div className="text-sm mt-1">{i.description}</div>{i.resolution && <div className="text-sm text-green-600 mt-1">✅ 处理: {i.resolution}</div>}{i.reportedBy && <div className="text-xs text-zinc-400 mt-1">报告人: {i.reportedBy}</div>}</div>{isStaff && <div className="flex gap-1"><button onClick={()=>editIncident(i)} className="text-xs text-sky-500">编辑</button><button onClick={async()=>{await api.delete(`/api/incidents/${i.id}`);fetchAll();}} className="text-xs text-red-400 ml-2">删除</button></div>}</div></div>
+          <div className="rounded-xl border bg-surface divide-y">
+            {incidents.length === 0 ? <div className="p-12 text-center text-faint">暂无飞行事故记录</div> : incidents.map(i => (
+              <div key={i.id} className="p-4"><div className="flex items-start justify-between"><div className="flex-1"><div className="flex items-center gap-2"><span className="font-medium">{i.type}</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[i.severity]}`}>{i.severity}</span><span className="text-xs text-faint">{new Date(i.date).toLocaleDateString("zh-CN")}</span></div><div className="text-sm mt-1">{i.description}</div>{i.resolution && <div className="text-sm text-success mt-1">✅ 处理: {i.resolution}</div>}{i.reportedBy && <div className="text-xs text-faint mt-1">报告人: {i.reportedBy}</div>}</div>{isStaff && <div className="flex gap-1"><button onClick={()=>editIncident(i)} className="text-xs text-sky-500">编辑</button><button onClick={async()=>{await api.delete(`/api/incidents/${i.id}`);fetchAll();}} className="text-xs text-red-400 ml-2">删除</button></div>}</div></div>
             ))}
           </div>
         </div>

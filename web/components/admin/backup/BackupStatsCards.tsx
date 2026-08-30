@@ -20,7 +20,7 @@ export default function BackupStatsCards({ stats }: Props) {
       </div>
       <div className="rounded-xl border border-border bg-surface p-4 flex items-center gap-3">
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/40">
-          <FileArchive className="h-5 w-5 text-green-500" />
+          <FileArchive className="h-5 w-5 text-success" />
         </div>
         <div>
           <div className="text-xl font-bold">{stats.backupCount}</div>
@@ -44,10 +44,10 @@ export default function BackupStatsCards({ stats }: Props) {
         <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${
           stats.dbExists ? "bg-green-100 dark:bg-green-900/50" : "bg-red-100 dark:bg-red-900/50"
         }`}>
-          <ShieldCheck className={`h-5 w-5 ${stats.dbExists ? "text-green-500" : "text-red-500"}`} />
+          <ShieldCheck className={`h-5 w-5 ${stats.dbExists ? "text-success" : "text-danger"}`} />
         </div>
         <div>
-          <div className={`text-xl font-bold ${stats.dbExists ? "text-green-600" : "text-red-500"}`}>
+          <div className={`text-xl font-bold ${stats.dbExists ? "text-success" : "text-danger"}`}>
             {stats.dbExists ? "正常" : "异常"}
           </div>
           <div className="text-xs text-muted">数据库状态</div>

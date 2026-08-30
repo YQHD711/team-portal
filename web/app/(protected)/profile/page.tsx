@@ -83,7 +83,7 @@ export default function ProfilePage() {
     finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -98,13 +98,13 @@ export default function ProfilePage() {
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${LEVEL_COLORS[profile?.level || "学员"]}`}>
               {profile?.level || "学员"}
             </span>
-            <span className="text-sm text-zinc-500">{profile?.totalFlightHours || 0} 飞行小时</span>
+            <span className="text-sm text-muted">{profile?.totalFlightHours || 0} 飞行小时</span>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
         {[
           { key: "info", label: "基本信息", icon: User },
           { key: "training", label: "培训记录", icon: GraduationCap },
@@ -112,7 +112,7 @@ export default function ProfilePage() {
           { key: "certifications", label: "我的认证", icon: BadgeCheck },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-white dark:bg-zinc-700 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
             <t.icon className="h-4 w-4" />{t.label}
           </button>
         ))}
@@ -120,7 +120,7 @@ export default function ProfilePage() {
 
       {/* Tab: Info */}
       {tab === "info" && (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-4">
+        <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
           {editMode ? (
             <>
               <div className="grid grid-cols-2 gap-4">
@@ -153,7 +153,7 @@ export default function ProfilePage() {
                   {FLIGHT_TYPES.map(ft => {
                     const checked = flightTypes.includes(ft);
                     return (
-                      <label key={ft} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border transition-colors ${checked ? "bg-sky-50 border-sky-300 text-sky-700 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-300" : "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700"}`}>
+                      <label key={ft} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer border transition-colors ${checked ? "bg-sky-50 border-sky-300 text-sky-700 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-300" : "border-border text-muted hover:border-border"}`}>
                         <input type="checkbox" className="sr-only" checked={checked} onChange={() => setFlightTypes(prev => prev.includes(ft) ? prev.filter(f => f !== ft) : [...prev, ft])} />
                         {ft}
                       </label>
@@ -164,15 +164,15 @@ export default function ProfilePage() {
               <div>
                 <label className="block text-sm font-medium mb-1">技能标签</label>
                 <input value={skills} onChange={e => setSkills(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="逗号分隔,如: STM32,焊接,PCB设计 / PS,视频剪辑" />
-                <p className="text-xs text-zinc-400 mt-1">展示在组织架构与队员档案卡片上</p>
+                <p className="text-xs text-faint mt-1">展示在组织架构与队员档案卡片上</p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">个人简介</label>
                 <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="介绍一下自己..." />
               </div>
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setEditMode(false)} className="px-4 py-2 rounded-lg text-sm border hover:bg-zinc-50 dark:hover:bg-zinc-800">取消</button>
-                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-50">
+                <button onClick={() => setEditMode(false)} className="px-4 py-2 rounded-lg text-sm border hover:bg-surface-hover">取消</button>
+                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存
                 </button>
               </div>
@@ -180,16 +180,16 @@ export default function ProfilePage() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-zinc-500">飞手等级</span><p className="font-medium mt-0.5">{profile?.level || "-"}</p></div>
-                <div><span className="text-zinc-500">累计飞行小时</span><p className="font-medium mt-0.5">{profile?.totalFlightHours || 0} 小时</p></div>
-                <div><span className="text-zinc-500">首次飞行日期</span><p className="font-medium mt-0.5">{profile?.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
-                <div><span className="text-zinc-500">最后更新</span><p className="font-medium mt-0.5">{profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString("zh-CN") : "-"}</p></div>
-                <div><span className="text-zinc-500">紧急联系人</span><p className="font-medium mt-0.5">{profile?.emergencyContact || "-"}</p></div>
-                <div><span className="text-zinc-500">紧急联系电话</span><p className="font-medium mt-0.5">{profile?.emergencyPhone || "-"}</p></div>
+                <div><span className="text-muted">飞手等级</span><p className="font-medium mt-0.5">{profile?.level || "-"}</p></div>
+                <div><span className="text-muted">累计飞行小时</span><p className="font-medium mt-0.5">{profile?.totalFlightHours || 0} 小时</p></div>
+                <div><span className="text-muted">首次飞行日期</span><p className="font-medium mt-0.5">{profile?.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
+                <div><span className="text-muted">最后更新</span><p className="font-medium mt-0.5">{profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString("zh-CN") : "-"}</p></div>
+                <div><span className="text-muted">紧急联系人</span><p className="font-medium mt-0.5">{profile?.emergencyContact || "-"}</p></div>
+                <div><span className="text-muted">紧急联系电话</span><p className="font-medium mt-0.5">{profile?.emergencyPhone || "-"}</p></div>
               </div>
               {profile?.flightTypes && (
                 <div>
-                  <span className="text-zinc-500 text-sm">飞行种类</span>
+                  <span className="text-muted text-sm">飞行种类</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {profile.flightTypes.split(",").filter(Boolean).map(ft => (
                       <span key={ft} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{ft}</span>
@@ -199,7 +199,7 @@ export default function ProfilePage() {
               )}
               {profile?.skills && (
                 <div>
-                  <span className="text-zinc-500 text-sm">技能标签</span>
+                  <span className="text-muted text-sm">技能标签</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {profile.skills.split(",").map(s => s.trim()).filter(Boolean).map(s => (
                       <span key={s} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"><Tag className="h-3 w-3 opacity-60" />{s}</span>
@@ -207,9 +207,9 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-              {profile?.bio && <div><span className="text-zinc-500 text-sm">个人简介</span><p className="mt-1 text-sm">{profile.bio}</p></div>}
+              {profile?.bio && <div><span className="text-muted text-sm">个人简介</span><p className="mt-1 text-sm">{profile.bio}</p></div>}
               <div className="flex justify-end">
-                <button onClick={() => setEditMode(true)} className="px-4 py-2 rounded-lg text-sm bg-sky-500 text-white hover:bg-sky-600">编辑档案</button>
+                <button onClick={() => setEditMode(true)} className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-accent-hover">编辑档案</button>
               </div>
             </>
           )}
@@ -218,9 +218,9 @@ export default function ProfilePage() {
 
       {/* Tab: Training */}
       {tab === "training" && (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
+        <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
           {profile?.trainingRecords?.length === 0 ? (
-            <div className="p-12 text-center text-zinc-400">
+            <div className="p-12 text-center text-faint">
               <GraduationCap className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
               <p>暂无培训记录</p>
               <p className="text-xs mt-1">请联系部长或管理员添加</p>
@@ -230,11 +230,11 @@ export default function ProfilePage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="font-medium">{t.courseName}</div>
-                  <div className="text-sm text-zinc-500 mt-0.5">
+                  <div className="text-sm text-muted mt-0.5">
                     {new Date(t.examDate).toLocaleDateString("zh-CN")}
                     {t.examiner && ` · 考官: ${t.examiner}`}
                   </div>
-                  {t.notes && <div className="text-sm text-zinc-400 mt-1">{t.notes}</div>}
+                  {t.notes && <div className="text-sm text-faint mt-1">{t.notes}</div>}
                 </div>
                 {t.score !== null && t.score !== undefined && (
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${t.score >= 80 ? "bg-green-100 text-green-700" : t.score >= 60 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
@@ -249,9 +249,9 @@ export default function ProfilePage() {
 
       {/* Tab: Competitions */}
       {tab === "competitions" && (
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
+        <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
           {profile?.competitionRecords?.length === 0 ? (
-            <div className="p-12 text-center text-zinc-400">
+            <div className="p-12 text-center text-faint">
               <Trophy className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
               <p>暂无参赛记录</p>
               <p className="text-xs mt-1">请联系部长或管理员添加</p>
@@ -261,12 +261,12 @@ export default function ProfilePage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="font-medium">{c.competitionName}</div>
-                  <div className="text-sm text-zinc-500 mt-0.5">
+                  <div className="text-sm text-muted mt-0.5">
                     {new Date(c.date).toLocaleDateString("zh-CN")}
                     {c.event && ` · ${c.event}`}
-                    {c.ranking && <span className="ml-2 font-medium text-amber-600">🏆 {c.ranking}</span>}
+                    {c.ranking && <span className="ml-2 font-medium text-warning">🏆 {c.ranking}</span>}
                   </div>
-                  {c.notes && <div className="text-sm text-zinc-400 mt-1">{c.notes}</div>}
+                  {c.notes && <div className="text-sm text-faint mt-1">{c.notes}</div>}
                 </div>
                 {c.certificate && (
                   <a href={c.certificate} target="_blank" className="text-xs text-sky-500 hover:underline shrink-0">查看证书</a>

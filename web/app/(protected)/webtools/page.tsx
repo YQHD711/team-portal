@@ -11,20 +11,20 @@ export default function WebToolsPage() {
       <div className="flex items-center justify-between gap-4 mb-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold">飞行日志分析工具集</h1>
-          <p className="text-sm text-zinc-500">ArduPilot WebTools · 日志分析、图表绘制与飞行数据可视化</p>
+          <p className="text-sm text-muted">ArduPilot WebTools · 日志分析、图表绘制与飞行数据可视化</p>
         </div>
         <a
           href={WEBTOOLS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
           <ExternalLink className="h-4 w-4" />
           新窗口打开
         </a>
       </div>
 
-      <div className="flex-1 min-h-0 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-zinc-900">
+      <div className="flex-1 min-h-0 rounded-xl border border-border overflow-hidden bg-surface">
         <iframe
           src={WEBTOOLS_IFRAME_SRC}
           title="飞行日志分析工具集"

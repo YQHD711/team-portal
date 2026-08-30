@@ -87,10 +87,10 @@ export default function OperationLogsTab() {
           共 {total.toLocaleString()} 条操作记录
         </div>
         <div className="flex gap-2">
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover">
             <Download className="h-4 w-4" />导出
           </button>
-          <button onClick={fetchOps} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button onClick={fetchOps} className="p-2 rounded hover:bg-surface-hover">
             <RefreshCw className="h-5 w-5 text-muted" />
           </button>
         </div>
@@ -99,65 +99,65 @@ export default function OperationLogsTab() {
       {/* 筛选 */}
       <div className="flex flex-wrap gap-2 items-center">
         <input type="text" placeholder="操作人..." value={user} onChange={e => { setUser(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm w-32" />
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-32" />
         <select value={action} onChange={e => { setAction(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm">
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
           <option value="">全部操作类型</option>
           {Object.entries(actionLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <div className="flex items-center gap-1 text-sm text-muted">
           <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" />
           <span>—</span>
           <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" />
         </div>
       </div>
 
       {/* 表格 */}
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-36 hidden md:table-cell">时间</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-24">操作人</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-24">操作类型</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500">目标</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-32 hidden sm:table-cell">来源IP</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-8"></th>
+            <thead><tr className="border-b border-border bg-background">
+              <th className="px-4 py-3 text-left font-medium text-muted w-36 hidden md:table-cell">时间</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-24">操作人</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-24">操作类型</th>
+              <th className="px-4 py-3 text-left font-medium text-muted">目标</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-32 hidden sm:table-cell">来源IP</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-8"></th>
             </tr></thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <tbody className="divide-y divide-border-subtle">
               {loading && items.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-zinc-400">加载中...</td></tr>
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-faint">加载中...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-faint">
                   <History className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无操作记录
                 </td></tr>
               ) : items.map(o => (
                 <tr key={o.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer align-top"
                   onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs hidden md:table-cell whitespace-nowrap">{new Date(o.createdAt).toLocaleString("zh-CN")}</td>
+                  <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell whitespace-nowrap">{new Date(o.createdAt).toLocaleString("zh-CN")}</td>
                   <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{o.userName}</td>
                   <td className="px-4 py-2.5">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${actionColors[o.action] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>
                       {actionLabel(o.action)}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-500 text-xs">
+                  <td className="px-4 py-2.5 text-muted text-xs">
                     <span className="font-mono">{o.targetType ?? "—"}</span>
                     {o.targetId && <span className="ml-1 font-mono">#{o.targetId}</span>}
                     {o.data && (
                       <div className="mt-1">
                         {expanded === o.id ? (
-                          <pre className="p-2 rounded bg-zinc-50 dark:bg-zinc-950 text-[11px] text-zinc-500 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{o.data}</pre>
+                          <pre className="p-2 rounded bg-background text-[11px] text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{o.data}</pre>
                         ) : (
-                          <span className="text-zinc-400 truncate block max-w-xs">{o.data}</span>
+                          <span className="text-faint truncate block max-w-xs">{o.data}</span>
                         )}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs font-mono hidden sm:table-cell">{o.ipAddress || "—"}</td>
-                  <td className="px-4 py-2.5 text-zinc-400">
+                  <td className="px-4 py-2.5 text-faint text-xs font-mono hidden sm:table-cell">{o.ipAddress || "—"}</td>
+                  <td className="px-4 py-2.5 text-faint">
                     {o.data ? (expanded === o.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : null}
                   </td>
                 </tr>
@@ -170,7 +170,7 @@ export default function OperationLogsTab() {
       <div className="flex justify-center gap-2">
         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
           className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">上一页</button>
-        <span className="px-3 py-1 text-sm text-zinc-500">第 {page} / {totalPages} 页</span>
+        <span className="px-3 py-1 text-sm text-muted">第 {page} / {totalPages} 页</span>
         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
           className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">下一页</button>
       </div>

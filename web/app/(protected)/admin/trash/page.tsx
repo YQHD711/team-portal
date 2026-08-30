@@ -45,25 +45,25 @@ export default function TrashPage() {
     fetchItems();
   };
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">回收站</h1>
-          <p className="text-sm text-zinc-500">已删除的数据保留 30 天，过期自动清理</p>
+          <p className="text-sm text-muted">已删除的数据保留 30 天，过期自动清理</p>
         </div>
-        <button onClick={cleanup} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm border border-red-200 text-red-600 hover:bg-red-50">
+        <button onClick={cleanup} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm border border-red-200 text-danger hover:bg-red-50">
           <AlertTriangle className="h-4 w-4" />清理过期记录
         </button>
       </div>
 
       {actionMsg && <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm">{actionMsg}</div>}
 
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
+      <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
         {items.length === 0 ? (
-          <div className="p-12 text-center text-zinc-400">
+          <div className="p-12 text-center text-faint">
             <Trash2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
             <p>回收站为空</p>
             <p className="text-xs mt-1">删除的数据会出现在这里</p>
@@ -72,7 +72,7 @@ export default function TrashPage() {
           <div key={item.id} className="flex items-center justify-between p-4">
             <div className="flex-1 min-w-0">
               <div className="font-medium text-sm truncate">{item.title}</div>
-              <div className="text-xs text-zinc-400 mt-0.5">
+              <div className="text-xs text-faint mt-0.5">
                 <span>{tableLabels[item.originalTable] || item.originalTable}</span>
                 <span className="mx-1">·</span>
                 <span>{new Date(item.deletedAt).toLocaleString("zh-CN")}</span>
@@ -84,7 +84,7 @@ export default function TrashPage() {
               <button onClick={() => restore(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-green-50 text-green-700 hover:bg-green-100">
                 <RotateCcw className="h-3.5 w-3.5" />恢复
               </button>
-              <button onClick={() => deleteForever(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-red-50 text-red-600 hover:bg-red-100">
+              <button onClick={() => deleteForever(item.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-red-50 text-danger hover:bg-red-100">
                 <XCircle className="h-3.5 w-3.5" />永久删除
               </button>
             </div>

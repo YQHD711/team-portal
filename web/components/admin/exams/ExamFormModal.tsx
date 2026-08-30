@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 interface Dept { id: number; name: string; }
 interface Exam { id: number; departmentId: number; title: string; examType: string; status: string; examDate: string | null; }
 
-const inputCls = "w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500";
+const inputCls = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
 
 const TEMPLATES = [
   { label: "理论考核", title: "2026秋季理论考核", examType: "theory" },
@@ -67,10 +67,10 @@ export default function ExamFormModal({ depts, exam, onClose, onSaved }: Props) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">{exam ? "编辑考核" : "创建考核"}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={submit} className="space-y-3">
           {!exam && (
@@ -81,15 +81,15 @@ export default function ExamFormModal({ depts, exam, onClose, onSaved }: Props) 
                   {TEMPLATES.map(t => (
                     <button key={t.label} type="button"
                       onClick={() => setForm(f => ({ ...f, title: t.title, examType: t.examType }))}
-                      className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-1.5 text-xs hover:border-sky-500 hover:text-sky-600">
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-sky-500 hover:text-sky-600">
                       {t.label}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">部门 * <span className="text-xs text-zinc-400">(可多选, 批量创建同名考核)</span></label>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 p-3 max-h-40 overflow-y-auto">
+                <label className="block text-sm font-medium mb-1">部门 * <span className="text-xs text-faint">(可多选, 批量创建同名考核)</span></label>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg border border-border p-3 max-h-40 overflow-y-auto">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox" checked={allSel} onChange={toggleAll} className="h-4 w-4 rounded" />全选
                   </label>
@@ -124,7 +124,7 @@ export default function ExamFormModal({ depts, exam, onClose, onSaved }: Props) 
             </div>
           </div>
           <div><label className="block text-sm font-medium mb-1">考核日期</label><input type="date" value={form.examDate} onChange={e => setForm({ ...form, examDate: e.target.value })} className={inputCls} /></div>
-          <button type="submit" disabled={saving} className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-60">
+          <button type="submit" disabled={saving} className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {exam ? "保存" : `创建${selDepts.size > 1 ? ` ${selDepts.size} 场` : ""}`}
           </button>

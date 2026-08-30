@@ -38,7 +38,7 @@ function MermaidBlock({ code }: { code: string }) {
 
   if (failed) {
     return (
-      <div className="mermaid my-4 text-sm text-red-500 p-3 border border-red-200 rounded-lg">
+      <div className="mermaid my-4 text-sm text-danger p-3 border border-red-200 rounded-lg">
         图表渲染失败，请检查语法
       </div>
     );
@@ -67,7 +67,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
             if (!match) {
               return (
-                <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 text-sm" {...props}>
+                <code className="rounded bg-surface-subtle px-1 py-0.5 text-sm" {...props}>
                   {children}
                 </code>
               );

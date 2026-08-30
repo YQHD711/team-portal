@@ -159,13 +159,13 @@ export default function AdminProfileDetailPage() {
   const toggleCompForm = () => { setShowCompForm(!showCompForm); setEditCompId(null); setCompName(""); setCompEvent(""); setCompRanking(""); setCompCert(""); setCompNotes(""); };
   const cancelCompForm = () => { setShowCompForm(false); setEditCompId(null); };
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
   if (!profile) return null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back */}
-      <button onClick={() => router.push("/admin/profiles")} className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700">
+      <button onClick={() => router.push("/admin/profiles")} className="inline-flex items-center gap-1 text-sm text-muted hover:text-zinc-700">
         <ArrowLeft className="h-4 w-4" />返回队员列表
       </button>
 
@@ -173,7 +173,7 @@ export default function AdminProfileDetailPage() {
       <ProfileHeader profile={profile} />
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
         {[
           { key: "info", label: "基本信息", icon: User },
           { key: "training", label: `培训 (${profile.trainingRecords.length})`, icon: GraduationCap },
@@ -181,7 +181,7 @@ export default function AdminProfileDetailPage() {
           { key: "certifications", label: "技能认证", icon: BadgeCheck },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-white dark:bg-zinc-700 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
             <t.icon className="h-4 w-4" />{t.label}
           </button>
         ))}

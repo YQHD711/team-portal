@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       aria-label={title || "对话框"}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-800 p-6"
+        className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
@@ -48,7 +48,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             <h2 className="text-lg font-bold">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="p-1 rounded hover:bg-surface-hover"
               aria-label="关闭"
             >
               <X className="h-5 w-5" />

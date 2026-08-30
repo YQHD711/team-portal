@@ -99,31 +99,31 @@ export default function RequestLogsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover">
             <Download className="h-4 w-4" />导出
           </button>
-          <button onClick={handleCleanup} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+          <button onClick={handleCleanup} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover">
             <Trash2 className="h-4 w-4" />清理旧日志
           </button>
-          <button onClick={handleClearAll} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950">
+          <button onClick={handleClearAll} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-danger hover:bg-red-50 dark:hover:bg-red-950">
             <Trash2 className="h-4 w-4" />清除全部
           </button>
-          <button onClick={() => { fetchLogs(); fetchStats(); }} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button onClick={() => { fetchLogs(); fetchStats(); }} className="p-2 rounded hover:bg-surface-hover">
             <RefreshCw className="h-5 w-5 text-muted" />
           </button>
         </div>
       </div>
 
       {msg && (
-        <div className={`text-sm p-3 rounded-xl ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{msg}</div>
+        <div className={`text-sm p-3 rounded-xl ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{msg}</div>
       )}
 
       {/* Stats cards */}
       {stats && (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-surface p-4 flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800">
-              <Activity className="h-5 w-5 text-slate-500" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-surface-hover">
+              <Activity className="h-5 w-5 text-muted" />
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.total.toLocaleString()}</div>
@@ -132,11 +132,11 @@ export default function RequestLogsTab() {
           </div>
           <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/50">
-              <XCircle className="h-5 w-5 text-red-500" />
+              <XCircle className="h-5 w-5 text-danger" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.errors24h}</div>
-              <div className="text-xs text-red-500">24h 错误</div>
+              <div className="text-2xl font-bold text-danger dark:text-red-400">{stats.errors24h}</div>
+              <div className="text-xs text-danger">24h 错误</div>
             </div>
           </div>
           <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 flex items-center gap-3">
@@ -144,7 +144,7 @@ export default function RequestLogsTab() {
               <AlertTriangle className="h-5 w-5 text-amber-500" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{stats.warns24h}</div>
+              <div className="text-2xl font-bold text-warning dark:text-amber-400">{stats.warns24h}</div>
               <div className="text-xs text-amber-500">24h 警告</div>
             </div>
           </div>
@@ -155,12 +155,12 @@ export default function RequestLogsTab() {
       {stats && stats.recentErrors.length > 0 && (
         <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4">
           <div className="flex items-center gap-2 mb-2">
-            <ShieldCheck className="h-4 w-4 text-red-500" />
+            <ShieldCheck className="h-4 w-4 text-danger" />
             <h3 className="font-semibold text-sm text-red-700 dark:text-red-300">最近错误</h3>
           </div>
           <div className="space-y-1">
             {stats.recentErrors.map((e, i) => (
-              <div key={i} className="text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+              <div key={i} className="text-xs text-danger dark:text-red-400 flex items-center gap-2">
                 <span className="shrink-0 px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/50 font-mono">{e.category}</span>
                 <span className="truncate">{e.message}</span>
                 <span className="shrink-0 text-red-400 ml-auto">
@@ -176,43 +176,43 @@ export default function RequestLogsTab() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <select value={level} onChange={e => { setLevel(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm">
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
           <option value="">全部级别</option>
           <option value="info">信息</option>
           <option value="warn">警告</option>
           <option value="error">错误</option>
         </select>
         <select value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm">
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
           {categories.map(c => <option key={c} value={c === "all" ? "" : c}>{c === "all" ? "全部分类" : c}</option>)}
         </select>
         <input type="text" placeholder="搜索关键词..." value={keyword} onChange={e => { setKeyword(e.target.value); setPage(1); }}
-          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm w-40" />
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm w-40" />
         <div className="flex items-center gap-1 text-sm text-muted">
           <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" />
           <span>—</span>
           <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm" />
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" />
         </div>
       </div>
 
       {/* Log table */}
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-16">级别</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-20">分类</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500">消息</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-20 hidden sm:table-cell">用户</th>
-              <th className="px-4 py-3 text-left font-medium text-zinc-500 w-36 hidden md:table-cell">时间</th>
+            <thead><tr className="border-b border-border bg-background">
+              <th className="px-4 py-3 text-left font-medium text-muted w-16">级别</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-20">分类</th>
+              <th className="px-4 py-3 text-left font-medium text-muted">消息</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-20 hidden sm:table-cell">用户</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-36 hidden md:table-cell">时间</th>
             </tr></thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <tbody className="divide-y divide-border-subtle">
               {loading && logs.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400">加载中...</td></tr>
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-faint">加载中...</td></tr>
               ) : logs.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400">
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-faint">
                   <Activity className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无日志记录
                 </td></tr>
               ) : logs.map(l => (
@@ -223,15 +223,15 @@ export default function RequestLogsTab() {
                       {levelIcons[l.level]}{l.level}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-500 text-xs font-mono">{l.category}</td>
+                  <td className="px-4 py-2.5 text-muted text-xs font-mono">{l.category}</td>
                   <td className="px-4 py-2.5">
                     <div className="truncate max-w-xs lg:max-w-md">{l.message}</div>
                     {expanded === l.id && l.detail && (
-                      <div className="mt-1 p-2 rounded bg-zinc-50 dark:bg-zinc-950 text-xs text-zinc-500 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{l.detail}</div>
+                      <div className="mt-1 p-2 rounded bg-background text-xs text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{l.detail}</div>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs hidden sm:table-cell">{l.userName || "—"}</td>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs hidden md:table-cell">{new Date(l.createdAt).toLocaleString("zh-CN")}</td>
+                  <td className="px-4 py-2.5 text-faint text-xs hidden sm:table-cell">{l.userName || "—"}</td>
+                  <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell">{new Date(l.createdAt).toLocaleString("zh-CN")}</td>
                 </tr>
               ))}
             </tbody>
@@ -242,7 +242,7 @@ export default function RequestLogsTab() {
       <div className="flex justify-center gap-2">
         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
           className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">上一页</button>
-        <span className="px-3 py-1 text-sm text-zinc-500">第 {page} 页</span>
+        <span className="px-3 py-1 text-sm text-muted">第 {page} 页</span>
         <button onClick={() => setPage(p => p + 1)} disabled={logs.length < 50}
           className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-slate-50">下一页</button>
       </div>

@@ -48,34 +48,34 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">部门</h2>
           <button onClick={() => setDeptModal({ open: true, edit: null })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-600">
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
             <Plus className="h-4 w-4" />添加部门
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map(({ dept, members }) => (
-            <div key={dept.id} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 group hover:shadow-md transition-shadow">
+            <div key={dept.id} className="rounded-xl border border-border bg-surface p-4 group hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600"><Building2 className="h-5 w-5" /></div>
                   <div>
                     <div className="font-medium">{dept.name}</div>
-                    <div className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{dept.description || "暂无描述"}</div>
+                    <div className="text-xs text-muted mt-0.5 line-clamp-2">{dept.description || "暂无描述"}</div>
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600" title="删除"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
-              <div className="flex gap-4 mt-3 text-xs text-zinc-500">
+              <div className="flex gap-4 mt-3 text-xs text-muted">
                 <span className="inline-flex items-center gap-1"><UsersIcon className="h-3.5 w-3.5" />{members.length} 人</span>
                 <span className="inline-flex items-center gap-1"><BadgeCheck className="h-3.5 w-3.5" />{examsByDept.get(dept.id)?.length || 0} 场考核</span>
               </div>
             </div>
           ))}
           {depts.length === 0 && (
-            <div className="sm:col-span-2 lg:col-span-3 text-center py-10 text-zinc-400">
+            <div className="sm:col-span-2 lg:col-span-3 text-center py-10 text-faint">
               <Building2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无部门
             </div>
           )}
@@ -87,7 +87,7 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">队员</h2>
           <button onClick={() => setUserModal({ open: true, edit: null })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-600">
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
             <Plus className="h-4 w-4" />添加队员
           </button>
         </div>
@@ -103,7 +103,7 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
             onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
         )}
         {users.length === 0 && (
-          <div className="text-center py-10 text-zinc-400"><UsersIcon className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无队员</div>
+          <div className="text-center py-10 text-faint"><UsersIcon className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无队员</div>
         )}
       </section>
 
@@ -133,7 +133,7 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-sm font-semibold">{title}</span>
-        <span className="text-xs text-zinc-400">{members.length} 人</span>
+        <span className="text-xs text-faint">{members.length} 人</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {members.map(u => {
@@ -142,9 +142,9 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
           const examPasses = examPassesByUser.get(u.id) || [];
           return (
             <Link key={u.id} href={`/admin/profiles/${u.id}`}
-              className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
+              className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">
                   {u.username[0]?.toUpperCase() || "?"}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -156,28 +156,28 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
                   {u.role !== "admin" && u.role !== "部长" && (
-                    <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-zinc-400 hover:text-red-600" title="删除"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </div>
               </div>
               {skills.length > 0 && (
                 <div className="mt-3">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-400 mb-1"><Tag className="h-3 w-3" />技能</div>
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-faint mb-1"><Tag className="h-3 w-3" />技能</div>
                   <div className="flex flex-wrap gap-1">
                     {skills.slice(0, 3).map(s => (
                       <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                         <Tag className="h-3 w-3 opacity-60" />{s}
                       </span>
                     ))}
-                    {skills.length > 3 && <span className="text-[11px] text-zinc-400 self-center">+{skills.length - 3}</span>}
+                    {skills.length > 3 && <span className="text-[11px] text-faint self-center">+{skills.length - 3}</span>}
                   </div>
                 </div>
               )}
               {(certs.length > 0 || examPasses.length > 0) && (
                 <div className="mt-2">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-green-600/70 dark:text-green-400/70 mb-1"><BadgeCheck className="h-3 w-3" />团队认证</div>
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-success/70 dark:text-green-400/70 mb-1"><BadgeCheck className="h-3 w-3" />团队认证</div>
                   <div className="flex flex-wrap gap-1">
                     {certs.slice(0, 2).map(c => (
                       <span key={c.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">
@@ -191,7 +191,7 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
                       </span>
                     ))}
                     {(certs.length + examPasses.length) > 4 && (
-                      <span className="text-[11px] text-zinc-400 self-center">+{certs.length + examPasses.length - 4}</span>
+                      <span className="text-[11px] text-faint self-center">+{certs.length + examPasses.length - 4}</span>
                     )}
                   </div>
                 </div>

@@ -95,7 +95,7 @@ export default function BackupPage() {
           <button
             onClick={handleBackup}
             disabled={backingUp}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary disabled:opacity-50 transition-colors"
           >
             {backingUp ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
@@ -104,7 +104,7 @@ export default function BackupPage() {
             )}
             {backingUp ? "备份中..." : "立即备份"}
           </button>
-          <button onClick={fetchData} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button onClick={fetchData} className="p-2 rounded-lg hover:bg-surface-hover">
             <RefreshCw className="h-5 w-5 text-muted" />
           </button>
         </div>
@@ -115,7 +115,7 @@ export default function BackupPage() {
         <div className={`text-sm p-3 rounded-xl flex items-center gap-2 ${
           msg.type === "success"
             ? "bg-green-50 dark:bg-green-950 text-green-700"
-            : "bg-red-50 dark:bg-red-950 text-red-600"
+            : "bg-red-50 dark:bg-red-950 text-danger"
         }`}>
           {msg.type === "success" ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
           {msg.text}
@@ -127,10 +127,10 @@ export default function BackupPage() {
 
       {/* Info bar */}
       {stats && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted bg-slate-50 dark:bg-slate-900 rounded-xl p-3">
-          <span>路径: <code className="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">{stats.dbPath}</code></span>
-          <span>备份目录: <code className="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">{stats.backupDir}</code></span>
-          {stats.latestBackup && <span>最新备份: <code className="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">{stats.latestBackup}</code></span>}
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted bg-surface-subtle rounded-xl p-3">
+          <span>路径: <code className="text-xs bg-surface-hover px-1 rounded">{stats.dbPath}</code></span>
+          <span>备份目录: <code className="text-xs bg-surface-hover px-1 rounded">{stats.backupDir}</code></span>
+          {stats.latestBackup && <span>最新备份: <code className="text-xs bg-surface-hover px-1 rounded">{stats.latestBackup}</code></span>}
         </div>
       )}
 

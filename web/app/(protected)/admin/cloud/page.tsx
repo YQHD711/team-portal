@@ -216,7 +216,7 @@ export default function CloudPage() {
         <div><h1 className="text-2xl font-bold flex items-center gap-2"><Cloud className="h-6 w-6 text-sky-500" />云存储</h1><p className="text-sm text-muted mt-1">百度网盘 — 大文件云端存储</p></div>
         {authed && (
           <div className="flex gap-2">
-            <label className="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600 cursor-pointer shadow-sm">
+            <label className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer shadow-sm">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}上传文件
               <input ref={fileRef} type="file" onChange={handleUpload} className="hidden" />
             </label>
@@ -227,7 +227,7 @@ export default function CloudPage() {
         )}
       </div>
 
-      {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-red-600"}`}>{msg}</div>}
+      {msg && <div className={`text-sm p-2.5 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{msg}</div>}
 
       {/* Auth section — only show if explicitly not authed */}
       {authed === false && (
@@ -239,7 +239,7 @@ export default function CloudPage() {
       {quota && quota.total > 0 && (
         <div className="rounded-2xl border border-border bg-surface p-4">
           <div className="flex items-center gap-2 mb-3"><HardDrive className="h-4 w-4 text-muted" /><span className="font-semibold text-sm">存储空间</span></div>
-          <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+          <div className="h-3 rounded-full bg-surface-hover overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all" style={{ width: `${quota.total > 0 ? (quota.used / quota.total * 100) : 0}%` }} />
           </div>
           <div className="flex justify-between text-xs text-muted mt-1.5">

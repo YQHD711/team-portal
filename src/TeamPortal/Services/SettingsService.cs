@@ -124,7 +124,8 @@ public class SettingsService
             new() { Key = "Brand:SystemTitle", Value = "", Category = "品牌", Description = "系统标题（留空自动用“队名 · 副标题管理系统”）" },
             new() { Key = "Brand:Description", Value = "", Category = "品牌", Description = "系统描述（留空自动生成）" },
             new() { Key = "Brand:LogoUrl", Value = "", Category = "品牌", Description = "Logo 图片 URL（留空使用默认 /logo.png）" },
-            new() { Key = "Brand:PrimaryColor", Value = "", Category = "品牌", Description = "品牌主题色（如 #3b82f6，暂未应用到 UI）" },
+            new() { Key = "Brand:PrimaryColor", Value = "", Category = "品牌", Description = "品牌主题色（如 #5e6ad2，留空随主题；设置后覆盖主题主色）" },
+            new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "配色主题：indigo(深空靛蓝)/sky(深空天青)/light(日光蓝)/warm(暖白)" },
         };
 
         var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();
@@ -148,6 +149,10 @@ public class SettingsService
         var description = await Get("Brand:Description");
         var logoUrl = await Get("Brand:LogoUrl");
         var primaryColor = await Get("Brand:PrimaryColor");
+        var theme = await Get("Brand:Theme", "indigo");
+        // 校验主题名，非法值回退默认
+        if (theme is not ("indigo" or "sky" or "light" or "warm"))
+            theme = "indigo";
 
         if (string.IsNullOrWhiteSpace(systemTitle))
             systemTitle = $"{teamName} · {teamSubtitle}管理系统";
@@ -157,7 +162,8 @@ public class SettingsService
         return new BrandConfig(
             teamName, teamSubtitle, systemTitle, description,
             string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl,
-            string.IsNullOrWhiteSpace(primaryColor) ? null : primaryColor);
+            string.IsNullOrWhiteSpace(primaryColor) ? null : primaryColor,
+            theme);
     }
 
     /// <summary>Clear cache (call after external DB changes).</summary>
@@ -171,4 +177,5 @@ public record BrandConfig(
     string SystemTitle,
     string Description,
     string? LogoUrl,
-    string? PrimaryColor);
+    string? PrimaryColor,
+    string Theme);

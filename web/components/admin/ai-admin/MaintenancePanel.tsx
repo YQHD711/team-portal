@@ -21,9 +21,9 @@ export default function MaintenancePanel({ result, setResult, onProposalsChanged
       {result && (
         <div className={`text-sm p-3 rounded-xl whitespace-pre-wrap font-mono ${
           result.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" :
-          result.startsWith("❌") ? "bg-red-50 dark:bg-red-950 text-red-600" :
-          result.startsWith("🔨") ? "bg-blue-50 dark:bg-blue-950 text-blue-600" :
-          "bg-slate-50 dark:bg-slate-800 text-slate-600"
+          result.startsWith("❌") ? "bg-red-50 dark:bg-red-950 text-danger" :
+          result.startsWith("🔨") ? "bg-blue-50 dark:bg-blue-950 text-primary" :
+          "bg-slate-50 dark:bg-slate-800 text-muted"
         }`}>{result}</div>
       )}
       <div className="flex gap-2 flex-wrap">
@@ -41,7 +41,7 @@ export default function MaintenancePanel({ result, setResult, onProposalsChanged
             }
             onProposalsChanged();
           } catch (e: any) { setResult("❌ 维护操作失败: " + (e?.message || '网络错误')); }
-        }} className="inline-flex items-center gap-1.5 rounded-lg bg-purple-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-600">
+        }} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover">
           <RefreshCw className="h-3 w-3" />应用（需手动重启）
         </button>
         <button onClick={async () => {
@@ -51,7 +51,7 @@ export default function MaintenancePanel({ result, setResult, onProposalsChanged
             setResult(res.success ? `✅ ${res.message}` : `❌ ${res.message}`);
             onProposalsChanged();
           } catch { setResult("❌ 回滚失败"); }
-        }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950">
+        }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-danger hover:bg-red-50 dark:hover:bg-red-950">
           <RefreshCw className="h-3 w-3" />回滚
         </button>
         <button onClick={async () => {

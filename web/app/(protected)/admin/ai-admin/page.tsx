@@ -94,7 +94,7 @@ export default function AIAdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl bg-surface-hover p-1 w-fit">
         {[{ k: "chat", l: "分析对话", i: Sparkles }, { k: "proposals", l: "代码提案", i: FileText }].map(t => (
           <button key={t.k} onClick={() => { setTab(t.k as "chat" | "proposals"); if (t.k === "proposals") fetchProposals(); }}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.k ? "bg-white dark:bg-slate-700 shadow-sm" : "text-muted hover:text-foreground"}`}>

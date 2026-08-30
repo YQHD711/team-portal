@@ -97,12 +97,12 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
   };
 
   return (
-    <div ref={boxRef} className="w-64 shrink-0 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 overflow-y-auto">
-      <h3 className="text-xs font-semibold text-zinc-500 mb-2">物料挂载（{items.length}）</h3>
+    <div ref={boxRef} className="w-64 shrink-0 rounded-xl border border-border bg-surface p-3 overflow-y-auto">
+      <h3 className="text-xs font-semibold text-muted mb-2">物料挂载（{items.length}）</h3>
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索物料…"
-        className="mb-2 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500" />
+        className="mb-2 w-full rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
 
-      {items.length === 0 && <p className="text-sm text-zinc-400">该房间暂无物料</p>}
+      {items.length === 0 && <p className="text-sm text-faint">该房间暂无物料</p>}
 
       {matched.map(({ element, items: list }) => (
         <div key={element.id} className="mb-3">
@@ -112,12 +112,12 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
             className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium transition-colors ${
               selectedId === element.id
                 ? "bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300"
-                : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                : "hover:bg-surface-hover"
             }`}>
-            <span className="h-2 w-2 rounded-full bg-sky-500 shrink-0" />
+            <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
             {element.name}
-            <span className="font-mono text-[10px] text-zinc-400">{element.locCode}</span>
-            <span className="flex-1 text-right text-zinc-400">{list.reduce((s, i) => s + i.quantity, 0)}</span>
+            <span className="font-mono text-[10px] text-faint">{element.locCode}</span>
+            <span className="flex-1 text-right text-faint">{list.reduce((s, i) => s + i.quantity, 0)}</span>
           </button>
           <div className="mt-1 space-y-0.5 pl-3">
             {list.map(it => {
@@ -128,9 +128,9 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
                 <MaterialChip key={it.id} item={it} onRef={setChipRef(it.id)} onHover={onHoverItem}
                   onUnmount={handleUnmount} onClick={() => onSelect(element.id)} draggable={dnd}
                   title={dnd ? `${it.locationCode} ${it.name} ×${it.quantity}（拖拽可换位，右键卸下）` : `${it.locationCode} ${it.name} ×${it.quantity}`}
-                  className="flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-left text-[11px] text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                  className="flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-left text-[11px] text-muted hover:bg-surface-hover/60">
                   <span className="truncate flex-1">{it.name}</span>
-                  <span className="font-mono text-[10px] text-zinc-400">{suffix}</span>
+                  <span className="font-mono text-[10px] text-faint">{suffix}</span>
                   <span className="font-semibold">×{it.quantity}</span>
                 </MaterialChip>
               );
@@ -140,13 +140,13 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
       ))}
 
       {unlocated.length > 0 && (
-        <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
-          <p className="text-xs text-zinc-400 mb-1">未定位（{unlocated.length}）</p>
+        <div className="border-t border-border pt-2">
+          <p className="text-xs text-faint mb-1">未定位（{unlocated.length}）</p>
           <div className="flex flex-wrap gap-1">
             {unlocated.map(it => (
               <MaterialChip key={it.id} item={it} onRef={setChipRef(it.id)} onHover={onHoverItem} draggable={dnd}
                 title={dnd ? `${it.name} ×${it.quantity} — 拖拽到画布元素上挂载` : `${it.name} ×${it.quantity}`}
-                className={`rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-500 ${dnd ? "cursor-grab" : ""}`}>
+                className={`rounded-md bg-surface-subtle px-1.5 py-0.5 text-[11px] text-muted ${dnd ? "cursor-grab" : ""}`}>
                 {it.name} ×{it.quantity}
               </MaterialChip>
             ))}

@@ -44,7 +44,7 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
 
   return (
     <div ref={workRef} className="relative flex gap-3">
-      <div ref={wrapRef} className="flex-1 relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white" style={{ height: H }}>
+      <div ref={wrapRef} className="flex-1 relative overflow-hidden rounded-xl border border-border bg-white" style={{ height: H }}>
         {scale > 0 && (
           <Stage ref={stageRef} width={width} height={H}
             onClick={e => { if (e.target === e.target.getStage()) setHighlight(null); }}>
@@ -69,8 +69,8 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
         <button onClick={() => setShowLines(v => !v)} title="显示/隐藏物料连线"
           className={`absolute right-2 top-2 z-10 rounded-lg px-2.5 py-1.5 text-xs shadow-sm transition-colors ${
             showLines
-              ? "bg-sky-500 text-white"
-              : "border border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 text-zinc-500 hover:text-sky-600"
+              ? "bg-primary text-white"
+              : "border border-border bg-surface/90 text-muted hover:text-sky-600"
           }`}>
           连线{showLines ? "开" : "关"}
         </button>

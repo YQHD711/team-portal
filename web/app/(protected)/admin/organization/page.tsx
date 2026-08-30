@@ -72,32 +72,32 @@ export default function OrganizationPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">组织架构</h1>
-          <p className="text-sm text-zinc-500">部门与队员统一管理 · 按部门展示队员技能与认证</p>
+          <p className="text-sm text-muted">部门与队员统一管理 · 按部门展示队员技能与认证</p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {stats.map(s => (
-          <div key={s.label} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-            <div className="flex items-center gap-2 text-zinc-400"><s.icon className="h-4 w-4" /><span className="text-xs">{s.label}</span></div>
+          <div key={s.label} className="rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-2 text-faint"><s.icon className="h-4 w-4" /><span className="text-xs">{s.label}</span></div>
             <div className="text-2xl font-bold mt-1">{s.value}</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-white dark:bg-zinc-700 shadow-sm" : "text-zinc-500"}`}>
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted"}`}>
             {t.label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-zinc-400" /></div>
+        <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>
       ) : tab === "org" ? (
         <OrgTab users={users} depts={depts} passedCertsByUser={passedByUser}
           examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} examsByDept={examsByDept} onChanged={refresh} />
