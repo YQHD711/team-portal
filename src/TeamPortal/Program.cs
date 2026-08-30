@@ -40,7 +40,11 @@ if (string.IsNullOrEmpty(adminPwd)) builder.Configuration["Admin:Password"] = Gu
 
 // ── Database ──
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
+    // TODO(下次迭代):迁到 EF Migrations 后移除此 Ignore。
+    // 抑制 PendingModelChangesWarning:Program.cs 内联 ALTER TABLE 加字段
+    // (Level/PayloadJson on Notification),与 EF Model 不一致产生该警告。
+    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // ── JWT Auth ──
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

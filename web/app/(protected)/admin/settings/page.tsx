@@ -192,7 +192,7 @@ export default function SettingsPage() {
           暂无配置项
         </div>
       ) : (
-        <div className="space-y-4">
+        <form onSubmit={e => e.preventDefault()} className="space-y-4">
           {categories.map(cat => {
             const Icon = CATEGORY_ICONS[cat] || Settings2;
             const items = settings[cat];
@@ -224,7 +224,7 @@ export default function SettingsPage() {
               </div>
             );
           })}
-        </div>
+        </form>
       )}
 
       {/* System info footer */}
