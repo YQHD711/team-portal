@@ -1,5 +1,6 @@
 """Team Portal AI Service — FastAPI entry point."""
 
+import os
 import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -35,7 +36,16 @@ async def lifespan(app: FastAPI):
     await app.state.http.aclose()
 
 
-app = FastAPI(title="Team Portal AI Service", version="0.1.0", lifespan=lifespan)
+# F-1 fix: gate docs / OpenAPI schema behind DEV env. Production disables both.
+_DEV_MODE = os.environ.get("AI_SERVICE_ENV", "development").lower() != "production"
+app = FastAPI(
+    title="Team Portal AI Service",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _DEV_MODE else None,
+    openapi_url="/openapi.json" if _DEV_MODE else None,
+    redoc_url=None,
+)
 
 app.add_middleware(
     CORSMiddleware,

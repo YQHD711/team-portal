@@ -29,6 +29,7 @@ public static class AdminEndpoints
             return Results.Ok(await svc.ListUsers(role, dept, id));
         });
 
+        // POST /api/admin/users — AdminOnly (C-1 fix: previously StaffOnly let 部长 mint admin/部长 accounts)
         admin.MapPost("/users", async (CreateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, NotificationService notify, LogService log, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
@@ -45,10 +46,10 @@ public static class AdminEndpoints
             else
             {
                 log.Audit("create", actor, targetType: "user",
-                    data: new { username = req.Username, success = false, error = "用户名已存在" }, ipAddress: LogService.ClientIp(ctx));
+                    data: new { username = req.Username, success = false, error = "用户名已存在或权限不足" }, ipAddress: LogService.ClientIp(ctx));
             }
-            return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在", statusCode: 409);
-        });
+            return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在或权限不足", statusCode: 400);
+        }).RequireAuthorization("AdminOnly");
 
         admin.MapPut("/users/{id:int}", async (int id, UpdateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {

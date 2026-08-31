@@ -22,6 +22,35 @@ public static class FileEndpoints
     /// <summary>带点号包裹的危险扩展名段(双扩展名混淆检测用)</summary>
     private static readonly string[] DangerousExtSegments = [".php.", ".asp.", ".aspx.", ".jsp.", ".exe.", ".sh.", ".js.", ".html.", ".htm.", ".svg."];
 
+    /// <summary>扩展名 → magic byte 前缀 (hex)，用于阻断"改后缀绕过"。空数组表示跳过校验。</summary>
+    private static readonly Dictionary<string, byte[][]> MagicByteTable = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".pdf"]  = new[] { new byte[]{0x25,0x50,0x44,0x46} },                              // %PDF
+        [".jpg"]  = new[] { new byte[]{0xFF,0xD8,0xFF} },
+        [".jpeg"] = new[] { new byte[]{0xFF,0xD8,0xFF} },
+        [".png"]  = new[] { new byte[]{0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A} },          // \x89PNG\r\n\x1a\n
+        [".gif"]  = new[] { new byte[]{0x47,0x49,0x46,0x38} },                              // GIF8
+        [".webp"] = new[] { new byte[]{0x52,0x49,0x46,0x46} },                              // RIFF (WebP container)
+        [".zip"]  = new[] { new byte[]{0x50,0x4B,0x03,0x04}, new byte[]{0x50,0x4B,0x05,0x06}, new byte[]{0x50,0x4B,0x07,0x08} }, // PK\x03/05/07
+        [".rar"]  = new[] { new byte[]{0x52,0x61,0x72,0x21,0x1A,0x07} },                    // Rar!\x1A\x07
+        [".7z"]   = new[] { new byte[]{0x37,0x7A,0xBC,0xAF,0x27,0x1C} },
+        [".doc"]  = new[] { new byte[]{0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1} },          // OLE2
+        [".xls"]  = new[] { new byte[]{0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1} },
+        // Office OOXML (.docx/.xlsx/.pptx) are ZIP containers
+        [".docx"] = new[] { new byte[]{0x50,0x4B,0x03,0x04} },
+        [".xlsx"] = new[] { new byte[]{0x50,0x4B,0x03,0x04} },
+        [".pptx"] = new[] { new byte[]{0x50,0x4B,0x03,0x04} },
+        [".ppt"]  = new[] { new byte[]{0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1} },
+        // 纯文本/Markdown/JSON/CSV:不强校验字节,无明确 magic
+        // ".md" ".txt" ".json" ".csv" — skip
+    };
+
+    private static bool MagicByteMatches(string ext, byte[] head)
+    {
+        if (!MagicByteTable.TryGetValue(ext, out var candidates)) return true; // 纯文本格式跳过
+        return candidates.Any(sig => head.Length >= sig.Length && head.Take(sig.Length).SequenceEqual(sig));
+    }
+
     private static async Task<(string? role, string? dept, int id)> GetCtx(ClaimsPrincipal user, AppDbContext db)
     {
         var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -75,8 +104,21 @@ public static class FileEndpoints
             Directory.CreateDirectory(UploadDir());
             var storedName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
             var path = Path.Combine(UploadDir(), storedName);
+
+            // D-2 fix: read first bytes into a buffer for magic-byte check BEFORE committing to disk
             await using (var fs = File.Create(path))
-                await file.CopyToAsync(fs);
+            using (var peekMs = new MemoryStream())
+            {
+                await file.CopyToAsync(peekMs);
+                var all = peekMs.ToArray();
+                var head = all.Length >= 8 ? all.Take(8).ToArray() : all;
+                if (!MagicByteMatches(uploadExt, head))
+                {
+                    try { File.Delete(path); } catch { }
+                    return Results.Problem($"文件内容与扩展名 {uploadExt} 不匹配（magic-byte 校验失败）", statusCode: 415);
+                }
+                await fs.WriteAsync(all);
+            }
 
             var sf = new SharedFile
             {

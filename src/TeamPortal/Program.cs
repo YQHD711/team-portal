@@ -290,7 +290,8 @@ if (!app.Environment.IsDevelopment())
 }
 else
 {
-    app.MapOpenApi();
+    // D-4 fix: gate OpenAPI behind staff auth — previously /openapi/v1.json was world-readable
+    app.MapOpenApi("/api/admin/openapi").RequireAuthorization("StaffOnly");
 }
 
 app.UseStatusCodePages();
@@ -364,6 +365,14 @@ static void MigrateExistingTables(AppDbContext db)
 
         // BatteryRecords.IncidentDate — replaces CycleCount/CapacityMAh/LastUsedDate
         MigrateSql(conn, "ALTER TABLE BatteryRecords ADD COLUMN IncidentDate TEXT DEFAULT (datetime('now'))",
+            "duplicate column");
+
+        // IncidentRecords.ReporterUserId — 可见性:按提交人过滤(普通成员只看自己)
+        MigrateSql(conn, "ALTER TABLE IncidentRecords ADD COLUMN ReporterUserId INTEGER NULL",
+            "duplicate column");
+
+        // IncidentRecords.DepartmentId — 可见性:部长按部门过滤(本部门成员)
+        MigrateSql(conn, "ALTER TABLE IncidentRecords ADD COLUMN DepartmentId INTEGER NULL",
             "duplicate column");
 
         // Notifications.TargetRole — role-based notification filtering

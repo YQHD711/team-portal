@@ -73,10 +73,14 @@ public class InventoryService
     }
 
     public async Task<InventoryItem?> Update(int id,
+        string? name = null, int? quantity = null, string? status = null,
         string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? projectTag = null, string? locationCode = null)
     {
         var item = await _db.InventoryItems.FindAsync(id);
         if (item is null) return null;
+        if (name is not null) item.Name = name;
+        if (quantity.HasValue) item.Quantity = quantity.Value;
+        if (status is not null) item.Status = status;
         if (unitPrice.HasValue) item.UnitPrice = unitPrice.Value;
         if (unitPrice.HasValue && grade is null)
             item.Grade = CalcGrade(unitPrice.Value);

@@ -80,10 +80,15 @@ public static class InventoryEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
 
+            if (req.Quantity is < 0 || req.Quantity > 1_000_000)
+                return Results.Problem(req.Quantity < 0 ? "数量不能为负数" : "数量超出合理范围(上限1000000)", statusCode: 400);
             if (req.UnitPrice is < 0)
                 return Results.Problem("价格不能为负数", statusCode: 400);
+            if (req.Name is not null && HasUnsafeName(req.Name))
+                return Results.Problem("名称包含非法字符", statusCode: 400);
 
             var item = await svc.Update(id,
+                req.Name, req.Quantity, req.Status,
                 req.Grade, req.UnitPrice, req.DepartmentId, req.ProjectTag, req.LocationCode);
             if (item is not null)
             {
@@ -224,6 +229,8 @@ public static class InventoryEndpoints
         // Quick consume — for C-level consumables (no approval, no return)
         group.MapPost("/{id:int}/consume", async (int id, TransactionRequest req, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可消耗零件", statusCode: 403); // D-3 fix
             var userName = user.Identity?.Name ?? "unknown";
             if (req.Quantity <= 0) return Results.Problem("数量必须大于0", statusCode: 400);
             var item = await db.InventoryItems.FindAsync(id);
@@ -268,6 +275,7 @@ public static class InventoryEndpoints
 public record CreateItemRequest(string Name, string? Category, int Quantity,
     string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
 public record UpdateItemRequest(
+    string? Name, int? Quantity, string? Status,
     string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
 public record ImportRequest(string FilePath);
 public record TransactionRequest(int Quantity, string? Note);
