@@ -49,6 +49,12 @@ tmp_*.cs
 # Code intelligence
 .codegraph/
 
+# Runtime logs / test reports (开发期生成,不入仓)
+logs/
+!logs/.gitkeep
+test-results/
+!test-results/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db
