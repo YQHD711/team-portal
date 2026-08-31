@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using TeamPortal.Data;
+using TeamPortal.Data.Models;
 using TeamPortal.Services;
 
 namespace api;
@@ -29,8 +30,16 @@ public class SecurityTests
         var method = typeof(MaintenanceService).GetMethod("ResolveInside",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
-        var result = method!.Invoke(null, new object?[] { "C:\\fake\\root", malicious });
-        Assert.Null(result);
+        // 用 Path.GetTempPath() 下的真实子目录作 root(Windows 盘符字符串在 Linux 容器上会引发
+        // Path.GetFullPath 行为异常,导致 root 解析成 cwd 路径,越界检测失效)。
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "tp-traversal-" + Guid.NewGuid().ToString("N")[..8]));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var result = method!.Invoke(null, new object?[] { root, malicious });
+            Assert.Null(result);
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
     }
 
     [Fact]
@@ -85,8 +94,9 @@ public class SecurityTests
 
             var result = svc.DeleteBackup("../../../etc/passwd");
             Assert.False(result);
-            // 越界文件未被创建
-            Assert.False(File.Exists(Path.Combine(tempDir, "..", "..", "..", "etc", "passwd")));
+            // 越界路径已被拦截(DeleteBackup 内置 _backupDir 检查),
+            // 不应试图在文件系统上查找越界目标(在 Linux 容器上 /etc/passwd 真实存在会误报)。
+            // 这里改为断言:服务返回 false 即代表越界防护生效。
         }
         finally { try { Directory.Delete(tempDir, true); } catch { } }
     }
@@ -155,6 +165,13 @@ public class SecurityTests
             Assert.NotNull(firstName);
             var name = Path.GetFileName(firstName!);
 
+            // 释放 db 句柄与 SQLite Online Backup 的临时连接,避免 Windows 上 DeleteBackup
+            // 触发 "file in use" IOException(SQLite dispose 不立即释放 OS handle)。
+            db.Dispose();
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
             var result = svc.DeleteBackup(name);
             Assert.True(result);
             Assert.False(File.Exists(firstName));
@@ -179,10 +196,18 @@ public class SecurityTests
         var db = CreateContext();
         var auth = new AuthService(db, CreateConfig(), CreateLog(db), CreateSettings(db));
 
-        var user = await auth.Register("bob", "secret-password-1234");
+        // B-1 修复后注册默认需要 inviteCode:seed 一条有效码
+        db.InviteCodes.Add(new InviteCode
+        {
+            Code = "TEST-CODE", MaxUses = 100,
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedByUserId = 0
+        });
+        await db.SaveChangesAsync();
+
+        var user = await auth.Register("bob", "secret-password-1234", "TEST-CODE");
         Assert.NotNull(user);
         Assert.NotEqual("secret-password-1234", user!.PasswordHash);
-        // bcrypt 格式：$2a$ / $2b$ / $2y$ 前缀
+        // bcrypt 格式:$2a$ / $2b$ / $2y$ 前缀
         Assert.StartsWith("$2", user.PasswordHash);
         Assert.True(BCrypt.Net.BCrypt.Verify("secret-password-1234", user.PasswordHash));
         Assert.False(BCrypt.Net.BCrypt.Verify("wrong-password", user.PasswordHash));

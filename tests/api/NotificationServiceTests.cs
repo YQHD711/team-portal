@@ -166,7 +166,9 @@ public class NotificationServiceTests
         svc.Notify("全员 2", "");
         svc.Notify("管理员 1", "X", targetRole: "staff");
         svc.Notify("管理员 2", "Y", targetRole: "admin");
-        await Task.Delay(800);
+        // ProcessChannel 每 500ms flush 一次 + 容器内首次 JIT/启动有额外延迟,
+        // 1500ms 在 CI 慢机器上仍能保证 batch 已持久化到 db
+        await Task.Delay(1500);
 
         var memberUnread = await svc.GetUnreadCount(1, role: "member");
         var staffUnread = await svc.GetUnreadCount(2, role: "部长");
