@@ -32,11 +32,14 @@ public class SecurityTests
         Assert.NotNull(method);
         // 用 Path.GetTempPath() 下的真实子目录作 root(Windows 盘符字符串在 Linux 容器上会引发
         // Path.GetFullPath 行为异常,导致 root 解析成 cwd 路径,越界检测失效)。
+        // 另外 Linux 上反斜杠不是路径 separator — 测试输入如果是 Windows 风格路径需手动
+        // 转换为正斜杠,确保跨平台一致。
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "tp-traversal-" + Guid.NewGuid().ToString("N")[..8]));
         Directory.CreateDirectory(root);
         try
         {
-            var result = method!.Invoke(null, new object?[] { root, malicious });
+            var input = malicious.Replace('\\', '/');
+            var result = method!.Invoke(null, new object?[] { root, input });
             Assert.Null(result);
         }
         finally { try { Directory.Delete(root, true); } catch { } }
