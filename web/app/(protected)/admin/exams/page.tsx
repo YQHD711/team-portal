@@ -5,6 +5,7 @@ import { ClipboardCheck, ChevronDown, ChevronUp, Loader2, Pencil, Plus, Trash2 }
 import { api } from "@/lib/api";
 import ExamFormModal from "@/components/admin/exams/ExamFormModal";
 import ResultsPanel from "@/components/admin/exams/ResultsPanel";
+import BatchTrainingPanel from "@/components/admin/training/BatchTrainingPanel";
 
 interface Exam { id: number; departmentId: number; department: string | null; title: string; examType: string; status: string; examDate: string | null; resultCount: number; passedCount: number; }
 interface Dept { id: number; name: string; }
@@ -104,6 +105,9 @@ export default function ExamsPage() {
         </div>
       ) : (
         <>
+          {/* 培训批量录入(独立于考核列表) */}
+          <BatchTrainingPanel users={users} onSaved={(msg) => alert(msg)} />
+
           {/* 批量操作工具条 */}
           <div className="rounded-xl border border-border bg-surface px-4 py-3 flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0">

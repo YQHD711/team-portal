@@ -62,22 +62,33 @@ public static class FlightEndpoints
         // ── Incidents ──
         var ig = app.MapGroup("/api/incidents").RequireAuthorization();
 
-        ig.MapGet("/", async (int? page, FlightService svc) => Results.Ok(await svc.GetIncidents(page ?? 1)));
+        ig.MapGet("/", async (int? page, ClaimsPrincipal user, AppDbContext db, FlightService svc) =>
+        {
+            var (role, dept) = await GetCtx(user, db);
+            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var deptId = await db.Users.Where(u => u.Id == uid).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+            var items = await svc.GetIncidents(uid, role, dept, deptId, page ?? 1);
+            return Results.Ok(items);
+        });
 
         ig.MapPost("/", async (IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
             var (role, _) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可添加", statusCode: 403);
+            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var deptId = await db.Users.Where(u => u.Id == uid).Select(u => u.DepartmentId).FirstOrDefaultAsync();
             var inc = await svc.CreateIncident(req.Type, req.Severity, req.Description, req.Date,
-                req.Resolution, req.ReportedBy);
+                req.Resolution, req.ReportedBy, uid, deptId);
             log.Info("flight", $"Incident added: {req.Type}/{req.Severity} by {user.Identity?.Name}");
             return Results.Created($"/api/incidents/{inc.Id}", inc);
         });
 
         ig.MapPut("/{id:int}", async (int id, IncidentRequest req, ClaimsPrincipal user, AppDbContext db, FlightService svc, LogService log) =>
         {
-            var (role, _) = await GetCtx(user, db);
+            var (role, dept) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可编辑", statusCode: 403);
+            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var deptId = await db.Users.Where(u => u.Id == uid).Select(u => u.DepartmentId).FirstOrDefaultAsync();
             var ok = await svc.UpdateIncident(id, req.Type, req.Severity, req.Description, req.Date, req.Resolution);
             if (ok) log.Info("flight", $"Incident #{id} updated: {req.Type} by {user.Identity?.Name}");
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("Not found", statusCode: 404);

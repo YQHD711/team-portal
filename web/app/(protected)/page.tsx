@@ -116,7 +116,7 @@ export default function Home() {
 
   const quickActions = [
     { href: "/inventory/checkout", label: "发起领用", icon: Package },
-    { href: "/knowledge", label: "上传文档", icon: Sparkles },
+    { href: "/admin/knowledge", label: "上传文档", icon: Sparkles },
     { href: "/flightlog", label: "记飞行日志", icon: ShieldAlert },
     { href: "/profile", label: "我的档案", icon: Users },
   ];

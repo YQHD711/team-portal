@@ -11,7 +11,7 @@ import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
 
 const pageTitles: Record<string, string> = {
-  "/": "仪表盘", "/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志", "/incidents": "事故安全",
+  "/": "仪表盘", "/admin/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志", "/incidents": "事故安全",
 };
 
 function getStoredScheme(): "dark" | "light" | null {
@@ -24,7 +24,7 @@ export function Topbar() {
   const { setOpen } = useSidebar();
   const { teamName } = useBrand();
   const pathname = usePathname();
-  const title = pageTitles[pathname] || (pathname.startsWith("/knowledge") ? "知识库" : null);
+  const title = pageTitles[pathname] || (pathname.startsWith("/admin/knowledge") ? "知识库" : null);
   // SSR 一致性:首帧不读 localStorage(否则服务端 null vs 客户端 "light" 引发表单错位)
   // 初始态为 null,挂载后 useEffect 读 localStorage 同步 class
   const [scheme, setScheme] = useState<"dark" | "light" | null>(null);

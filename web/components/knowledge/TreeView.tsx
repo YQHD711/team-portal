@@ -42,7 +42,7 @@ function FileLink({ node }: { node: TreeNode }) {
 
   if (isTextFile(node.path)) {
     const href = node.path
-      ? `/knowledge/${node.path.replace(/\.\w+$/, "").split("/").map(s => encodeURIComponent(s)).join("/")}`
+      ? `/admin/knowledge/${node.path.replace(/\.\w+$/, "").split("/").map(s => encodeURIComponent(s)).join("/")}`
       : "#";
     return (
       <Link href={href}

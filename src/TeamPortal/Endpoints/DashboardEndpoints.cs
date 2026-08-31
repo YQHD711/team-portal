@@ -2,12 +2,13 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
+using TeamPortal.Data.Models;
+using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
 public static class DashboardEndpoints
 {
-    private const int LowStockThreshold = 5;
     // 性能 #1:仪表盘聚合缓存 15s(弱实时数据可容忍陈旧)
     private static readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
@@ -21,11 +22,14 @@ public static class DashboardEndpoints
 
     public static void MapDashboardEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/dashboard", async (AppDbContext db, ClaimsPrincipal user) =>
+        app.MapGet("/api/dashboard", async (AppDbContext db, ClaimsPrincipal user, SettingsService settings) =>
         {
             var role = user.FindFirstValue(ClaimTypes.Role);
             var isStaff = role == "admin" || role == "部长";
-            var cacheKey = isStaff ? "staff" : "member";
+            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+            // 缓存键: staff/member + user id (普通成员缓存各自可见的事故子集)
+            var cacheKey = isStaff ? "staff" : $"member-{uid}";
 
             // 命中未过期缓存:直接返回(零 DB 查询)
             if (_cache.TryGetValue(cacheKey, out var entry) && entry.Valid)
@@ -40,15 +44,35 @@ public static class DashboardEndpoints
             var inventoryTotalTask = db.InventoryItems.SumAsync(i => i.Quantity);
             var departmentsTask = db.Departments.CountAsync();
             var monthNewItemsTask = db.InventoryItems.CountAsync(i => i.CreatedAt >= monthStart);
+
+            // 库存低物料阈值可配(默认 5),仅提醒 C 级(普通耗材);关键件 A/B 走主动采购
+            var lowGrade = await settings.Get("Inventory:LowStockGrade", "C");
+            var lowThreshold = await settings.GetInt("Inventory:LowStockThreshold", 5);
             var lowStockTask = db.InventoryItems
-                .Where(i => i.Quantity < LowStockThreshold && i.Quantity > 0)
+                .Where(i => i.Quantity < lowThreshold && i.Quantity > 0 && i.Grade == lowGrade)
                 .OrderBy(i => i.Quantity).Take(5)
                 .Select(i => new { i.Id, i.Name, i.Quantity, i.Category }).ToListAsync();
             var activeWikiTask = db.WikiTasks
                 .Where(w => w.Status != "completed" && w.Status != "failed")
                 .OrderByDescending(w => w.CreatedAt).Take(3)
                 .Select(w => new { w.Id, w.ProjectName, w.Status, w.CreatedAt }).ToListAsync();
-            var recentIncidentsTask = db.IncidentRecords
+
+            // 事故可见性按角色过滤:admin=全部,部长=本部门,member=自己
+            IQueryable<IncidentRecord> incQ = db.IncidentRecords;
+            if (!isStaff)
+                incQ = incQ.Where(i => i.ReporterUserId == uid);
+            else if (role == "部长")
+            {
+                var callerDeptId = await db.Users.Where(u => u.Id == uid).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+                if (callerDeptId.HasValue)
+                {
+                    var memberIds = await db.Users.Where(u => u.DepartmentId == callerDeptId.Value && u.Role != "admin").Select(u => u.Id).ToListAsync();
+                    incQ = incQ.Where(i => (i.ReporterUserId != null && memberIds.Contains(i.ReporterUserId.Value)) || i.ReporterUserId == uid);
+                }
+                else
+                    incQ = incQ.Where(i => i.ReporterUserId == uid);
+            }
+            var recentIncidentsTask = incQ
                 .OrderByDescending(i => i.Date).Take(3)
                 .Select(i => new { i.Id, i.Type, i.Severity, i.Description, i.Date }).ToListAsync();
             var completedWikiTask = db.WikiTasks.CountAsync(w => w.Status == "completed");

@@ -126,6 +126,8 @@ public class SettingsService
             new() { Key = "Brand:LogoUrl", Value = "", Category = "品牌", Description = "Logo 图片 URL（留空使用默认 /logo.png）" },
             new() { Key = "Brand:PrimaryColor", Value = "", Category = "品牌", Description = "品牌主题色（如 #5e6ad2，留空随主题；设置后覆盖主题主色）" },
             new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "配色主题：indigo(深空靛蓝)/sky(深空天青)/light(日光蓝)/warm(暖白)" },
+            new() { Key = "Inventory:LowStockGrade", Value = "C", Category = "库存", Description = "库存低物料提醒的等级（A/B/C），仅该等级物料入库会触发仪表盘提醒" },
+            new() { Key = "Inventory:LowStockThreshold", Value = "5", Category = "库存", Description = "库存低物料提醒阈值（quantity < 此值时提醒）" },
         };
 
         var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();

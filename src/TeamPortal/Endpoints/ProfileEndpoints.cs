@@ -125,6 +125,27 @@ public static class ProfileEndpoints
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);
         });
 
+        // 培训批量录入:独立 group /api/admin/training (和单条 /api/admin/profiles/{userId}/training 不冲突)
+        var trainingAdmin = app.MapGroup("/api/admin/training").RequireAuthorization();
+        trainingAdmin.MapPost("/batch", async (BatchTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        {
+            var (role, _) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可批量录入", statusCode: 403);
+            if (string.IsNullOrWhiteSpace(req.CourseName))
+                return Results.Problem("课程名称不能为空", statusCode: 400);
+            if (req.UserIds is null || req.UserIds.Count == 0)
+                return Results.Problem("请至少选择一位队员", statusCode: 400);
+            try
+            {
+                var count = await svc.BatchAddTrainingForUsers(req.UserIds, req.CourseName, req.ExamDate, req.Score, req.Examiner, req.Notes);
+                return Results.Ok(new { count, message = $"已为 {count} 人录入培训" });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
+        });
+
         // 参赛记录
         adminGroup.MapPost("/{userId:int}/competitions", async (int userId, AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
@@ -171,6 +192,15 @@ public record AddTrainingRequest(
     string CourseName,
     double? Score,
     DateTime ExamDate,
+    string? Examiner,
+    string? Notes
+);
+
+public record BatchTrainingRequest(
+    List<int> UserIds,
+    string CourseName,
+    DateTime ExamDate,
+    double? Score,
     string? Examiner,
     string? Notes
 );
