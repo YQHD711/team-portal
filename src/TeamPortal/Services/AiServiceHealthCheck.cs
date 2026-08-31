@@ -20,7 +20,9 @@ public class AiServiceHealthCheck : IHealthCheck
     {
         try
         {
-            var baseUrl = _config.GetValue<string>("AiService:Url") ?? "http://localhost:9001";
+            var baseUrl = _config.GetValue<string>("AiService:BaseUrl")
+                ?? _config.GetValue<string>("AiService:Url")
+                ?? "http://localhost:9001";
             var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(3);
 

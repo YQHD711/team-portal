@@ -17,8 +17,8 @@ public static class AdminEndpoints
 
     public static void MapAdminEndpoints(this WebApplication app)
     {
-        // Stats — accessible to all authenticated users (dashboard)
-        app.MapGet("/api/admin/stats", async (AdminService svc) => Results.Ok(await svc.GetStats())).RequireAuthorization();
+        // Stats — staff only (admin & 部长), same policy as the rest of /api/admin
+        app.MapGet("/api/admin/stats", async (AdminService svc) => Results.Ok(await svc.GetStats())).RequireAuthorization("StaffOnly");
 
         var admin = app.MapGroup("/api/admin").RequireAuthorization("StaffOnly");
 
@@ -29,17 +29,29 @@ public static class AdminEndpoints
             return Results.Ok(await svc.ListUsers(role, dept, id));
         });
 
-        admin.MapPost("/users", async (CreateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, NotificationService notify) =>
+        // POST /api/admin/users — AdminOnly (C-1 fix: previously StaffOnly let 部长 mint admin/部长 accounts)
+        admin.MapPost("/users", async (CreateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, NotificationService notify, LogService log, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
                 return Results.Problem("用户名和密码必填", statusCode: 400);
             var (role, dept, _) = await GetUserCtx(user, db);
+            var actor = user.Identity?.Name ?? "unknown";
             var u = await svc.CreateUser(req.Username, req.Password, req.Role ?? "member", req.DepartmentId, role, dept);
-            if (u is not null) notify.Notify("新成员加入", $"{req.Username} 加入了团队", "/admin/users", targetRole: "staff");
-            return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在", statusCode: 409);
-        });
+            if (u is not null)
+            {
+                log.Audit("create", actor, targetType: "user", targetId: u.Id.ToString(),
+                    data: new { username = req.Username, role = req.Role ?? "member", departmentId = req.DepartmentId }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("新成员加入", $"{req.Username} 加入了团队", "/admin/organization", targetRole: "staff");
+            }
+            else
+            {
+                log.Audit("create", actor, targetType: "user",
+                    data: new { username = req.Username, success = false, error = "用户名已存在或权限不足" }, ipAddress: LogService.ClientIp(ctx));
+            }
+            return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在或权限不足", statusCode: 400);
+        }).RequireAuthorization("AdminOnly");
 
-        admin.MapPut("/users/{id:int}", async (int id, UpdateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        admin.MapPut("/users/{id:int}", async (int id, UpdateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
@@ -51,70 +63,93 @@ public static class AdminEndpoints
                 if (req.DepartmentId.HasValue) changes.Add($"dept→{req.DepartmentId}");
                 if (req.Password is not null) changes.Add("password-reset");
                 log.Warn("admin", $"User #{id} updated by {actor}: {string.Join(", ", changes)}");
-                notify.Notify("用户信息已更新", $"{actor} 修改了用户 #{id} 的信息", "/admin/users", targetRole: "staff");
+                log.Audit("update", actor, targetType: "user", targetId: id.ToString(),
+                    data: new { changes }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("用户信息已更新", $"{actor} 修改了用户 #{id} 的信息", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("权限不足或用户不存在", statusCode: 404);
         });
 
-        admin.MapDelete("/users/{id:int}", async (int id, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        admin.MapDelete("/users/{id:int}", async (int id, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.DeleteUser(id, role, dept);
-            if (ok) { log.Warn("admin", $"User #{id} deleted by {actor}"); notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/users", targetRole: "staff"); }
+            if (ok)
+            {
+                log.Warn("admin", $"User #{id} deleted by {actor}");
+                log.Audit("delete", actor, targetType: "user", targetId: id.ToString(),
+                    data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/organization", targetRole: "staff");
+            }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("无法删除", statusCode: 400);
         });
 
         // ── Departments ──
         admin.MapGet("/departments", async (AdminService svc) => Results.Ok(await svc.ListDepartments()));
 
-        admin.MapPost("/departments", async (CreateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        admin.MapPost("/departments", async (CreateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var dept = await svc.CreateDepartment(req.Name, req.Description ?? "");
             var actor = user.Identity?.Name ?? "unknown";
             log.Info("admin", $"Department created: {dept.Name} by {actor}");
-            notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/departments", targetRole: "staff");
+            log.Audit("create", actor, targetType: "department", targetId: dept.Id.ToString(),
+                data: new { name = req.Name }, ipAddress: LogService.ClientIp(ctx));
+            notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/organization", targetRole: "staff");
             return Results.Ok(dept);
         });
 
-        admin.MapPut("/departments/{id:int}", async (int id, UpdateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        admin.MapPut("/departments/{id:int}", async (int id, UpdateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var ok = await svc.UpdateDepartment(id, req.Name, req.Description ?? "");
-            if (ok) { var actor = user.Identity?.Name ?? "unknown"; log.Info("admin", $"Department #{id} updated: {req.Name} by {actor}"); notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/departments", targetRole: "staff"); }
+            if (ok)
+            {
+                var actor = user.Identity?.Name ?? "unknown";
+                log.Info("admin", $"Department #{id} updated: {req.Name} by {actor}");
+                log.Audit("update", actor, targetType: "department", targetId: id.ToString(),
+                    data: new { name = req.Name }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/organization", targetRole: "staff");
+            }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
         });
 
-        admin.MapDelete("/departments/{id:int}", async (int id, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify) =>
+        admin.MapDelete("/departments/{id:int}", async (int id, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.DeleteDepartment(id);
-            if (ok) { log.Warn("admin", $"Department #{id} deleted by {actor}"); notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/departments", targetRole: "staff"); }
+            if (ok)
+            {
+                log.Warn("admin", $"Department #{id} deleted by {actor}");
+                log.Audit("delete", actor, targetType: "department", targetId: id.ToString(),
+                    data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/organization", targetRole: "staff");
+            }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
         });
 
         // ── Knowledge ──
-        admin.MapPost("/knowledge/write", async (KnowledgeWriteReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        admin.MapPost("/knowledge/write", async (KnowledgeWriteReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             req = req with { Path = Uri.UnescapeDataString(req.Path) };
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}", targetRole: "staff"); return Results.Ok(new { success = true }); }
-            catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
+            try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = true }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}", targetRole: "staff"); return Results.Ok(new { success = true }); }
+            catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
         });
 
-        admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify) =>
+        admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             path = Uri.UnescapeDataString(path);
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try { svc.DeleteFile(path); log.Warn("knowledge", $"File deleted: {path} by {actor}"); notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}", targetRole: "staff"); return Results.Ok(new { success = true }); }
-            catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
+            try { svc.DeleteFile(path); log.Warn("knowledge", $"File deleted: {path} by {actor}"); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = true }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}", targetRole: "staff"); return Results.Ok(new { success = true }); }
+            catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
         });
 
         // ── Document upload ──
-        admin.MapPost("/documents/upload", async (IFormFile file, string? folder, ClaimsPrincipal user, DocumentService docSvc, AppDbContext db, BaiduNetdiskService baidu, LogService log, NotificationService notify) =>
+        admin.MapPost("/documents/upload", async (IFormFile file, string? folder, ClaimsPrincipal user, DocumentService docSvc, AppDbContext db, BaiduNetdiskService baidu, LogService log, NotificationService notify, HttpContext ctx) =>
         {
             if (file is null || file.Length == 0) return Results.Problem("No file provided", statusCode: 400);
             if (file.Length > 50 * 1024 * 1024) return Results.Problem("File too large (max 50MB)", statusCode: 400);
@@ -136,6 +171,8 @@ public static class AdminEndpoints
                 };
                 var path = await docSvc.UploadAndProcess(formFile, targetFolder, role, dept);
                 log.Info("knowledge", $"Document uploaded: {file.FileName} ({file.Length} bytes) → {path} by {actor}");
+                log.Audit("upload", actor, targetType: "document", data: new { name = file.FileName, size = file.Length, path, folder = targetFolder },
+                    ipAddress: LogService.ClientIp(ctx));
 
                 string? cloudUrl = null;
                 if (await baidu.IsConfigured())
@@ -153,6 +190,7 @@ public static class AdminEndpoints
                 notify.Notify("文档上传完成", $"{actor} 上传了 {file.FileName} 到 {targetFolder}", $"/knowledge/{path.Replace(".md","")}", targetRole: "staff");
                 return Results.Ok(new { success = true, path, cloudUrl });
             }
+            catch (DocumentConflictException e) { return Results.Problem(e.Message, statusCode: 409); }
             catch (UnauthorizedAccessException) { return Results.Problem("Access denied", statusCode: 403); }
             catch (Exception e) { log.Error("knowledge", $"Document upload failed: {file.FileName}", e.Message); return Results.Problem(e.Message, statusCode: 500); }
             finally { if (File.Exists(tmpPath)) File.Delete(tmpPath); }

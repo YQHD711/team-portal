@@ -58,43 +58,43 @@ export function GlobalSearch() {
   return (
     <>
       <button onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-sm text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors sm:min-w-[200px]">
+        className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-sm text-muted bg-surface hover:bg-surface-hover border border-border-subtle transition-colors sm:min-w-[200px]">
         <Search className="h-4 w-4 shrink-0" />
         <span className="hidden sm:block flex-1 text-left">搜索...</span>
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-zinc-300 dark:border-zinc-600 px-1.5 py-0.5 text-[10px] text-zinc-400 font-mono">Ctrl+K</kbd>
+        <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border-subtle px-1.5 py-0.5 text-[10px] text-faint font-mono">Ctrl+K</kbd>
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative z-10 w-full max-w-xl mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-              {loading ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" /> : <Search className="h-5 w-5 text-zinc-400" />}
+          <div className="relative z-10 w-full max-w-xl mx-4 rounded-2xl bg-surface shadow-2xl border border-border overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin text-primary" /> : <Search className="h-5 w-5 text-muted" />}
               <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
                 placeholder="搜索知识库、库存、Wiki、文件..."
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400" />
-              <kbd className="text-[10px] text-zinc-400 font-mono border rounded-md px-1.5 py-0.5">ESC</kbd>
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-faint" />
+              <kbd className="text-[10px] text-faint font-mono border border-border-subtle rounded-md px-1.5 py-0.5">ESC</kbd>
             </div>
             <div className="max-h-80 overflow-y-auto">
               {!results && q.length < 2 && (
-                <div className="p-8 text-center text-sm text-zinc-400">输入至少 2 个字符开始搜索</div>
+                <div className="p-8 text-center text-sm text-faint">输入至少 2 个字符开始搜索</div>
               )}
               {allResults.length === 0 && q.length >= 2 && !loading && (
-                <div className="p-8 text-center text-sm text-zinc-400">未找到相关结果</div>
+                <div className="p-8 text-center text-sm text-faint">未找到相关结果</div>
               )}
               {allResults.map((r, i) => {
                 const Icon = typeIcons[r.type] || FileText;
                 return (
                   <button key={i} onClick={() => navigate(r.path)}
-                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                    <div className="mt-0.5 p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                      <Icon className="h-4 w-4 text-zinc-500" />
+                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-surface-hover transition-colors">
+                    <div className="mt-0.5 p-1.5 rounded-lg bg-surface-subtle">
+                      <Icon className="h-4 w-4 text-muted" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{r.title}</div>
-                      <div className="text-xs text-zinc-400 truncate mt-0.5">{r.snippet}</div>
+                      <div className="text-xs text-muted truncate mt-0.5">{r.snippet}</div>
                     </div>
-                    <span className="shrink-0 text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                    <span className="shrink-0 text-[10px] text-muted bg-surface-subtle px-1.5 py-0.5 rounded-full">
                       {typeLabels[r.type]}
                     </span>
                   </button>

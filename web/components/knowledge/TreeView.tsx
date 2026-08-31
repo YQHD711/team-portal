@@ -23,7 +23,7 @@ const ICON_MAP: Record<string, typeof File> = {
   ".jpg": Image, ".jpeg": Image, ".png": Image, ".gif": Image, ".webp": Image,
   ".ppt": File, ".pptx": File,
 };
-const ICON_COLOR = "text-amber-600 dark:text-amber-400";
+const ICON_COLOR = "text-warning dark:text-amber-400";
 const TEXT_EXTS = new Set([".md", ".txt", ".csv", ".json", ".xml", ".html", ".css", ".js", ".ts", ".py", ".cs"]);
 
 function getExt(path?: string): string {
@@ -42,15 +42,15 @@ function FileLink({ node }: { node: TreeNode }) {
 
   if (isTextFile(node.path)) {
     const href = node.path
-      ? `/knowledge/${node.path.replace(/\.\w+$/, "").split("/").map(s => encodeURIComponent(s)).join("/")}`
+      ? `/admin/knowledge/${node.path.replace(/\.\w+$/, "").split("/").map(s => encodeURIComponent(s)).join("/")}`
       : "#";
     return (
       <Link href={href}
-        className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+        className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm hover:bg-surface-hover transition-colors">
         <span className="w-4 shrink-0" />
-        <Icon className={`h-4 w-4 shrink-0 ${ext ? ICON_COLOR : "text-zinc-400"}`} />
+        <Icon className={`h-4 w-4 shrink-0 ${ext ? ICON_COLOR : "text-faint"}`} />
         <span className="truncate">{node.name}</span>
-        {ext && <span className="text-xs text-zinc-400 ml-auto">{ext}</span>}
+        {ext && <span className="text-xs text-faint ml-auto">{ext}</span>}
       </Link>
     );
   }
@@ -61,11 +61,11 @@ function FileLink({ node }: { node: TreeNode }) {
     : "#";
   return (
     <a href={downloadUrl} target="_blank" rel="noopener"
-      className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+      className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm hover:bg-surface-hover transition-colors">
       <span className="w-4 shrink-0" />
       <Icon className={`h-4 w-4 shrink-0 ${ICON_COLOR}`} />
       <span className="truncate">{node.name}</span>
-      <span className="text-xs text-zinc-400 ml-auto">{ext}</span>
+      <span className="text-xs text-faint ml-auto">{ext}</span>
     </a>
   );
 }
@@ -93,7 +93,7 @@ function TreeNodeItem({ node, level }: { node: TreeNode; level: number }) {
           <span className="w-4 shrink-0" />
           <BookOpen className="h-4 w-4 shrink-0" />
           <span className="truncate font-medium">{node.name}</span>
-          <span className="text-xs text-zinc-400 ml-auto">Wiki</span>
+          <span className="text-xs text-faint ml-auto">Wiki</span>
         </Link>
       </li>
     );
@@ -104,12 +104,12 @@ function TreeNodeItem({ node, level }: { node: TreeNode; level: number }) {
       <li>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-sm text-left hover:bg-surface-hover transition-colors"
         >
           <ChevronRight
-            className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+            className={`h-4 w-4 shrink-0 text-faint transition-transform ${expanded ? "rotate-90" : ""}`}
           />
-          <Folder className="h-4 w-4 shrink-0 text-zinc-400" />
+          <Folder className="h-4 w-4 shrink-0 text-faint" />
           <span className="truncate">{node.name}</span>
         </button>
         {expanded && node.children && node.children.length > 0 && (

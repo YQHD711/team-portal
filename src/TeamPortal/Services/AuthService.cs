@@ -30,6 +30,12 @@ public class AuthService
             return null;
         }
 
+        // B-1 fix: registration requires invite code unless system explicitly allows open registration
+        var openRegistrationStr = await _settings.Get("Auth:OpenRegistration", "false");
+        var openRegistration = bool.TryParse(openRegistrationStr, out var open) && open;
+        if (!openRegistration && string.IsNullOrEmpty(inviteCode))
+            throw new InvalidOperationException("注册需要邀请码");
+
         // Validate invite code if provided (or if system requires it)
         if (!string.IsNullOrEmpty(inviteCode))
         {

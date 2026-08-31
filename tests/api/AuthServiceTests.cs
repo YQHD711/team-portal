@@ -12,10 +12,15 @@ public class AuthServiceTests
 {
     private AppDbContext CreateContext()
     {
+        // SQLite 内存库（与 MaterialServiceTests 一致；InMemory 包已从测试项目移除）
+        var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        connection.Open();
         var opts = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseSqlite(connection)
             .Options;
-        return new AppDbContext(opts);
+        var context = new AppDbContext(opts);
+        context.Database.EnsureCreated();
+        return context;
     }
 
     private IConfiguration CreateConfig()

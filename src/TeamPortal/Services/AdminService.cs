@@ -33,6 +33,8 @@ public class AdminService
     public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username)) return null;
+        // Non-admin may not mint admin/部长 accounts (C-1 fix)
+        if (currentRole != "admin" && (userRole == "admin" || userRole == "部长")) return null;
         if (currentRole == "部长" && !string.IsNullOrEmpty(currentDept))
         {
             var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == currentDept);
@@ -49,6 +51,9 @@ public class AdminService
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
         if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
+        // Non-admin may not promote anyone to admin/部长 — only admin can write those role values (C-1 fix)
+        if (currentRole != "admin" && userRole is not null && (userRole == "admin" || userRole == "部长"))
+            return false;
 
         var changes = new List<string>();
         if (userRole is not null && user.Role != userRole) { changes.Add($"role:{user.Role}→{userRole}"); user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member"; }

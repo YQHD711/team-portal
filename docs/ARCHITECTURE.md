@@ -210,29 +210,30 @@ GET    /api/admin/me                                   → 当前用户角色+�
 
 ---
 
-## 六、与 OpenDeepWiki 的关系
+## 六、与 OpenDeepWiki 的关系（已融合，2026-08-06 更新）
 
-```
-OpenDeepWiki          Team Portal
-┌──────────┐          ┌──────────┐
-│ 代码知识库  │          │ 航模队管理  │
-│ 独立产品   │          │ 独立产品   │
-│           │          │           │
-│ 技术栈重叠: │          │           │
-│ Next.js   │          │ Next.js   │
-│ .NET 10   │          │ .NET 10   │
-│ Radix UI  │          │ Radix UI  │
-│ Tailwind  │          │ Tailwind  │
-└──────────┘          └──────────┘
-      │                     │
-      └──── 不共享代码 ──────┘
-      └──── 共享技术栈经验 ──┘
+> **状态:OpenDeepWiki 的 Wiki 生成能力已完整融合进 Team Portal,不再独立部署/运行。**
+
+```text
+OpenDeepWiki(已停用)          Team Portal
+┌──────────────────┐          ┌──────────────────┐
+│ 代码→Wiki 生成     │  ──融合──▶ │ Wiki 文档模块      │
+│ (git/zip/翻译)    │          │ /wiki + /wiki/import │
+│                  │          │ WikiGeneratorService │
+└──────────────────┘          │ (AI读源码生成文档)   │
+                              │ git提交/ZIP上传/翻译  │
+                              └──────────────────┘
 ```
 
-- 两个独立 Git 仓库
-- 两个独立 Docker Compose
-- 未来可选: JWT SSO 打通登录
-- 绝不: 在 OpenDeepWiki 仓库里建子项目
+融合情况:
+- **WikiGeneratorService.cs**(`src/TeamPortal/Services/`)= 原 OpenDeepWiki 生成器移植版("Inspired by OpenDeepWiki WikiGenerator")
+- 前端 Wiki 导入页(`web/app/(protected)/wiki/import/`)支持 git/ZIP/翻译三种方式
+- 生成的文档进入知识库(`data/knowledge/`),可被 AI RAG 检索
+- **端口冲突说明**:OpenDeepWiki 原占 8080/3000,与 Team Portal 相同;因已融合,OpenDeepWiki 不再需要运行,冲突不存在
+
+遗留事项:
+- OpenDeepWiki 仓库 `G:\OpenDeepWiki` 保留作历史参考,不再部署
+- `G:\长期资料库\CUADC技术资料库\` 等资料库内容可通过知识库上传/文档上传导入 Team Portal
 
 ---
 
@@ -240,15 +241,11 @@ OpenDeepWiki          Team Portal
 
 ```
 专用服务器 (Linux / Windows Server)
-├── /opt/team-portal/
-│   ├── docker-compose.yml
-│   ├── data/              ← 数据卷 (定期备份)
-│   └── .env               ← 密钥 (不在 Git 中)
-│
-└── /opt/opendeepwiki/     ← 独立部署
-    └── docker-compose.yml
+└── /opt/team-portal/
+    ├── docker-compose.yml
+    ├── data/              ← 数据卷 (定期备份)
+    └── .env               ← 密钥 (不在 Git 中)
 
    Nginx (可选)
-   ├── team.yourdomain.com → localhost:3000
-   └── wiki.yourdomain.com → localhost:8080
+   └── team.yourdomain.com → localhost:3000
 ```

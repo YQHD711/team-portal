@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Loader2, Plus, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 interface Session { sessionId: string; title: string; messageCount: number; lastMessage: string; }
@@ -21,8 +22,7 @@ export function FloatingChat() {
   // Load sessions on open
   useEffect(() => {
     if (!open || !getToken()) return;
-    fetch("/api/chat/sessions", { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(d => setSessions(d)).catch(() => {});
+    api.get<Session[]>("/api/chat/sessions").then(setSessions).catch(() => {});
   }, [open]);
 
   // Restore last session from localStorage (shared with ChatPanel)
@@ -32,8 +32,8 @@ export function FloatingChat() {
     if (stored) {
       setSessionId(stored);
     } else {
-      fetch("/api/chat/new-session", { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then(r => r.json()).then((d: { sessionId: string }) => {
+      api.get<{ sessionId: string }>("/api/chat/new-session")
+        .then(d => {
           setSessionId(d.sessionId);
           localStorage.setItem("chatSessionId", d.sessionId);
         }).catch(() => {});
@@ -45,11 +45,9 @@ export function FloatingChat() {
   const loadHistory = useCallback(async (sid: string) => {
     if (!sid) return;
     try {
-      const token = getToken();
-      const res = await fetch(`/api/chat/sessions/${sid}`, { headers: { Authorization: `Bearer ${token}` } });
-      const history = await res.json();
+      const history = await api.get<{ role: string; content: string }[]>(`/api/chat/sessions/${sid}`);
       if (Array.isArray(history) && history.length > 0) {
-        setMessages(history.map((m: { role: string; content: string }) => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setMessages(history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })));
       } else {
         setMessages([]);
       }
@@ -66,9 +64,7 @@ export function FloatingChat() {
   const newChat = async () => {
     setMessages([]);
     try {
-      const token = getToken();
-      const res = await fetch("/api/chat/new-session", { headers: { Authorization: `Bearer ${token}` } });
-      const { sessionId: sid } = await res.json();
+      const { sessionId: sid } = await api.get<{ sessionId: string }>("/api/chat/new-session");
       setSessionId(sid);
       localStorage.setItem("chatSessionId", sid);
     } catch { }
@@ -76,8 +72,7 @@ export function FloatingChat() {
 
   const deleteChat = async (sid: string) => {
     try {
-      const token = getToken();
-      await fetch(`/api/chat/sessions/${sid}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      await api.delete(`/api/chat/sessions/${sid}`);
       setSessions(prev => prev.filter(s => s.sessionId !== sid));
       if (sessionId === sid) { setSessionId(""); setMessages([]); localStorage.removeItem("chatSessionId"); }
     } catch { }
@@ -90,12 +85,7 @@ export function FloatingChat() {
     setSending(true);
 
     try {
-      const token = getToken();
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question: q, sessionId }),
-      });
+      const res = await api.stream("/api/ai/chat", { question: q, sessionId });
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No stream");
       const decoder = new TextDecoder();
@@ -121,8 +111,7 @@ export function FloatingChat() {
         });
       }
       // Refresh sessions
-      fetch("/api/chat/sessions", { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then(r => r.json()).then(d => setSessions(d)).catch(() => {});
+      api.get<Session[]>("/api/chat/sessions").then(setSessions).catch(() => {});
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "抱歉，AI 服务暂时不可用" }]);
     } finally {
@@ -134,31 +123,31 @@ export function FloatingChat() {
     <>
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-purple-500 text-white shadow-lg hover:bg-purple-600 transition-all hover:scale-105"
+        className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-accent-hover transition-all hover:scale-105"
         title="AI 助手"
       >
         {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-2 sm:right-6 z-50 w-[calc(100vw-1rem)] sm:w-96 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-2xl flex flex-col" style={{ maxHeight: "70vh" }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="fixed bottom-20 right-2 sm:right-6 z-50 w-[calc(100vw-1rem)] sm:w-96 rounded-2xl border border-border dark:border-zinc-700 bg-surface shadow-2xl flex flex-col" style={{ maxHeight: "70vh" }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-sm text-purple-600 dark:text-purple-400">AI 助手</span>
             <div className="flex items-center gap-1">
-              <button onClick={newChat} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800" title="新对话"><Plus className="h-4 w-4 text-zinc-400" /></button>
-              <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="h-4 w-4 text-zinc-400" /></button>
+              <button onClick={newChat} className="p-1 rounded hover:bg-surface-hover" title="新对话"><Plus className="h-4 w-4 text-faint" /></button>
+              <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-surface-hover"><X className="h-4 w-4 text-faint" /></button>
             </div>
           </div>
 
           {/* Session switcher */}
           {sessions.length > 0 && messages.length === 0 && (
-            <div className="border-b border-zinc-100 dark:border-zinc-800 max-h-36 overflow-y-auto">
+            <div className="border-b border-border max-h-36 overflow-y-auto">
               {sessions.slice(0, 5).map(s => (
                 <div key={s.sessionId} onClick={() => switchSession(s.sessionId)}
-                  className={`flex items-center gap-2 px-4 py-2 cursor-pointer text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 ${s.sessionId === sessionId ? "bg-purple-50 dark:bg-purple-950" : ""}`}>
+                  className={`flex items-center gap-2 px-4 py-2 cursor-pointer text-sm hover:bg-surface-hover ${s.sessionId === sessionId ? "bg-purple-50 dark:bg-purple-950" : ""}`}>
                   <span className="flex-1 truncate">{s.title}</span>
-                  <span className="text-xs text-zinc-400">{s.messageCount}条</span>
-                  <button onClick={(e) => { e.stopPropagation(); deleteChat(s.sessionId); }} className="p-0.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                  <span className="text-xs text-faint">{s.messageCount}条</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteChat(s.sessionId); }} className="p-0.5 rounded hover:bg-red-50 text-faint hover:text-danger"><Trash2 className="h-3 w-3" /></button>
                 </div>
               ))}
             </div>
@@ -168,11 +157,11 @@ export function FloatingChat() {
             {!loaded ? (
               <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-300" /></div>
             ) : messages.length === 0 ? (
-              <p className="text-sm text-zinc-400 text-center pt-8">问我任何关于航模、零件、飞行日志的问题</p>
+              <p className="text-sm text-faint text-center pt-8">问我任何关于航模、零件、飞行日志的问题</p>
             ) : (
               messages.map((m, i) => (
                 <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
-                  <div className={`inline-block max-w-[85%] rounded-xl px-3 py-2 ${m.role === "user" ? "bg-purple-500 text-white rounded-br-sm" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-bl-sm"}`}>
+                  <div className={`inline-block max-w-[85%] rounded-xl px-3 py-2 ${m.role === "user" ? "bg-primary text-white rounded-br-sm" : "bg-surface-subtle text-zinc-800 dark:text-zinc-200 rounded-bl-sm"}`}>
                     {m.content || (m.role === "assistant" && sending ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "")}
                   </div>
                 </div>
@@ -180,12 +169,12 @@ export function FloatingChat() {
             )}
           </div>
 
-          <div className="p-3 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="p-3 border-t border-border">
             <form onSubmit={e => { e.preventDefault(); send(); }} className="flex gap-2">
               <input ref={inputRef} value={question} onChange={e => setQuestion(e.target.value)} placeholder="输入问题..." disabled={sending || !loaded}
-                className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-sm outline-none focus:border-purple-400 disabled:opacity-50" />
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-50" />
               <button type="submit" disabled={sending || !question.trim()}
-                className="rounded-lg bg-purple-500 px-3 py-1.5 text-white hover:bg-purple-600 disabled:opacity-50">
+                className="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-accent-hover disabled:opacity-50">
                 <Send className="h-4 w-4" />
               </button>
             </form>

@@ -44,19 +44,49 @@ public class FlightService
 
     // ── Incidents ──
 
-    public async Task<List<IncidentRecord>> GetIncidents(int page = 1, int pageSize = 50)
-        => await _db.IncidentRecords.OrderByDescending(i => i.Date).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+    /// <summary>按调用者角色过滤事故:
+    /// - admin: 全部
+    /// - 部长: 仅本部门成员提交
+    /// - member: 仅自己提交</summary>
+    public async Task<List<IncidentRecord>> GetIncidents(int callerUserId, string? callerRole, string? callerDeptName, int? callerDeptId, int page = 1, int pageSize = 50)
+    {
+        var q = _db.IncidentRecords.AsQueryable();
+        if (callerRole == "admin")
+        {
+            // 全部可见
+        }
+        else if (callerRole == "部长")
+        {
+            if (callerDeptId.HasValue)
+            {
+                // 本部门成员(userIds) + 自己(若未关联 DepartmentId)
+                var memberIds = _db.Users.Where(u => u.DepartmentId == callerDeptId.Value && u.Role != "admin").Select(u => u.Id).ToList();
+                q = q.Where(i => (i.ReporterUserId != null && memberIds.Contains(i.ReporterUserId.Value)) || i.ReporterUserId == callerUserId);
+            }
+            else
+            {
+                q = q.Where(i => i.ReporterUserId == callerUserId);
+            }
+        }
+        else
+        {
+            // 普通成员:只看自己
+            q = q.Where(i => i.ReporterUserId == callerUserId);
+        }
+        return await q.OrderByDescending(i => i.Date).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+    }
 
     public async Task<IncidentRecord> CreateIncident(string type, string severity, string description,
-        DateTime date, string? resolution, string? reportedBy)
+        DateTime date, string? resolution, string? reportedBy, int reporterUserId, int? departmentId)
     {
         var i = new IncidentRecord
         {
             Type = type, Severity = severity, Description = description, Date = date,
-            Resolution = resolution, ReportedBy = reportedBy
+            Resolution = resolution, ReportedBy = reportedBy,
+            ReporterUserId = reporterUserId, DepartmentId = departmentId
         };
         _db.IncidentRecords.Add(i); await _db.SaveChangesAsync();
-        _log.Warn("flight", $"Incident reported: {type} ({severity})");
+        _log.Warn("flight", $"Incident reported: {type} ({severity}) by user#{reporterUserId}");
         return i;
     }
 

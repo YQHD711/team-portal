@@ -24,12 +24,20 @@ src/TeamPortal/Data/backups/
 **/__pycache__/
 ai-service/.venv/
 
-# Data (mounted at runtime)
-data/knowledge/
-data/knowledge/.history/
-data/inventory.xlsx
-data/flightlogs/
-data/baidu-token.json
+# Runtime data (uploads, baidu token, flight logs — never commit)
+# 注意：必须用前导 / 精确匹配根目录的 data/，避免误伤 src/TeamPortal/Data/（源码目录）
+/data/
+!data/.gitkeep
+
+# 明确排除：src/TeamPortal/Data/ 是源码目录，绝不能被上面的 data/ 规则忽略
+!/src/TeamPortal/Data/
+!/src/TeamPortal/Data/Models/
+!/src/TeamPortal/Data/Models/*.cs
+
+# Test / recovery artifacts
+*.bak-test
+*.corrupted
+tmp_*.cs
 
 # IDE
 .vs/
@@ -41,6 +49,12 @@ data/baidu-token.json
 # Code intelligence
 .codegraph/
 
+# Runtime logs / test reports (开发期生成,不入仓)
+logs/
+!logs/.gitkeep
+test-results/
+!test-results/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db
@@ -49,4 +63,3 @@ Thumbs.db
 certbot/
 deploy/nginx.prod.generated.conf
 deploy/nginx.temp.conf
-data/files/

@@ -14,6 +14,19 @@ public class MaintenanceService
     private readonly LogService _log;
     private string ProjRoot => Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..", ".."));
 
+    /// <summary>
+    /// 校验 relativePath 解析后是否在 root  目录下,防止 <c>../../etc/passwd</c> 逃逸。
+    /// 解析失败或越界返回 null。
+    /// </summary>
+    private static string? ResolveInside(string root, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return null;
+        var full = Path.GetFullPath(Path.Combine(root, relativePath));
+        var normRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normFull = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return normFull.StartsWith(normRoot, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
     public MaintenanceService(IServiceScopeFactory scopeFactory, IWebHostEnvironment env, LogService log)
     {
         _scopeFactory = scopeFactory;
@@ -65,7 +78,15 @@ public class MaintenanceService
         {
             try
             {
-                var fullPath = Path.GetFullPath(Path.Combine(ProjRoot, p.FilePath));
+                var fullPath = ResolveInside(ProjRoot, p.FilePath!);
+                if (fullPath is null)
+                {
+                    failedCount++;
+                    p.Status = "failed";
+                    p.ErrorMessage = $"拒绝写入：路径 '{p.FilePath}' 解析后不在项目根目录下";
+                    _log.Error("maintenance", $"路径遍历被拦截: {p.FilePath}");
+                    continue;
+                }
                 var dir = Path.GetDirectoryName(fullPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
@@ -159,7 +180,12 @@ public class MaintenanceService
         var applied = await db.CodeProposals.Where(p => p.Status == "applied").ToListAsync();
         foreach (var p in applied)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(ProjRoot, p.FilePath!));
+            var fullPath = ResolveInside(ProjRoot, p.FilePath!);
+            if (fullPath is null)
+            {
+                _log.Error("maintenance", $"回滚路径遍历被拦截: {p.FilePath}");
+                continue;
+            }
             var bakPath = fullPath + ".bak";
             if (File.Exists(bakPath))
             {

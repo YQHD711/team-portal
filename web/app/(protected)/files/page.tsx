@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { Upload, Download, Trash2, File, Loader2, Globe, Building2 } from "lucide-react";
 
 interface SharedFile { id: number; originalName: string; contentType: string; size: number; visibility: string; department: string | null; uploaderName: string; createdAt: string; }
@@ -17,11 +18,12 @@ export default function FilesPage() {
   const [uploading, setUploading] = useState(false);
   const [visibility, setVisibility] = useState("public");
   const [msg, setMsg] = useState("");
-  const [isStaff, setIsStaff] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchFiles = () => api.get<SharedFile[]>("/api/files").then(setFiles).catch(() => {});
-  useEffect(() => { fetchFiles(); api.get<{role:string}>("/api/auth/me").then(u => setIsStaff(u.role === "admin" || u.role === "部长")).catch(()=>{}); }, []);
+  useEffect(() => { fetchFiles(); }, []);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,9 +47,9 @@ export default function FilesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div><h1 className="text-2xl font-bold">资源共享</h1><p className="text-sm text-zinc-500">上传和下载队内共享文件，支持任意格式（最大 100MB）</p></div>
+      <div><h1 className="text-2xl font-bold">资源共享</h1><p className="text-sm text-muted">上传和下载队内共享文件，支持任意格式（最大 100MB）</p></div>
 
-      <form onSubmit={handleUpload} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3">
+      <form onSubmit={handleUpload} className="rounded-xl border border-border bg-surface p-5 space-y-3">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-sm font-medium mb-1">选择文件</label>
@@ -60,26 +62,26 @@ export default function FilesPage() {
               <option value="department">🏢 部门</option>
             </select>
           </div>
-          <button type="submit" disabled={uploading} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-50">
+          <button type="submit" disabled={uploading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50">
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {uploading ? "上传中..." : "上传"}
           </button>
         </div>
-        {msg && <div className={`text-sm p-2 rounded-lg ${msg.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{msg}</div>}
+        {msg && <div className={`text-sm p-2 rounded-lg ${msg.startsWith("✅") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>{msg}</div>}
       </form>
 
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
+      <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
         {files.length === 0 ? (
-          <div className="p-12 text-center text-zinc-400">
+          <div className="p-12 text-center text-faint">
             <File className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
             <p>暂无共享文件</p>
           </div>
         ) : files.map(f => (
           <div key={f.id} className="flex items-center gap-3 p-4">
-            <File className="h-8 w-8 text-zinc-400 shrink-0" />
+            <File className="h-8 w-8 text-faint shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="font-medium text-sm truncate">{f.originalName}</div>
-              <div className="text-xs text-zinc-400">
+              <div className="text-xs text-faint">
                 {formatSize(f.size)} · {f.uploaderName} · {new Date(f.createdAt).toLocaleString("zh-CN")}
                 <span className="ml-2">{f.visibility === "department" ? "🏢 部门" : "🌐 公开"}</span>
               </div>
@@ -92,7 +94,7 @@ export default function FilesPage() {
               const a = document.createElement("a"); a.href = url; a.download = f.originalName; a.click();
               URL.revokeObjectURL(url);
             }} className="p-2 rounded-lg hover:bg-sky-50 text-sky-600" title="下载"><Download className="h-5 w-5" /></button>
-            {isStaff && <button onClick={() => handleDelete(f.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="删除"><Trash2 className="h-5 w-5" /></button>}
+            {isStaff && <button onClick={() => handleDelete(f.id)} className="p-2 rounded-lg hover:bg-red-50 text-danger" title="删除"><Trash2 className="h-5 w-5" /></button>}
           </div>
         ))}
       </div>

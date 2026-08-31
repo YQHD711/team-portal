@@ -19,9 +19,9 @@ public class FlightTools
     [McpServerTool(Name = "flight_delete_battery")]
     public async Task<bool> DeleteBattery(int id) => await _flight.DeleteBattery(id);
     [McpServerTool(Name = "flight_list_incidents")]
-    public async Task<object> ListIncidents(int page = 1, int pageSize = 50) => await _flight.GetIncidents(page, pageSize);
+    public async Task<object> ListIncidents(int page = 1, int pageSize = 50) => await _flight.GetIncidents(0, "admin", null, null, page, pageSize);
     [McpServerTool(Name = "flight_create_incident")]
-    public async Task<object> CreateIncident(string type, string severity, string description, string? resolution = null, string? reportedBy = null) => await _flight.CreateIncident(type, severity, description, DateTime.UtcNow, resolution, reportedBy);
+    public async Task<object> CreateIncident(string type, string severity, string description, string? resolution = null, string? reportedBy = null) => await _flight.CreateIncident(type, severity, description, DateTime.UtcNow, resolution, reportedBy, 0, null);
     [McpServerTool(Name = "flight_update_incident")]
     public async Task<bool> UpdateIncident(int id, string? type = null, string? severity = null, string? description = null, string? resolution = null) => await _flight.UpdateIncident(id, type, severity, description, null, resolution);
     [McpServerTool(Name = "flight_delete_incident")]

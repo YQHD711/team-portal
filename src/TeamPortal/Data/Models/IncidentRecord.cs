@@ -10,4 +10,7 @@ public class IncidentRecord
     public string? Resolution { get; set; }
     public string? ReportedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    // 可见性控制:记录提交人 + 提交人所属部门(部长只能看本部门成员的提交)
+    public int? ReporterUserId { get; set; }
+    public int? DepartmentId { get; set; }
 }

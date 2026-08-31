@@ -159,8 +159,11 @@ public class BackupService
             _log.Info("backup", $"Safety backup saved: {Path.GetFileName(safetyPath)}");
         }
 
-        // Restore: copy backup over current DB
-        File.Copy(backupPath, _dbPath, overwrite: true);
+        // Restore via SQLite online backup API — handles WAL correctly,
+        // unlike File.Copy which leaves a stale -wal that replays pre-restore writes on restart
+        // (and File.Delete on -wal fails while the app's own connection holds the lock).
+        await Task.Run(() => RestoreDatabase(backupPath, _dbPath));
+
         _log.Warn("backup", $"Database restored from {backupFileName}. App restart required.");
 
         return true;
@@ -171,7 +174,16 @@ public class BackupService
     /// </summary>
     public bool DeleteBackup(string fileName)
     {
-        var path = Path.Combine(_backupDir, fileName);
+        // 校验 fileName 解析后在 _backupDir 内（防 ../ 逃逸到上级目录删任意文件）
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
+        var path = Path.GetFullPath(Path.Combine(_backupDir, fileName));
+        var normDir = Path.GetFullPath(_backupDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!normPath.StartsWith(normDir, StringComparison.OrdinalIgnoreCase) || normPath == normDir)
+        {
+            _log.Warn("backup", $"拒绝删除越界备份: {fileName}");
+            return false;
+        }
         if (!File.Exists(path)) return false;
 
         var latest = GetLatestBackup();
@@ -231,15 +243,40 @@ public class BackupService
             return new StartupDbResult { Healthy = false, Recovered = false, Message = $"{reason} — no backup, starting fresh" };
         }
 
+        // 关键: 释放 Microsoft.Data.Sqlite 连接池持有的文件句柄,
+        // 否则下面的 File.Move/File.Copy 会因 "file being used by another process" 失败。
+        SqliteConnection.ClearAllPools();
+
         // Move corrupted DB aside (don't delete — keep for forensics)
+        // -wal/-shm 也要一起移走,否则新 DB 会复用旧 WAL,导致恢复无效(旧数据复活)。
         if (File.Exists(_dbPath))
         {
             var corruptPath = _dbPath + ".corrupted";
-            File.Move(_dbPath, corruptPath, overwrite: true);
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                var f = _dbPath + suffix;
+                if (File.Exists(f))
+                {
+                    try { File.Move(f, corruptPath + suffix, overwrite: true); }
+                    catch (Exception ex) { _log.Warn("backup", $"Failed to move {Path.GetFileName(f)}: {ex.Message}"); }
+                }
+            }
             _log.Warn("backup", $"Corrupted DB saved as: {Path.GetFileName(corruptPath)}");
         }
 
         File.Copy(latest, _dbPath);
+
+        // 防御: 如果主文件缺失但旧 -wal/-shm 残留,清掉避免污染新库
+        foreach (var suffix in new[] { "-wal", "-shm" })
+        {
+            var f = _dbPath + suffix;
+            if (File.Exists(f))
+            {
+                try { File.Delete(f); }
+                catch { /* best effort */ }
+            }
+        }
+
         _log.Warn("backup", $"Auto-recovery: restored from {Path.GetFileName(latest)}");
         return new StartupDbResult
         {
@@ -329,6 +366,18 @@ public class BackupService
     {
         using var source = new SqliteConnection($"Data Source={sourcePath}");
         using var dest = new SqliteConnection($"Data Source={destPath}");
+        source.Open();
+        dest.Open();
+        source.BackupDatabase(dest);
+    }
+
+    /// <summary>Restore from a backup file into the live DB via the SQLite backup API.
+    /// Unlike File.Copy, this correctly checkpoints/rewrites the live WAL so no stale
+    /// pre-restore writes survive a restart.</summary>
+    private static void RestoreDatabase(string backupPath, string dbPath)
+    {
+        using var source = new SqliteConnection($"Data Source={backupPath}");
+        using var dest = new SqliteConnection($"Data Source={dbPath}");
         source.Open();
         dest.Open();
         source.BackupDatabase(dest);

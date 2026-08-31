@@ -1,122 +1,239 @@
 @import "tailwindcss";
 
+/* ============================================================================
+ * Team Portal 设计系统 · 多主题配色
+ * ----------------------------------------------------------------------------
+ * 4 套预设主题通过 <html data-theme="..."> 切换（管理员在系统设置里选，前端 ThemeProvider 应用）：
+ *   indigo — 深空靛蓝（Linear 风，默认，深色）
+ *   sky    — 深空天青（航模/飞行气质，深色）
+ *   light  — 日光蓝（白天实用，浅色）
+ *   warm   — 暖白（温暖克制，浅色）
+ *
+ * 组件统一引用语义 token（bg-background/text-foreground/bg-surface/border-border 等），
+ * 不要硬编码颜色，这样切换主题时全局自动生效。
+ * ============================================================================
+ */
+
+/* 旧的 .dark 类仍可触发深色（兼容历史 dark: 前缀代码，本质等同 indigo 主题的明度） */
 @variant dark (&:where(.dark, .dark *));
 
-:root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-light: #3b82f6;
-  --accent: #06b6d4;
-  --surface: #ffffff;
-  --border: #e2e8f0;
-  --muted: #64748b;
+/* ── 主题 1：深空靛蓝（默认） ── */
+:root,
+:root[data-theme="indigo"] {
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --surface: #191a1b;
+  --surface-subtle: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --muted: #8a8f98;
+  --faint: #62666d;
+  --primary: #5e6ad2;
+  --primary-fg: #7170ff;
+  --accent: #7170ff;
+  --accent-hover: #828fff;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #22d3ee;
+  color-scheme: dark;
 }
 
+/* ── 主题 2：深空天青 ── */
+:root[data-theme="sky"] {
+  --background: #060a10;
+  --foreground: #f8fafc;
+  --surface: #101923;
+  --surface-subtle: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --muted: #7e8fa3;
+  --faint: #556476;
+  --primary: #0ea5e9;
+  --primary-fg: #38bdf8;
+  --accent: #38bdf8;
+  --accent-hover: #60a5fa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #22d3ee;
+  color-scheme: dark;
+}
+
+/* ── 主题 3：日光蓝（浅色） ── */
+:root[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #1a1d21;
+  --surface: #f6f7f9;
+  --surface-subtle: #f1f2f5;
+  --surface-hover: #eceef2;
+  --border: rgba(0, 0, 0, 0.09);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --muted: #6b7280;
+  --faint: #9aa1ab;
+  --primary: #5e6ad2;
+  --primary-fg: #7170ff;
+  --accent: #5e6ad2;
+  --accent-hover: #7170ff;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #0891b2;
+  color-scheme: light;
+}
+
+/* ── 主题 4：暖白 ── */
+:root[data-theme="warm"] {
+  --background: #fbfaf7;
+  --foreground: #1f1d1b;
+  --surface: #ffffff;
+  --surface-subtle: #f6f3ee;
+  --surface-hover: #f0ece4;
+  --border: rgba(0, 0, 0, 0.09);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --muted: #7a7266;
+  --faint: #a39a8d;
+  /* 主色加深以保证白字按钮 AA 对比度 (≥4.5:1)：原 #c26a1d 仅 3.9:1 */
+  --primary: #9c4d10;
+  --primary-fg: #b25e15;
+  --accent: #b25e15;
+  --accent-hover: #823f08;
+  --success: #15803d;
+  --warning: #b25e15;
+  --danger: #b13e1f;
+  --info: #0e7490;
+  color-scheme: light;
+}
+
+/* ── 个人明暗覆盖 ──
+ * 团队 Brand:Theme 经 data-theme 决定主色（--primary/--accent 等）；
+ * 明暗（背景/文字/表面/边框）默认跟随主题，但个人可在 `html` 上加 `.dark`/`.light`
+ * class 覆盖明暗（普通队员也能自己切深/浅，主色保持不变）。
+ * 注意：此块定义在 data-theme 之后，保证优先级覆盖明暗、不影响主色。
+ */
 .dark {
-  --background: #0b1120;
-  --foreground: #e2e8f0;
-  --primary: #60a5fa;
-  --primary-light: #93bbfd;
-  --accent: #22d3ee;
-  --surface: #111827;
-  --border: #1e293b;
-  --muted: #94a3b8;
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --surface: #191a1b;
+  --surface-subtle: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --muted: #8a8f98;
+  --faint: #62666d;
+  color-scheme: dark;
+}
+.light {
+  --background: #ffffff;
+  --foreground: #1a1d21;
+  --surface: #f6f7f9;
+  --surface-subtle: #f1f2f5;
+  --surface-hover: #eceef2;
+  --border: rgba(0, 0, 0, 0.09);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --muted: #6b7280;
+  --faint: #9aa1ab;
+  color-scheme: light;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-fg: var(--primary-light);
-  --color-accent: var(--accent);
   --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-muted: var(--muted);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, monospace;
+  --color-faint: var(--faint);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --radius-card: 14px;
+  --radius-btn: 9px;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* Modern scrollbar */
+/* ── 滚动条（跟随主题） ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
-.dark ::-webkit-scrollbar-thumb { background: #475569; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); }
 
-/* Glass effect utility */
+/* ── 玻璃拟态（跟随主题明度） ── */
 .glass {
-  background: rgba(255,255,255,0.7);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-.dark .glass {
-  background: rgba(17,24,39,0.7);
-}
 
-/* Card hover effect */
+/* ── 卡片 hover ── */
 .card-hover {
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-.dark .card-hover:hover {
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 30px -12px rgba(0, 0, 0, 0.35);
 }
 
-/* Gradient text */
+/* ── 品牌渐变文字（跟随主题主色） ── */
 .gradient-text {
-  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  background: linear-gradient(135deg, var(--primary), var(--accent));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Page fade in */
+/* ── 页面入场 ── */
 main { animation: fadeIn 0.3s ease-out; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Shimmer loading */
+/* ── 骨架 shimmer ── */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, var(--border) 25%, transparent 50%, var(--border) 75%);
+  background: linear-gradient(90deg, var(--surface-subtle) 25%, var(--surface-hover) 50%, var(--surface-subtle) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* Mobile optimizations */
+/* ── 移动端优化 ── */
 @media (max-width: 640px) {
   .hide-on-mobile { display: none !important; }
   .full-on-mobile { width: 100% !important; }
   main { padding: 12px !important; }
 }
 
-/* Responsive table wrapper */
+/* ── 响应式表格 ── */
 .table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Touch-friendly buttons */
+/* ── 触控友好 ── */
 @media (max-width: 768px) {
-  button, a.btn, .clickable {
-    min-height: 40px;
-    min-width: 40px;
-  }
-  input, select, textarea {
-    font-size: 16px !important; /* prevent iOS zoom */
-  }
+  button, a.btn, .clickable { min-height: 40px; min-width: 40px; }
+  input, select, textarea { font-size: 16px !important; }
 }

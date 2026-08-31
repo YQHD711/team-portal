@@ -12,5 +12,6 @@ public class PilotProfile
     public string? EmergencyContact { get; set; }
     public string? EmergencyPhone { get; set; }
     public string? FlightTypes { get; set; }
+    public string? Skills { get; set; } // 技能标签,逗号分隔,如 "STM32,焊接,PCB设计"
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

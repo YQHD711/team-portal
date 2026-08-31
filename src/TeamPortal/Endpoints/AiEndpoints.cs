@@ -10,8 +10,10 @@ public static class AiEndpoints
     {
         var group = app.MapGroup("/api/ai").RequireAuthorization();
 
-        group.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, AiProxyService proxy, ConversationService conv) =>
+        group.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, AiProxyService proxy, ConversationService conv, LogService log) =>
         {
+            if (string.IsNullOrWhiteSpace(req.Question))
+                return Results.Problem("question 不能为空", statusCode: 400);
             var userName = user.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
             var sessionId = req.SessionId ?? Guid.NewGuid().ToString("N")[..12];
 
@@ -29,7 +31,12 @@ public static class AiEndpoints
             // Stream AI response
             var stream = await proxy.ChatStream(req.Question, historyTuples);
             if (stream is null)
+            {
+                log.Warn("ai", $"Chat failed: AI service unavailable, user={userName}");
                 return Results.Problem("AI service unavailable", statusCode: 503);
+            }
+
+            log.Info("ai", $"Chat: {userName} session={sessionId} q={req.Question.Length} chars");
 
             // Wrap stream to capture the full response for saving
             var ms = new MemoryStream();
@@ -43,12 +50,17 @@ public static class AiEndpoints
             return Results.Stream(captureStream, "text/event-stream");
         });
 
-        group.MapPost("/search", async (SearchRequest req, AiProxyService proxy) =>
+        group.MapPost("/search", async (SearchRequest req, ClaimsPrincipal user, AiProxyService proxy, LogService log) =>
         {
+            var userName = user.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
             var result = await proxy.Search(req.Query);
             if (result is null)
+            {
+                log.Warn("ai", $"Search failed: AI service unavailable, user={userName}");
                 return Results.Problem("Search service unavailable", statusCode: 503);
+            }
 
+            log.Info("ai", $"Search: {userName} query={req.Query}");
             return Results.Ok(result);
         });
     }
@@ -151,7 +163,15 @@ internal class CaptureStream : Stream
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _disposed = true; _cts.Cancel(); _inner.Dispose(); _buffer.Dispose(); _cts.Dispose(); }
+        if (disposing)
+        {
+            _disposed = true;
+            try { _cts.Cancel(); }
+            catch (ObjectDisposedException) { /* response pipeline may dispose twice */ }
+            _inner.Dispose();
+            _buffer.Dispose();
+            _cts.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

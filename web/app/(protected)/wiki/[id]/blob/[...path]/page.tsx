@@ -30,8 +30,8 @@ export default function BlobViewerPage() {
       .finally(() => setLoading(false));
   }, [taskId, filePath]);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
-  if (error) return <div className="text-center py-16 text-zinc-500">{error}</div>;
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-6 w-6 animate-spin text-faint" /></div>;
+  if (error) return <div className="text-center py-16 text-muted">{error}</div>;
   if (!data) return null;
 
   const lines = data.content.split("\n");
@@ -39,13 +39,13 @@ export default function BlobViewerPage() {
   return (
     <div className="space-y-2 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
-        <Link href={`/wiki/${taskId}`} className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-sky-600">
+        <Link href={`/wiki/${taskId}`} className="inline-flex items-center gap-1 text-sm text-muted hover:text-sky-600">
           <ArrowLeft className="h-4 w-4" /> 返回文档
         </Link>
-        <span className="text-xs text-zinc-400">{data.language} · {data.lines} 行</span>
+        <span className="text-xs text-faint">{data.language} · {data.lines} 行</span>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-[#1e1e1e] text-[#d4d4d4]">
+      <div className="rounded-xl border border-border overflow-hidden bg-[#1e1e1e] text-[#d4d4d4]">
         <div className="px-4 py-2 border-b border-zinc-700 bg-[#252526] flex items-center justify-between">
           <span className="text-sm font-mono text-[#4fc3f7]">{filePath}</span>
         </div>

@@ -16,7 +16,7 @@ public class InventoryTools
     [McpServerTool(Name = "inventory_create")]
     public async Task<object> Create(string name, string category, int quantity, string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? projectTag = null, string? locationCode = null) => await _inv.Create(name, category, quantity, grade, unitPrice, departmentId, projectTag, locationCode);
     [McpServerTool(Name = "inventory_update")]
-    public async Task<object?> Update(int id, string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? projectTag = null, string? locationCode = null) => await _inv.Update(id, grade, unitPrice, departmentId, projectTag, locationCode);
+    public async Task<object?> Update(int id, string? name = null, int? quantity = null, string? status = null, string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? projectTag = null, string? locationCode = null) => await _inv.Update(id, name, quantity, status, grade, unitPrice, departmentId, projectTag, locationCode);
     [McpServerTool(Name = "inventory_set_photo")]
     public async Task SetPhoto(int id, string photoUrl) => await _inv.SetPhoto(id, photoUrl);
     [McpServerTool(Name = "inventory_delete")]

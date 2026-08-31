@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/lib/auth", () => ({
   isStaff: vi.fn(),
+  getToken: vi.fn(),
 }));
 vi.mock("@/components/ai/ChatPanel", () => ({
   ChatPanel: () => null,
@@ -46,18 +47,18 @@ describe("仪表盘", () => {
     mockedIsStaff.mockReturnValue(false);
     render(<Home />);
 
-    expect(await screen.findByText("团队人数")).toBeInTheDocument();
+    expect(await screen.findByText("团队成员")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
-    expect(screen.getByText("零件库存")).toBeInTheDocument();
+    expect(screen.getByText("库存物料")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByText("本月新增零件")).toBeInTheDocument();
+    expect(screen.getByText("本月新增")).toBeInTheDocument();
   });
 
   it("普通成员不显示财务卡片", async () => {
     mockedIsStaff.mockReturnValue(false);
     render(<Home />);
 
-    await screen.findByText("团队人数");
+    await screen.findByText("团队成员");
     expect(screen.queryByText("库存总价值")).not.toBeInTheDocument();
     expect(screen.queryByText("本月支出")).not.toBeInTheDocument();
   });
@@ -66,20 +67,21 @@ describe("仪表盘", () => {
     mockedIsStaff.mockReturnValue(true);
     render(<Home />);
 
-    await screen.findByText("团队人数");
+    await screen.findByText("团队成员");
     expect(screen.getByText("库存总价值")).toBeInTheDocument();
-    expect(screen.getByText("¥9,999")).toBeInTheDocument();
+    // formatMoney 将 ≥1000 缩写为 k：9999 → "¥10.0k"，1200 → "¥1.2k"
+    expect(screen.getByText("¥10.0k")).toBeInTheDocument();
     expect(screen.getByText("本月支出")).toBeInTheDocument();
-    expect(screen.getByText("¥1200")).toBeInTheDocument();
+    expect(screen.getByText("¥1.2k")).toBeInTheDocument();
   });
 
   it("低库存警告显示零件名与补货链接", async () => {
     mockedIsStaff.mockReturnValue(false);
     render(<Home />);
 
-    expect(await screen.findByText("库存不足警告")).toBeInTheDocument();
+    expect(await screen.findByText("低库存预警")).toBeInTheDocument();
     expect(screen.getByText(/螺旋桨/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "补货" })).toHaveAttribute("href", "/inventory");
+    expect(screen.getByRole("link", { name: /补货/ })).toHaveAttribute("href", "/inventory");
   });
 
   it("无团队动态时显示空状态", async () => {

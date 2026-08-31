@@ -1,9 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace TeamPortal.Data.Models;
 
 public class User
 {
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
+    [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "member";
     public int? DepartmentId { get; set; }

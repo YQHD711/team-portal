@@ -17,14 +17,27 @@ public class MaterialService
         _db = db; _log = log; _notify = notify;
     }
 
-    public async Task<CheckoutRequest> CreateCheckout(int itemId, int userId, int quantity, string note)
+    public async Task<CheckoutRequest> CreateCheckout(int itemId, int userId, int quantity, string note, string? role = null)
     {
         var item = await _db.InventoryItems.FindAsync(itemId)
             ?? throw new InvalidOperationException("零件不存在");
         if (quantity <= 0) throw new InvalidOperationException("数量必须大于0");
         if (item.Quantity < quantity) throw new InvalidOperationException("库存不足");
 
-        var status = item.Grade switch { "A" => "pending_dept", "B" => "pending_dept", _ => "approved" };
+        // 审批流转规则：
+        //  管理员领用 → 直接放行（管理员即终审人）
+        //  部长领用   → A级 跳过部长审直接到管理员终审；B级 直接放行（部长即部长审审批人）
+        //  普通成员   → A/B级 需部长审（A级再管理员终审）；C级 自助放行
+        var isAdminSelf = role == "admin";
+        var isDeptHeadSelf = role == "部长";
+        var status = isAdminSelf
+            ? "approved"
+            : item.Grade switch
+            {
+                "A" => isDeptHeadSelf ? "pending_admin" : "pending_dept",
+                "B" => isDeptHeadSelf ? "approved" : "pending_dept",
+                _ => "approved",
+            };
         var req = new CheckoutRequest
         {
             InventoryItemId = itemId, RequesterUserId = userId, Quantity = quantity,
@@ -32,22 +45,28 @@ public class MaterialService
             CreatedAt = DateTime.UtcNow,
             ApprovedAt = status == "approved" ? DateTime.UtcNow : null,
         };
-        _db.CheckoutRequests.Add(req);
 
         if (status == "approved")
         {
-            item.Quantity -= quantity; item.Status = item.Quantity <= 0 ? "in_use" : item.Status;
-            item.UpdatedAt = DateTime.UtcNow;
+            // 原子扣库存:单条 UPDATE 防并发丢更新;受影响行数为 0 即库存不足
+            var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE InventoryItems SET Quantity = Quantity - {quantity},
+Status = CASE WHEN Quantity - {quantity} <= 0 THEN 'in_use' ELSE Status END,
+UpdatedAt = {DateTime.UtcNow} WHERE Id = {itemId} AND Quantity >= {quantity}");
+            if (updated == 0) throw new InvalidOperationException("库存不足");
             _db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = itemId, Type = "checkout", Quantity = quantity,
                 UserName = "", Note = $"[C级自助] {note}", CreatedAt = DateTime.UtcNow,
             });
         }
+        _db.CheckoutRequests.Add(req);
 
         await _db.SaveChangesAsync();
         _log?.Info("inventory", $"Checkout #{req.Id}: {item.Name} -{quantity} [{item.Grade}] -> {status}");
-        if (status != "approved")
+        if (status == "pending_admin")
+            _notify?.Notify("待管理员审批", $"「{item.Name}」({item.Grade}级) 申请 {quantity} 个", "/inventory/checkout", targetRole: "admin");
+        else if (status == "pending_dept")
             _notify?.Notify("待审批领用", $"「{item.Name}」({item.Grade}级) 申请 {quantity} 个", "/inventory/checkout", targetRole: "staff");
         return req;
     }
@@ -59,11 +78,13 @@ public class MaterialService
 
         if (req.Grade == "B")
         {
+            // 原子扣库存(B级批准即扣),失败抛库存不足
+            var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE InventoryItems SET Quantity = Quantity - {req.Quantity},
+Status = CASE WHEN Quantity - {req.Quantity} <= 0 THEN 'in_use' ELSE Status END,
+UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
+            if (updated == 0) throw new InvalidOperationException("库存不足");
             req.Status = "approved"; req.ApprovedAt = DateTime.UtcNow; req.DeptApproverUserId = approverUserId;
-            var item = req.Item!;
-            if (item.Quantity < req.Quantity) throw new InvalidOperationException("库存不足");
-            item.Quantity -= req.Quantity; item.Status = item.Quantity <= 0 ? "in_use" : item.Status;
-            item.UpdatedAt = DateTime.UtcNow;
             _db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
@@ -87,9 +108,12 @@ public class MaterialService
         if (req is null || req.Status != "pending_admin" || req.Grade != "A") return null;
         req.Status = "approved"; req.ApprovedAt = DateTime.UtcNow; req.AdminApproverUserId = approverUserId;
         var item = req.Item!;
-        if (item.Quantity < req.Quantity) throw new InvalidOperationException("库存不足");
-        item.Quantity -= req.Quantity; item.Status = item.Quantity <= 0 ? "in_use" : item.Status;
-        item.UpdatedAt = DateTime.UtcNow;
+        // 原子扣库存(A级终审即扣),失败抛库存不足
+        var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE InventoryItems SET Quantity = Quantity - {req.Quantity},
+Status = CASE WHEN Quantity - {req.Quantity} <= 0 THEN 'in_use' ELSE Status END,
+UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
+        if (updated == 0) throw new InvalidOperationException("库存不足");
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
@@ -113,7 +137,8 @@ public class MaterialService
     }
 
     public async Task<List<CheckoutRequest>> GetMyRequests(int userId) =>
-        await _db.CheckoutRequests.Include(r => r.Item).Where(r => r.RequesterUserId == userId)
+        await _db.CheckoutRequests.Include(r => r.Item).Include(r => r.Checkin)
+            .Where(r => r.RequesterUserId == userId)
             .OrderByDescending(r => r.CreatedAt).Take(100).ToListAsync();
 
     public async Task<List<CheckoutRequest>> GetPendingRequests(string? role, int? userId, int? departmentId)
@@ -138,9 +163,13 @@ public class MaterialService
         if (req.Grade == "A" && !hasPhoto) throw new InvalidOperationException("A级物料归还必须上传照片");
 
         req.Status = "returned"; req.ReturnedAt = DateTime.UtcNow;
-        var item = req.Item!; item.Quantity += req.Quantity;
-        item.Status = condition == "damaged" ? "broken" : "available";
-        item.UpdatedAt = DateTime.UtcNow;
+        var item = req.Item!;
+        // 原子加库存并恢复状态(损坏→broken,否则→available),防并发丢更新
+        var status = condition == "damaged" ? "broken" : "available";
+        var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE InventoryItems SET Quantity = Quantity + {req.Quantity}, Status = {status},
+UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
+        if (updated == 0) throw new InvalidOperationException("零件不存在");
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkin", Quantity = req.Quantity,
@@ -217,10 +246,17 @@ public class MaterialService
 
     public async Task AssignStocktakeItems(int stocktakeId, Dictionary<int, int> itemUserMap)
     {
+        // 性能 #3:预加载所有相关项,内存匹配 → 100 项从 100 次查询降为 1 次
+        if (itemUserMap.Count == 0) return;
+        var itemIds = itemUserMap.Keys.ToList();
+        var items = await _db.StocktakeItems
+            .Where(s => s.StocktakeId == stocktakeId && itemIds.Contains(s.InventoryItemId))
+            .ToListAsync();
+        var byItemId = items.ToDictionary(s => s.InventoryItemId);
         foreach (var kv in itemUserMap)
         {
-            var si = await _db.StocktakeItems.FirstOrDefaultAsync(s => s.StocktakeId == stocktakeId && s.InventoryItemId == kv.Key);
-            if (si is not null) si.CheckedByUserId = kv.Value;
+            if (byItemId.TryGetValue(kv.Key, out var si))
+                si.CheckedByUserId = kv.Value;
         }
         await _db.SaveChangesAsync();
     }
@@ -250,13 +286,22 @@ public class MaterialService
 
     public async Task BatchCheckStocktakeItems(int stocktakeId, int userId, List<StocktakeItemResult> results)
     {
-        foreach (var r in results)
+        // 性能 #3:预加载 + 内存匹配 → 100 项从 100 次查询降为 1 次
+        if (results.Count == 0) { /* fall through to count */ }
+        else
         {
-            var si = await _db.StocktakeItems.FirstOrDefaultAsync(s => s.StocktakeId == stocktakeId && s.InventoryItemId == r.ItemId);
-            if (si is null || si.CheckedByUserId != userId) continue;
-            si.ActualQty = r.ActualQty; si.Difference = r.ActualQty - si.SystemQty; si.Note = r.Note;
+            var itemIds = results.Select(r => r.ItemId).ToList();
+            var items = await _db.StocktakeItems
+                .Where(s => s.StocktakeId == stocktakeId && itemIds.Contains(s.InventoryItemId))
+                .ToListAsync();
+            var byItemId = items.ToDictionary(s => s.InventoryItemId);
+            foreach (var r in results)
+            {
+                if (!byItemId.TryGetValue(r.ItemId, out var si) || si.CheckedByUserId != userId) continue;
+                si.ActualQty = r.ActualQty; si.Difference = r.ActualQty - si.SystemQty; si.Note = r.Note;
+            }
+            await _db.SaveChangesAsync();
         }
-        await _db.SaveChangesAsync();
 
         // Check if all items are now submitted
         var totalItems = await _db.StocktakeItems.CountAsync(si => si.StocktakeId == stocktakeId);

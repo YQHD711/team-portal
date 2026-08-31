@@ -31,7 +31,7 @@ public class ProfileService
     }
 
     public async Task<bool> UpdateProfile(int userId, string? level, double? flightHours, DateTime? firstFlight,
-        string? bio, string? emergencyContact, string? emergencyPhone, string? flightTypes)
+        string? bio, string? emergencyContact, string? emergencyPhone, string? flightTypes, string? skills)
     {
         var profile = await _db.PilotProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile is null) return false;
@@ -44,6 +44,7 @@ public class ProfileService
         if (emergencyContact is not null && profile.EmergencyContact != emergencyContact) { changes.Add("emergency"); profile.EmergencyContact = emergencyContact; }
         if (emergencyPhone is not null && profile.EmergencyPhone != emergencyPhone) { changes.Add("phone"); profile.EmergencyPhone = emergencyPhone; }
         if (flightTypes is not null && profile.FlightTypes != flightTypes) { changes.Add("flightTypes"); profile.FlightTypes = flightTypes; }
+        if (skills is not null && profile.Skills != skills) { changes.Add($"skills"); profile.Skills = skills; }
         profile.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -97,6 +98,27 @@ public class ProfileService
         _db.TrainingRecords.Remove(record);
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>批量给多人加同一次培训记录(同一课程同一次上课)。返回实际创建的记录数。
+    /// 自动跳过不存在的 userId(FK 失败),避免整批回滚。</summary>
+    public async Task<int> BatchAddTrainingForUsers(IEnumerable<int> userIds, string courseName, DateTime examDate,
+        double? score, string? examiner, string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(courseName)) throw new ArgumentException("课程名称不能为空");
+        var distinctIds = userIds.Distinct().ToList();
+        if (distinctIds.Count == 0) return 0;
+        var existingIds = await _db.Users.Where(u => distinctIds.Contains(u.Id)).Select(u => u.Id).ToListAsync();
+        var records = existingIds.Select(uid => new TrainingRecord
+        {
+            UserId = uid, CourseName = courseName, ExamDate = examDate,
+            Score = score, Examiner = examiner, Notes = notes
+        }).ToList();
+        if (records.Count == 0) return 0;
+        _db.TrainingRecords.AddRange(records);
+        await _db.SaveChangesAsync();
+        _log.Info("profile", $"Batch training: course='{courseName}', {records.Count}/{distinctIds.Count} users (skipped {distinctIds.Count - records.Count} missing), date={examDate:yyyy-MM-dd}");
+        return records.Count;
     }
 
     // ── Competition ──
@@ -159,7 +181,7 @@ public class ProfileService
             {
                 p.Id, p.UserId, Username = p.User!.Username,
                 Department = p.User.Department != null ? p.User.Department.Name : null,
-                p.Level, p.TotalFlightHours, p.FirstFlightDate, p.UpdatedAt
+                p.Level, p.TotalFlightHours, p.FirstFlightDate, p.Skills, p.UpdatedAt
             })
             .ToListAsync<object>();
     }
@@ -182,7 +204,7 @@ public class ProfileService
             Department = profile.User.Department?.Name,
             profile.Level, profile.TotalFlightHours, profile.FirstFlightDate,
             profile.Bio, profile.EmergencyContact, profile.EmergencyPhone,
-            profile.FlightTypes, profile.UpdatedAt,
+            profile.FlightTypes, profile.Skills, profile.UpdatedAt,
             TrainingRecords = training.Select(t => new
             {
                 t.Id, t.CourseName, t.Score, t.ExamDate, t.Examiner, t.Notes, t.CreatedAt
