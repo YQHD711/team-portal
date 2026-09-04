@@ -27,9 +27,13 @@ if [ "$TAG" != "latest" ]; then
 fi
 
 echo "==> 3/4 滚动重启服务"
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --remove-orphans
+# 注意: 不能加 --remove-orphans，wiki-nginx 由独立的 docker-compose.wiki.yml 管理，会被误删
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 
-echo "==> 4/4 清理悬空镜像"
+echo "==> 4/4 恢复 wiki 站点(独立 compose 文件)"
+docker compose -f docker-compose.wiki.yml up -d 2>/dev/null || true
+
+echo "==> 5/5 清理悬空镜像"
 docker image prune -f >/dev/null
 
 echo "✅ 部署完成: $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"
