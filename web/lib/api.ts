@@ -2,6 +2,7 @@
 
 const API_BASE = ""; // Relative URL — proxied through Next.js rewrites
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const UPLOAD_TIMEOUT = 180000; // 3 minutes — 大文件上传(multipart)+ Next.js rewrites 转发
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -21,8 +22,9 @@ async function request<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  const isFormData = fetchOptions.body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...fetchOptions.headers,
   };
@@ -65,9 +67,18 @@ export const api = {
   get: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { timeoutMs }),
   post: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
-    request<T>(endpoint, { method: "POST", body: JSON.stringify(body), timeoutMs }),
+    request<T>(endpoint, {
+      method: "POST",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+      // multipart 上传默认给 3 分钟,避免大文件超过 30s 默认超时
+      timeoutMs: timeoutMs ?? (body instanceof FormData ? UPLOAD_TIMEOUT : DEFAULT_TIMEOUT),
+    }),
   put: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
-    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body), timeoutMs }),
+    request<T>(endpoint, {
+      method: "PUT",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+      timeoutMs: timeoutMs ?? (body instanceof FormData ? UPLOAD_TIMEOUT : DEFAULT_TIMEOUT),
+    }),
   delete: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { method: "DELETE", timeoutMs }),
   /** SSE/流式请求：返回原生 Response，由调用方解析流（保留超时、401 重定向、错误处理） */

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield, Folder } from "lucide-react";
+import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield, Folder, Pencil } from "lucide-react";
 import { getToken, isStaff } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,8 @@ export default function KnowledgeAdminPage() {
   const [original, setOriginal] = useState("");
   const [dirty, setDirty] = useState(false);
   const [showNew, setShowNew] = useState<"file" | "folder" | "upload" | null>(null);
+  const [renameTarget, setRenameTarget] = useState<TreeNode | null>(null);
+  const [renameNew, setRenameNew] = useState("");
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -22,6 +24,9 @@ export default function KnowledgeAdminPage() {
   const [uploadMsg, setUploadMsg] = useState("");
   const [preview, setPreview] = useState(false);
   const [splitMode, setSplitMode] = useState(false);
+  const [searchKw, setSearchKw] = useState("");
+  const [cssContent, setCssContent] = useState("");
+  const previewRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { user } = useCurrentUser();
@@ -30,9 +35,57 @@ export default function KnowledgeAdminPage() {
   const fetchTree = useCallback(() => { api.get<TreeNode[]>("/api/knowledge/tree").then(setTree); }, []);
   useEffect(() => { fetchTree(); }, [fetchTree]);
 
+  // 跨项目预览时套原文档的 CSS(Wiki 翻译项目把仓库 assets/ 复制到知识库,这里加载套到预览)
+  useEffect(() => {
+    if (!selected) { setCssContent(""); return; }
+    const m = selected.match(/^[^/]+\/([^/]+)\//);
+    if (!m || m[1].endsWith("_EN")) { setCssContent(""); return; }
+    const projectName = m[1];
+    const candidates = [
+      `公共/${projectName}/assets/style.css`,
+      `公共/${projectName}/assets/css/style.css`,
+      `公共/${projectName}/_assets/style.css`,
+    ];
+    (async () => {
+      for (const p of candidates) {
+        try {
+          const r = await api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(p)}`);
+          if (r?.content) { setCssContent(r.content); return; }
+        } catch {}
+      }
+      setCssContent("");
+    })();
+  }, [selected]);
+
+  // 从搜索结果 ?path=&q= 跳转过来时，自动打开文件并定位关键词
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const p = sp.get("path");
+    if (!p) return;
+    const q = sp.get("q");
+    api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(p)}`)
+      .then(data => { setContent(data.content); setOriginal(data.content); setSelected(p); setDirty(false); if (q) { setSearchKw(q); setPreview(true); } })
+      .catch(() => {});
+  }, []);
+
   const loadFile = async (path: string) => {
-    try { const data = await api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(path)}`); setContent(data.content); setOriginal(data.content); setSelected(path); setDirty(false); }
-    catch { alert("加载失败"); }
+    try {
+      const data = await api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(path)}`);
+      setContent(data.content); setOriginal(data.content); setSelected(path); setDirty(false);
+    } catch {
+      // 跨页 fallback:中文找不到则试 EN 版(Wiki 翻译任务结构 targetFolder/projectName/... vs targetFolder/projectName_EN/...)
+      const m = path.match(/^([^/]+\/)([^/]+)(\/.+)$/);
+      if (m) {
+        const proj = m[2].endsWith("_EN") ? m[2].slice(0, -3) : m[2] + "_EN";
+        const fallback = `${m[1]}${proj}${m[3]}`;
+        try {
+          const data = await api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(fallback)}`);
+          setContent(data.content); setOriginal(data.content); setSelected(fallback); setDirty(false);
+          return;
+        } catch {}
+      }
+      alert("加载失败");
+    }
   };
   const handleSave = async () => {
     if (!selected) return; setSaving(true);
@@ -50,6 +103,17 @@ export default function KnowledgeAdminPage() {
     try { await api.delete(`/api/admin/knowledge/delete?path=${encodeURIComponent(path)}`); if (selected === path) { setSelected(null); setContent(""); } fetchTree(); }
     catch { alert("删除失败"); }
   };
+  const openRename = (n: TreeNode) => { setRenameTarget(n); setRenameNew(n.name); };
+  const handleRename = async () => {
+    if (!renameTarget || !renameNew.trim()) return;
+    const old = renameTarget.path ?? renameTarget.name;
+    const dir = old.includes("/") ? old.slice(0, old.lastIndexOf("/") + 1) : "";
+    const ext = renameTarget.type === "file" ? (renameTarget.extra?.ext ?? ".md") : "";
+    const newPath = dir + renameNew.trim() + ext;
+    if (newPath === old) { setRenameTarget(null); return; }
+    try { await api.post("/api/admin/knowledge/rename", { path: old, newPath }); setRenameTarget(null); fetchTree(); if (selected === old) setSelected(newPath); }
+    catch { alert("重命名失败（目标可能已存在）"); }
+  };
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setUploading(true); setUploadMsg("");
@@ -63,7 +127,27 @@ export default function KnowledgeAdminPage() {
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
-  const previewHtml = useMemo(() => DOMPurify.sanitize(content.replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-500 underline">$1</a>').replace(/\n/g, '<br/>')), [content]);
+  const previewHtml = useMemo(() => {
+    let html = content
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-500 underline">$1</a>')
+      .replace(/\n/g, '<br/>');
+    if (searchKw) {
+      const esc = searchKw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      html = html.replace(new RegExp(esc, "g"), (m) => `<mark class="bg-yellow-200 dark:bg-yellow-700">${m}</mark>`);
+    }
+    return DOMPurify.sanitize(html);
+  }, [content, searchKw]);
+
+  // 定位到第一个关键词（搜索结果跳转后滚动到高亮处）
+  useEffect(() => {
+    if (!searchKw) return;
+    const t = setTimeout(() => previewRef.current?.querySelector("mark")?.scrollIntoView({ block: "center" }), 150);
+    return () => clearTimeout(t);
+  }, [searchKw, preview, content]);
 
   const renderTree = (nodes: TreeNode[], level = 0) => (
     <ul className={level === 0 ? "space-y-0.5" : "ml-4 space-y-0.5"}>
@@ -74,6 +158,7 @@ export default function KnowledgeAdminPage() {
           ) : n.type === "folder" ? (
             <div className="flex items-center gap-1 group">
               <span className="text-xs text-faint font-medium px-1">{n.name}/</span>
+              {canEdit && <button onClick={() => openRename(n)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary" title="重命名"><Pencil className="h-3 w-3" /></button>}
               {canEdit && <button onClick={() => handleDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>}
             </div>
           ) : (
@@ -81,7 +166,8 @@ export default function KnowledgeAdminPage() {
               className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-surface-hover group cursor-pointer", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
               <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
               <span className="truncate">{n.name}</span>
-              {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDelete(n.path ?? n.name); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
+              {canEdit && <button onClick={(e) => { e.stopPropagation(); openRename(n); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>}
+              {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDelete(n.path ?? n.name); }} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
             </div>
           )}
           {n.type !== "wiki" && n.children && renderTree(n.children, level + 1)}
@@ -98,7 +184,7 @@ export default function KnowledgeAdminPage() {
         <ChevronRight className="h-3 w-3" />
         <span className="text-foreground font-medium">知识库管理</span>
       </nav>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Shield className="h-6 w-6 text-sky-500" />
           <div>
@@ -112,7 +198,7 @@ export default function KnowledgeAdminPage() {
           </div>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => { setShowNew("file"); setNewName(""); }} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Plus className="h-4 w-4" />新建文档</button>
             <button onClick={() => { setShowNew("folder"); setNewName(""); }} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><FolderPlus className="h-4 w-4" />新建目录</button>
             <button onClick={() => { setShowNew("upload"); setUploadMsg(""); }} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors shadow-sm"><Upload className="h-4 w-4" />上传文件</button>
@@ -120,8 +206,8 @@ export default function KnowledgeAdminPage() {
         )}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4 h-[calc(100vh-12rem)]">
-        <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto">
+      <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100vh-12rem)]">
+        <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-72 lg:max-h-none">
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-xs font-medium text-faint">目录树</span>
             {user && <span className="text-[10px] text-faint">{user.role}</span>}
@@ -145,14 +231,18 @@ export default function KnowledgeAdminPage() {
                 )}
               </div>
               {preview && canEdit ? (
-                <div className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <>
+                  {cssContent && <style dangerouslySetInnerHTML={{ __html: cssContent }} />}
+                  <div ref={previewRef} className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                </>
               ) : splitMode && canEdit ? (
-                <div className="flex-1 flex">
-                  <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-r border-border focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
-                  <div className="flex-1 w-1/2 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <div className="flex-1 flex flex-col sm:flex-row">
+                  {cssContent && <style dangerouslySetInnerHTML={{ __html: cssContent }} />}
+                  <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[40vh] sm:min-h-0 sm:w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-b sm:border-b-0 sm:border-r border-border focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
+                  <div className="flex-1 w-full sm:w-1/2 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
                 </div>
               ) : (
-                <textarea value={content} readOnly={!canEdit} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder={canEdit ? "编辑 Markdown 内容..." : "知识库文档（只读）"} spellCheck={false} />
+                <textarea value={content} readOnly={!canEdit} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[60vh] lg:min-h-0 p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder={canEdit ? "编辑 Markdown 内容..." : "知识库文档（只读）"} spellCheck={false} />
               )}
             </>
           ) : (
@@ -164,8 +254,8 @@ export default function KnowledgeAdminPage() {
       </div>
 
       {showNew === "upload" && canEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
+          <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">上传文件</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <div className="space-y-4">
               <div><label className="block text-sm font-medium mb-1">目标文件夹</label>
@@ -185,12 +275,23 @@ export default function KnowledgeAdminPage() {
         </div>
       )}
       {showNew && showNew !== "upload" && canEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
+          <div className="w-full max-w-sm my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{showNew === "file" ? "新建文档" : "新建目录"}</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <form onSubmit={e => { e.preventDefault(); handleCreate(); }} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">名称{showNew === "file" && "（无需 .md 后缀）"}</label><input value={newName} onChange={e => setNewName(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required autoFocus /></div>
               <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover">创建</button>
+            </form>
+          </div>
+        </div>
+      )}
+      {renameTarget && canEdit && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setRenameTarget(null)}>
+          <div className="w-full max-w-sm my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">重命名</h2><button onClick={() => setRenameTarget(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
+            <form onSubmit={e => { e.preventDefault(); handleRename(); }} className="space-y-3">
+              <div><label className="block text-sm font-medium mb-1">新名称{renameTarget.type === "file" && "（无需扩展名）"}</label><input value={renameNew} onChange={e => setRenameNew(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required autoFocus /></div>
+              <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover">重命名</button>
             </form>
           </div>
         </div>

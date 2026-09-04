@@ -1,69 +1,25 @@
 @import "tailwindcss";
 
 /* ============================================================================
- * Team Portal 设计系统 · 多主题配色
+ * Team Portal 设计系统 · 明暗 × 色调 正交配色
  * ----------------------------------------------------------------------------
- * 4 套预设主题通过 <html data-theme="..."> 切换（管理员在系统设置里选，前端 ThemeProvider 应用）：
- *   indigo — 深空靛蓝（Linear 风，默认，深色）
- *   sky    — 深空天青（航模/飞行气质，深色）
- *   light  — 日光蓝（白天实用，浅色）
- *   warm   — 暖白（温暖克制，浅色）
+ * 两个正交维度，独立切换、互不干扰：
+ *   1. 明暗（背景/文字/表面/边框/语义色）— 个人偏好，顶栏按钮切换，
+ *      html 上加 `.dark` class 即深色，缺省浅色。存 localStorage。
+ *   2. 色调（品牌主色 --primary/--accent 等）— 管理员在系统设置里选，
+ *      <html data-theme="indigo|sky|warm"> 切换，存后端 Brand:Theme。
+ *      每个色调配深/浅两套主色（深色用亮主色、浅色用深主色，保证对比度）。
  *
  * 组件统一引用语义 token（bg-background/text-foreground/bg-surface/border-border 等），
- * 不要硬编码颜色，这样切换主题时全局自动生效。
+ * 不要硬编码颜色，这样切换明暗/色调时全局自动生效。
  * ============================================================================
  */
 
-/* 旧的 .dark 类仍可触发深色（兼容历史 dark: 前缀代码，本质等同 indigo 主题的明度） */
+/* 旧的 .dark 类触发深色（Tailwind dark: 前缀依赖此 class） */
 @variant dark (&:where(.dark, .dark *));
 
-/* ── 主题 1：深空靛蓝（默认） ── */
-:root,
-:root[data-theme="indigo"] {
-  --background: #08090a;
-  --foreground: #f7f8f8;
-  --surface: #191a1b;
-  --surface-subtle: rgba(255, 255, 255, 0.04);
-  --surface-hover: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.09);
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --muted: #8a8f98;
-  --faint: #62666d;
-  --primary: #5e6ad2;
-  --primary-fg: #7170ff;
-  --accent: #7170ff;
-  --accent-hover: #828fff;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #22d3ee;
-  color-scheme: dark;
-}
-
-/* ── 主题 2：深空天青 ── */
-:root[data-theme="sky"] {
-  --background: #060a10;
-  --foreground: #f8fafc;
-  --surface: #101923;
-  --surface-subtle: rgba(255, 255, 255, 0.04);
-  --surface-hover: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.09);
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --muted: #7e8fa3;
-  --faint: #556476;
-  --primary: #0ea5e9;
-  --primary-fg: #38bdf8;
-  --accent: #38bdf8;
-  --accent-hover: #60a5fa;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --danger: #f87171;
-  --info: #22d3ee;
-  color-scheme: dark;
-}
-
-/* ── 主题 3：日光蓝（浅色） ── */
-:root[data-theme="light"] {
+/* ── 明暗维度：浅色（默认，html 无 .dark class） ── */
+:root {
   --background: #ffffff;
   --foreground: #1a1d21;
   --surface: #f6f7f9;
@@ -73,10 +29,6 @@
   --border-subtle: rgba(0, 0, 0, 0.05);
   --muted: #6b7280;
   --faint: #9aa1ab;
-  --primary: #5e6ad2;
-  --primary-fg: #7170ff;
-  --accent: #5e6ad2;
-  --accent-hover: #7170ff;
   --success: #059669;
   --warning: #d97706;
   --danger: #dc2626;
@@ -84,35 +36,7 @@
   color-scheme: light;
 }
 
-/* ── 主题 4：暖白 ── */
-:root[data-theme="warm"] {
-  --background: #fbfaf7;
-  --foreground: #1f1d1b;
-  --surface: #ffffff;
-  --surface-subtle: #f6f3ee;
-  --surface-hover: #f0ece4;
-  --border: rgba(0, 0, 0, 0.09);
-  --border-subtle: rgba(0, 0, 0, 0.05);
-  --muted: #7a7266;
-  --faint: #a39a8d;
-  /* 主色加深以保证白字按钮 AA 对比度 (≥4.5:1)：原 #c26a1d 仅 3.9:1 */
-  --primary: #9c4d10;
-  --primary-fg: #b25e15;
-  --accent: #b25e15;
-  --accent-hover: #823f08;
-  --success: #15803d;
-  --warning: #b25e15;
-  --danger: #b13e1f;
-  --info: #0e7490;
-  color-scheme: light;
-}
-
-/* ── 个人明暗覆盖 ──
- * 团队 Brand:Theme 经 data-theme 决定主色（--primary/--accent 等）；
- * 明暗（背景/文字/表面/边框）默认跟随主题，但个人可在 `html` 上加 `.dark`/`.light`
- * class 覆盖明暗（普通队员也能自己切深/浅，主色保持不变）。
- * 注意：此块定义在 data-theme 之后，保证优先级覆盖明暗、不影响主色。
- */
+/* ── 明暗维度：深色（html 加 .dark） ── */
 .dark {
   --background: #08090a;
   --foreground: #f7f8f8;
@@ -121,22 +45,25 @@
   --surface-hover: rgba(255, 255, 255, 0.07);
   --border: rgba(255, 255, 255, 0.09);
   --border-subtle: rgba(255, 255, 255, 0.05);
-  --muted: #8a8f98;
-  --faint: #62666d;
+  /* 深色下 muted/faint 提亮，改善中文发虚、对比度不足 */
+  --muted: #9aa1aa;
+  --faint: #757c85;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #22d3ee;
   color-scheme: dark;
 }
-.light {
-  --background: #ffffff;
-  --foreground: #1a1d21;
-  --surface: #f6f7f9;
-  --surface-subtle: #f1f2f5;
-  --surface-hover: #eceef2;
-  --border: rgba(0, 0, 0, 0.09);
-  --border-subtle: rgba(0, 0, 0, 0.05);
-  --muted: #6b7280;
-  --faint: #9aa1ab;
-  color-scheme: light;
-}
+
+/* ── 色调维度：品牌主色（默认浅色背景值，管理员 data-theme 切换） ── */
+[data-theme="indigo"] { --primary: #5e6ad2; --primary-fg: #7170ff; --accent: #5e6ad2; --accent-hover: #7170ff; }
+[data-theme="sky"]   { --primary: #0284c7; --primary-fg: #0369a1; --accent: #0284c7; --accent-hover: #0369a1; }
+[data-theme="warm"]  { --primary: #9c4d10; --primary-fg: #b25e15; --accent: #9c4d10; --accent-hover: #823f08; }
+
+/* 深色背景下主色提亮（保证对比度）；indigo 仅 accent 需微调 */
+[data-theme="indigo"].dark { --accent: #7170ff; --accent-hover: #828fff; }
+[data-theme="sky"].dark   { --primary: #0ea5e9; --primary-fg: #38bdf8; --accent: #38bdf8; --accent-hover: #60a5fa; }
+[data-theme="warm"].dark  { --primary: #d97706; --primary-fg: #f59e0b; --accent: #f59e0b; --accent-hover: #fbbf24; }
 
 @theme inline {
   --color-background: var(--background);
@@ -166,7 +93,6 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-feature-settings: 'cv01', 'ss03';
   -webkit-font-smoothing: antialiased;
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -223,7 +149,7 @@ main { animation: fadeIn 0.3s ease-out; }
 @media (max-width: 640px) {
   .hide-on-mobile { display: none !important; }
   .full-on-mobile { width: 100% !important; }
-  main { padding: 12px !important; }
+  main { padding: 12px 12px 112px !important; } /* 底部留白避让悬浮 AI 按钮 */
 }
 
 /* ── 响应式表格 ── */

@@ -119,13 +119,14 @@ public class SettingsService
             new() { Key = "Wiki:PollingIntervalSec", Value = "30", Category = "系统参数", Description = "Wiki 任务轮询间隔（秒）" },
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
+            new() { Key = "Files:MaxUploadMB", Value = "100", Category = "系统参数", Description = "资源共享/上传文件最大大小（MB）；同步需要调整 Next.js proxyClientMaxBodySize/serverActions.bodySizeLimit 与后端 Kestrel MaxRequestBodySize" },
             new() { Key = "Brand:TeamName", Value = "雏鹰之翼", Category = "品牌", Description = "团队名称（登录页/侧边栏/仪表盘）" },
             new() { Key = "Brand:TeamSubtitle", Value = "航模队", Category = "品牌", Description = "团队副标题（显示在队名旁）" },
             new() { Key = "Brand:SystemTitle", Value = "", Category = "品牌", Description = "系统标题（留空自动用“队名 · 副标题管理系统”）" },
             new() { Key = "Brand:Description", Value = "", Category = "品牌", Description = "系统描述（留空自动生成）" },
             new() { Key = "Brand:LogoUrl", Value = "", Category = "品牌", Description = "Logo 图片 URL（留空使用默认 /logo.png）" },
             new() { Key = "Brand:PrimaryColor", Value = "", Category = "品牌", Description = "品牌主题色（如 #5e6ad2，留空随主题；设置后覆盖主题主色）" },
-            new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "配色主题：indigo(深空靛蓝)/sky(深空天青)/light(日光蓝)/warm(暖白)" },
+            new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "品牌色调：indigo(靛蓝)/sky(天青)/warm(暖橙)" },
             new() { Key = "Inventory:LowStockGrade", Value = "C", Category = "库存", Description = "库存低物料提醒的等级（A/B/C），仅该等级物料入库会触发仪表盘提醒" },
             new() { Key = "Inventory:LowStockThreshold", Value = "5", Category = "库存", Description = "库存低物料提醒阈值（quantity < 此值时提醒）" },
         };
@@ -153,7 +154,7 @@ public class SettingsService
         var primaryColor = await Get("Brand:PrimaryColor");
         var theme = await Get("Brand:Theme", "indigo");
         // 校验主题名，非法值回退默认
-        if (theme is not ("indigo" or "sky" or "light" or "warm"))
+        if (theme is not ("indigo" or "sky" or "warm"))
             theme = "indigo";
 
         if (string.IsNullOrWhiteSpace(systemTitle))

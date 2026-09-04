@@ -188,6 +188,10 @@ public class ProfileService
 
     public async Task<object?> GetFullProfile(int userId)
     {
+        // 用户不存在 → null；档案不存在 → 懒创建（管理员查看无档案队员不再 404）
+        if (!await _db.Users.AnyAsync(u => u.Id == userId)) return null;
+        await GetOrCreateProfile(userId);
+
         var profile = await _db.PilotProfiles
             .Include(p => p.User)
             .ThenInclude(u => u!.Department)
@@ -202,6 +206,7 @@ public class ProfileService
             profile.Id, profile.UserId, Username = profile.User!.Username,
             Role = profile.User.Role,
             Department = profile.User.Department?.Name,
+            DepartmentId = profile.User!.DepartmentId,
             profile.Level, profile.TotalFlightHours, profile.FirstFlightDate,
             profile.Bio, profile.EmergencyContact, profile.EmergencyPhone,
             profile.FlightTypes, profile.Skills, profile.UpdatedAt,

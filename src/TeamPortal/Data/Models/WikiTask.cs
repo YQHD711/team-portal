@@ -13,6 +13,8 @@ public class WikiTask
     public int? UserId { get; set; }
     public string? WorkspacePath { get; set; }
     public string? CatalogJson { get; set; }
+    public string? Model { get; set; }
+    public string? CustomCatalogJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 }

@@ -17,6 +17,12 @@ public class MaterialService
         _db = db; _log = log; _notify = notify;
     }
 
+    private async Task<string> GetUsername(int userId)
+    {
+        var u = await _db.Users.FindAsync(userId);
+        return u?.Username ?? "未知";
+    }
+
     public async Task<CheckoutRequest> CreateCheckout(int itemId, int userId, int quantity, string note, string? role = null)
     {
         var item = await _db.InventoryItems.FindAsync(itemId)
@@ -57,7 +63,7 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {itemId} AND Quantity >= {quantity}");
             _db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = itemId, Type = "checkout", Quantity = quantity,
-                UserName = "", Note = $"[C级自助] {note}", CreatedAt = DateTime.UtcNow,
+                UserName = await GetUsername(userId), Note = note, CreatedAt = DateTime.UtcNow,
             });
         }
         _db.CheckoutRequests.Add(req);
@@ -88,7 +94,7 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
             _db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
-                UserName = "", Note = $"[B级领用] {req.Note}", CreatedAt = DateTime.UtcNow,
+                UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = DateTime.UtcNow,
             });
         }
         else
@@ -117,7 +123,7 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
-            UserName = "", Note = $"[A级领用] {req.Note}", CreatedAt = DateTime.UtcNow,
+            UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = DateTime.UtcNow,
         });
         await _db.SaveChangesAsync();
         _log?.Info("inventory", $"Checkout #{requestId} admin-ok");
@@ -173,7 +179,7 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkin", Quantity = req.Quantity,
-            UserName = "", Note = $"[{req.Grade}级归还] {condition}", CreatedAt = DateTime.UtcNow,
+            UserName = await GetUsername(checkedByUserId), Note = condition == "damaged" ? "有损坏" : "完好", CreatedAt = DateTime.UtcNow,
         });
         var record = new CheckinRecord
         {

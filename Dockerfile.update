@@ -1,0 +1,24 @@
+# 多子站增量翻译镜像
+# 复用 ardupilot-wiki-cn 的依赖,只换 ENTRYPOINT 为 update-and-translate.sh
+#
+# 构建:
+#   docker build -t ardupilot-wiki-update -f Dockerfile.update .
+#
+# 运行:
+#   docker run --rm \
+#     -v /path/to/ardupilot_wiki:/work/src \
+#     -v /path/to/output:/work/out \
+#     -e DEEPSEEK_API_KEY=sk-xxx \
+#     ardupilot-wiki-update
+#
+# 产物在 /work/out/{wiki}.zh/build/html/  容器退出后落到 -v 挂载点
+
+FROM ardupilot-wiki-cn
+
+# 显式 COPY 最新 translate_html.py(覆盖 cn 镜像里构建时 COPY 的版本,保证容器用本地 v3)
+COPY translate_html.py /usr/local/bin/translate_html.py
+COPY update-and-translate.sh /usr/local/bin/update-and-translate.sh
+RUN chmod +x /usr/local/bin/update-and-translate.sh
+
+ENTRYPOINT ["/usr/local/bin/update-and-translate.sh"]
+CMD []

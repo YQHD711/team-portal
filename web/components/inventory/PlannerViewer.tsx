@@ -43,7 +43,7 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
   useCellCenters(layout, items, view, stageRef, setCellCenters);
 
   return (
-    <div ref={workRef} className="relative flex gap-3">
+    <div ref={workRef} className="relative flex flex-col lg:flex-row gap-3">
       <div ref={wrapRef} className="flex-1 relative overflow-hidden rounded-xl border border-border bg-white" style={{ height: H }}>
         {scale > 0 && (
           <Stage ref={stageRef} width={width} height={H}
@@ -75,7 +75,7 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
           连线{showLines ? "开" : "关"}
         </button>
       </div>
-      <div className="h-[560px] w-64 shrink-0">
+      <div className="h-[420px] lg:h-[560px] w-full lg:w-64 shrink-0">
         <MaterialsPanel roomCode={roomCode} items={items} elements={layout.items}
           selectedId={highlight} onSelect={setHighlight} dnd={false}
           onItemRects={setItemAnchors} onHoverItem={id => setHoverKey(id === null ? null : String(id))} />

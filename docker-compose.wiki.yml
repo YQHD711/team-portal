@@ -1,0 +1,13 @@
+services:
+  wiki-nginx:
+    image: nginx:alpine
+    container_name: wiki-nginx
+    ports:
+      - "80:80"
+    volumes:
+      # 整个 wiki_cn 目录(所有子站的 .zh 都在下面)
+      # wiki.conf 里 alias 用容器内路径 /data/{wiki}.zh/build/html/{path}
+      - /home/admin/ardupilot_wiki_cn:/data:ro
+      # nginx 配置(只读)
+      - ./wiki.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped

@@ -91,9 +91,9 @@ export default function FinancePage() {
 
       {/* Create form modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowForm(false)} />
-          <div className="relative bg-surface rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl space-y-4">
+          <div className="relative my-auto max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <h2 className="text-lg font-bold">采购申请</h2>
             <div><label className="block text-sm font-medium mb-1">物品名称</label><input value={itemName} onChange={e=>setItemName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="如：螺旋桨 1045"/></div>
             <div className="grid grid-cols-2 gap-3">
@@ -116,7 +116,7 @@ export default function FinancePage() {
           ...(isStaff ? [{ key: "all" as const, label: "全部申请" }] : []),
           ...(isAdmin ? [{ key: "report" as const, label: "月度报表" }] : []),
         ].map(t => (
-          <button key={t.key} onClick={() => { setTab(t.key); if (t.key==="all") fetchAll(); if (t.key==="report") fetchReport(); else fetchData(); }}
+          <button key={t.key} onClick={() => { setTab(t.key); if (t.key==="all") fetchAll(); else if (t.key==="report") fetchReport(); else fetchData(); }}
             className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700"}`}>
             {t.label}
           </button>
@@ -227,7 +227,7 @@ export default function FinancePage() {
 
           {report && (
             <>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="rounded-xl border p-4 bg-surface"><div className="text-2xl font-bold">{report.totalRequests}</div><div className="text-xs text-faint">总申请</div></div>
                 <div className="rounded-xl border p-4 bg-surface"><div className="text-2xl font-bold text-success">{report.approvedCount}</div><div className="text-xs text-faint">已批准</div></div>
                 <div className="rounded-xl border p-4 bg-surface"><div className="text-2xl font-bold text-danger">{report.rejectedCount}</div><div className="text-xs text-faint">已拒绝</div></div>

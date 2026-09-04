@@ -31,18 +31,15 @@ export function Topbar() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const s = getStoredScheme();
+    const s = getStoredScheme() ?? "dark"; // 默认深色，与 html 首帧 dark class 一致
     setScheme(s);
     root.classList.toggle("dark", s === "dark");
-    root.classList.toggle("light", s === "light");
   }, []);
 
   function toggleScheme() {
     const root = document.documentElement;
-    const isDark = root.classList.contains("dark") || !root.classList.contains("light");
-    const next: "dark" | "light" = isDark ? "light" : "dark";
+    const next: "dark" | "light" = root.classList.contains("dark") ? "light" : "dark";
     root.classList.toggle("dark", next === "dark");
-    root.classList.toggle("light", next === "light");
     localStorage.setItem("ui-scheme", next);
     setScheme(next);
   }

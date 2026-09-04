@@ -82,6 +82,27 @@ public partial class WikiGeneratorService
                 }
             }
 
+            // 复制非 .md 资源(images/、css/、assets/ 等)到知识库,保留相对路径
+            var resourceFiles = Directory.GetFiles(cloneDir, "*", SearchOption.AllDirectories)
+                .Where(f =>
+                {
+                    var rel = Path.GetRelativePath(cloneDir, f).Replace('\\', '/');
+                    return !rel.Contains("/.git/") && !rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+                });
+            foreach (var rf in resourceFiles)
+            {
+                try
+                {
+                    var relPath = Path.GetRelativePath(cloneDir, rf).Replace('\\', '/');
+                    var data = await File.ReadAllBytesAsync(rf);
+                    _knowledge.WriteFile($"{_targetFolder}/{_projectName}/{relPath}", data);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to copy wiki resource: {File}", rf);
+                }
+            }
+
             task.CatalogJson = System.Text.Json.JsonSerializer.Serialize(catalog);
             task.Status = done > 0 ? "completed" : "failed";
             task.ErrorMessage = done == 0 ? $"All {total} pages failed to translate" : null;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { User, Search, Loader2, BadgeCheck } from "lucide-react";
 
-interface UserInfo { id: number; username: string; role: string; department: string | null; departmentId: number | null; }
+interface UserInfo { id: number; username: string; role: string; department: string | null; departmentId: number | null; invitedBy: string | null; }
 interface ProfileBrief { userId: number; skills: string | null; }
 interface Certification { id: number; userId: number; certName: string; level: string; status: string; }
 interface Dept { id: number; name: string; }
@@ -88,10 +88,11 @@ export default function AdminProfilesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{u.username}</div>
-                      <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_BADGE[u.role] || ROLE_BADGE.member}`}>
                           {u.role === "admin" ? "管理员" : u.role === "部长" ? "部长" : "成员"}
                         </span>
+                        {u.invitedBy && <span className="text-[11px] text-faint">由 {u.invitedBy} 邀请</span>}
                       </div>
                     </div>
                   </div>

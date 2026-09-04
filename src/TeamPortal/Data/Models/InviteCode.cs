@@ -9,6 +9,7 @@ public class InviteCode
     public int MaxUses { get; set; } = 1;
     public int UsedCount { get; set; }
     public int CreatedByUserId { get; set; }
+    public User? CreatedByUser { get; set; }
     public bool IsRevoked { get; set; }
     public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddDays(7);
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

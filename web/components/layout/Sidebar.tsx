@@ -22,7 +22,6 @@ const baseGroups: NavGroup[] = [
   {
     heading: "资源",
     items: [
-      { href: "/admin/knowledge", label: "知识库", icon: BookOpen },
       { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
       { href: "/webtools", label: "日志分析", icon: Activity },
       { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
@@ -49,6 +48,7 @@ const materialNav = [
 
 /** 管理员子菜单（staff 折叠展开） */
 const staffNav = [
+  { href: "/admin/knowledge", label: "知识库", icon: BookOpen },
   { href: "/admin/profiles", label: "队员档案", icon: UserCircle },
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
 ];

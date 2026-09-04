@@ -136,8 +136,8 @@ export default function StocktakePage() {
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">{diffs.length} 项差异已调库存</div>
         )}
 
-        <div className="rounded-xl border overflow-hidden bg-surface">
-          <table className="w-full text-sm">
+        <div className="rounded-xl border overflow-x-auto bg-surface">
+          <table className="w-full text-sm min-w-[560px]">
             <thead><tr className="border-b bg-surface-subtle">
               <th className="px-4 py-3 text-left">零件</th><th className="px-4 py-3">等级</th>
               <th className="px-4 py-3 text-right">系统</th><th className="px-4 py-3 text-right">实盘</th>

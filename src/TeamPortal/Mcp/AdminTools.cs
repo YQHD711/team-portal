@@ -22,7 +22,7 @@ public class AdminTools
     [McpServerTool(Name = "admin_create_user")]
     public async Task<object?> CreateUser(string username, string password, string userRole = "member", int? deptId = null) { var (r, d, _) = GetUser(); if (r != "admin" && r != "部长") return "Forbidden"; return await _admin.CreateUser(username, password, userRole, deptId, r, d); }
     [McpServerTool(Name = "admin_update_user")]
-    public async Task<bool> UpdateUser(int id, string? userRole = null, int? deptId = null, string? password = null) { var (r, d, _) = GetUser(); if (r != "admin" && r != "部长") return false; return await _admin.UpdateUser(id, userRole, deptId, password, r, d); }
+    public async Task<bool> UpdateUser(int id, string? userRole = null, int? deptId = null, string? password = null) { var (r, d, _) = GetUser(); if (r != "admin" && r != "部长") return false; return await _admin.UpdateUser(id, userRole, deptId, password, null, r, d); }
     [McpServerTool(Name = "admin_delete_user")]
     public async Task<bool> DeleteUser(int id) { var (r, d, _) = GetUser(); if (r != "admin") return false; return await _admin.DeleteUser(id, r, d); }
     [McpServerTool(Name = "admin_list_departments")]

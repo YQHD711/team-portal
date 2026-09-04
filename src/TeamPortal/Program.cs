@@ -389,6 +389,13 @@ static void MigrateExistingTables(AppDbContext db)
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_Notifications_Level_CreatedAt ON Notifications (Level, CreatedAt)",
             "duplicate");
 
+        // WikiTasks.Model — 任务级 AI 模型选择(覆盖全局 CatalogModel/ContentModel)
+        MigrateSql(conn, "ALTER TABLE WikiTasks ADD COLUMN Model TEXT NULL",
+            "duplicate column");
+        // WikiTasks.CustomCatalogJson — 用户自定义目录(JSON 树),跳过 AI 自动生成
+        MigrateSql(conn, "ALTER TABLE WikiTasks ADD COLUMN CustomCatalogJson TEXT NULL",
+            "duplicate column");
+
         // ── New tables (Phase 10+: profiles, flights, batteries, incidents, trash) ──
         MigrateSql(conn, """
             CREATE TABLE IF NOT EXISTS PilotProfiles (

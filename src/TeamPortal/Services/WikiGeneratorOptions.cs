@@ -12,6 +12,9 @@ public class WikiGeneratorOptions
     /// <summary>AI model for document content generation.</summary>
     public string ContentModel { get; set; } = "deepseek-v4-pro";
 
+    /// <summary>可选模型列表（Wiki 导入页下拉选择用）。</summary>
+    public List<string> AvailableModels { get; set; } = new() { "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat" };
+
     /// <summary>Maximum output tokens. DeepSeek supports up to 131,072.</summary>
     public int MaxOutputTokens { get; set; } = 32768;
 

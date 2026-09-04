@@ -27,7 +27,7 @@ public static class WikiEndpoints
                 return Results.Problem("Invalid visibility", statusCode: 400);
 
             var uid = GetUserId(user);
-            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility);
+            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility, req.Model, req.CustomCatalogJson);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"Git task submitted: {req.ProjectName} (visibility={visibility})");
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
@@ -35,7 +35,7 @@ public static class WikiEndpoints
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         });
 
-        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
+        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, string? model, string? customCatalogJson, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -58,7 +58,7 @@ public static class WikiEndpoints
                 await file.CopyToAsync(stream);
 
             var uid = GetUserId(user);
-            var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis);
+            var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis, model, customCatalogJson);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"ZIP task submitted: {projectName} (visibility={vis})");
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
@@ -77,7 +77,7 @@ public static class WikiEndpoints
             var folder = req.TargetFolder ?? "公共";
             var vis = req.Visibility ?? "public";
             var uid = GetUserId(user);
-            var task = await generator.SubmitTranslate(req.Url, req.ProjectName, folder, uid, vis);
+            var task = await generator.SubmitTranslate(req.Url, req.ProjectName, folder, uid, vis, req.Model, req.CustomCatalogJson);
             var log = app.Services.GetRequiredService<LogService>();
             log.Info("wiki", $"Translate task submitted: {req.ProjectName}");
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
@@ -279,6 +279,6 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
         (task.Visibility == "personal" && (role == "admin" || task.UserId == userId));
 }
 
-public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility);
-public record TranslateRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility);
+public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null);
+public record TranslateRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null);
 public record VisibilityRequest(string Visibility);

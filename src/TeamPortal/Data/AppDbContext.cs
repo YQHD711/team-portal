@@ -330,5 +330,24 @@ public class AppDbContext : DbContext
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // ── 邀请码创建人 & 队员邀请人（2026-09）──
+        modelBuilder.Entity<InviteCode>(entity =>
+        {
+            entity.HasIndex(c => c.CreatedByUserId);
+            entity.HasOne(c => c.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasIndex(u => u.InvitedByUserId);
+            entity.HasOne(u => u.InvitedByUser)
+                .WithMany()
+                .HasForeignKey(u => u.InvitedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
     }
 }

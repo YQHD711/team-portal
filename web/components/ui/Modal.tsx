@@ -33,29 +33,31 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={title || "对话框"}
     >
-      <div
-        className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {title && (
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">{title}</h2>
-            <button
-              onClick={onClose}
-              className="p-1 rounded hover:bg-surface-hover"
-              aria-label="关闭"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        )}
-        {children}
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div
+          className="w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {title && (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">{title}</h2>
+              <button
+                onClick={onClose}
+                className="p-1 rounded hover:bg-surface-hover"
+                aria-label="关闭"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );

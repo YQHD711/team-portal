@@ -52,12 +52,14 @@ public class AuthService
         if (password.Length < minLen)
             throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
 
-        // Determine department from invite code
+        // Determine department & inviter from invite code
         int? deptId = null;
+        int? invitedById = null;
         if (!string.IsNullOrEmpty(inviteCode))
         {
             var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Code == inviteCode);
             deptId = code?.DepartmentId;
+            invitedById = code?.CreatedByUserId;
         }
 
         var user = new User
@@ -66,6 +68,7 @@ public class AuthService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "member",
             DepartmentId = deptId,
+            InvitedByUserId = invitedById,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -78,28 +81,47 @@ public class AuthService
 
     // ── Invite Codes ──
 
-    public async Task<InviteCode> GenerateInviteCode(int createdByUserId, int? deptId, int maxUses, int daysValid)
+    public async Task<InviteCode> GenerateInviteCode(int createdByUserId, int? deptId, int? maxUses = null, int? daysValid = null)
     {
+        var uses = maxUses ?? 1;
+        var days = daysValid ?? 30;
         var code = Guid.NewGuid().ToString("N")[..8].ToUpper();
         var invite = new InviteCode
         {
-            Code = code, DepartmentId = deptId, MaxUses = maxUses,
-            CreatedByUserId = createdByUserId, ExpiresAt = DateTime.UtcNow.AddDays(daysValid)
+            Code = code, DepartmentId = deptId, MaxUses = uses,
+            CreatedByUserId = createdByUserId, ExpiresAt = DateTime.UtcNow.AddDays(days)
         };
         _db.InviteCodes.Add(invite);
         await _db.SaveChangesAsync();
-        _log.Info("auth", $"Invite code generated: {code} (dept={deptId}, max={maxUses})");
+        _log.Info("auth", $"Invite code generated: {code} (dept={deptId}, max={uses}, days={days})");
         return invite;
     }
 
-    public async Task<List<InviteCode>> GetInviteCodes()
-        => await _db.InviteCodes.Include(c => c.Department).OrderByDescending(c => c.CreatedAt).ToListAsync();
+    public async Task<List<object>> GetInviteCodes()
+        => await _db.InviteCodes.Include(c => c.Department).Include(c => c.CreatedByUser)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new
+            {
+                c.Id, c.Code, c.DepartmentId,
+                DepartmentName = c.Department != null ? c.Department.Name : null,
+                c.MaxUses, c.UsedCount, c.IsRevoked, c.ExpiresAt, c.CreatedAt,
+                CreatedBy = c.CreatedByUser != null ? c.CreatedByUser.Username : null
+            }).ToListAsync<object>();
 
     public async Task<bool> RevokeInviteCode(int id)
     {
         var code = await _db.InviteCodes.FindAsync(id);
         if (code is null) return false;
         code.IsRevoked = true;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteInviteCode(int id)
+    {
+        var code = await _db.InviteCodes.FindAsync(id);
+        if (code is null) return false;
+        _db.InviteCodes.Remove(code);
         await _db.SaveChangesAsync();
         return true;
     }

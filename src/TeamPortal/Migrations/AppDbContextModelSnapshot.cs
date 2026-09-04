@@ -434,6 +434,9 @@ namespace TeamPortal.Migrations
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -441,6 +444,9 @@ namespace TeamPortal.Migrations
                     b.Property<string>("ReportedBy")
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReporterUserId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Resolution")
                         .HasColumnType("TEXT");
@@ -595,6 +601,8 @@ namespace TeamPortal.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
+                    b.HasIndex("CreatedByUserId");
+
                     b.HasIndex("DepartmentId");
 
                     b.ToTable("InviteCodes");
@@ -612,11 +620,18 @@ namespace TeamPortal.Migrations
                     b.Property<bool>("IsRead")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Link")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Message")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TargetRole")
@@ -1146,6 +1161,9 @@ namespace TeamPortal.Migrations
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("InvitedByUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1163,6 +1181,8 @@ namespace TeamPortal.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("InvitedByUserId");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -1184,7 +1204,13 @@ namespace TeamPortal.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CustomCatalogJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProjectName")
@@ -1359,9 +1385,17 @@ namespace TeamPortal.Migrations
 
             modelBuilder.Entity("TeamPortal.Data.Models.InviteCode", b =>
                 {
+                    b.HasOne("TeamPortal.Data.Models.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("TeamPortal.Data.Models.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId");
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Department");
                 });
@@ -1461,7 +1495,14 @@ namespace TeamPortal.Migrations
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("TeamPortal.Data.Models.User", "InvitedByUser")
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Department");
+
+                    b.Navigation("InvitedByUser");
                 });
 
             modelBuilder.Entity("TeamPortal.Data.Models.CheckoutRequest", b =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Activity, Cpu, MemoryStick, HardDrive, Server, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 
@@ -53,14 +53,19 @@ export default function RuntimeMonitorPage() {
   const [stats, setStats] = useState<RuntimeStats | null>(null);
   const [error, setError] = useState<string>("");
   const [lastFetch, setLastFetch] = useState<number>(0);
+  // 组件卸载后阻止 setState — 否则 React 19 Profiler 在已 unmount fiber 上抛 startTime undefined
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   const fetchStats = async () => {
     try {
       const data = await api.get<RuntimeStats>("/api/admin/runtime-stats");
+      if (!mountedRef.current) return;
       setStats(data);
       setError("");
       setLastFetch(Date.now());
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : "获取失败");
     }
   };

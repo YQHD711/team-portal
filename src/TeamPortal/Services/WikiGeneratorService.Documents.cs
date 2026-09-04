@@ -206,7 +206,7 @@ public partial class WikiGeneratorService
             new("write_doc", "Write document. MUST call this.", new { path = new { type = "string", description = "Document path (without .md)" }, content = new { type = "string", description = "Full Markdown content" } }),
         };
 
-        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}");
+        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}", _currentModel);
     }
 
     private static List<CatalogItem> FlattenCatalog(List<CatalogItem> items)

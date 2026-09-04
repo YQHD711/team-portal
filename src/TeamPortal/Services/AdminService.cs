@@ -26,7 +26,8 @@ public class AdminService
         if (role == "部长") query = query.Where(u => u.Department!.Name == dept || u.Id == userId);
         return await query.OrderBy(u => u.Id).Select(u => new {
             u.Id, u.Username, u.Role, Department = u.Department != null ? u.Department.Name : null,
-            u.DepartmentId, u.CreatedAt
+            u.DepartmentId, u.CreatedAt,
+            InvitedBy = u.InvitedByUser != null ? u.InvitedByUser.Username : null
         }).ToListAsync<object>();
     }
 
@@ -46,7 +47,7 @@ public class AdminService
         return user;
     }
 
-    public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? currentRole, string? currentDept)
+    public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? username, string? currentRole, string? currentDept)
     {
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
@@ -56,6 +57,11 @@ public class AdminService
             return false;
 
         var changes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(username) && user.Username != username)
+        {
+            if (await _db.Users.AnyAsync(u => u.Username == username)) return false; // 用户名已存在
+            changes.Add($"username:{user.Username}→{username}"); user.Username = username;
+        }
         if (userRole is not null && user.Role != userRole) { changes.Add($"role:{user.Role}→{userRole}"); user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member"; }
         if (deptId.HasValue) { var newDept = deptId == 0 ? null : deptId; if (user.DepartmentId != newDept) { changes.Add($"dept:{user.DepartmentId}→{newDept}"); user.DepartmentId = newDept; } }
         if (!string.IsNullOrWhiteSpace(password)) { changes.Add("password:reset"); user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); }

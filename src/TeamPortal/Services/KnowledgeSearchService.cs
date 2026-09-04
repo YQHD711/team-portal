@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TeamPortal.Services;
@@ -144,7 +145,10 @@ public class KnowledgeSearchService : IDisposable
             try
             {
                 var content = File.ReadAllText(fullPath);
-                snippet = ExtractSnippet(content, queryTokens[0], 500);
+                // 找 query 与文档的最长公共连续子串（如"管理委员会"）作锚点，精准定位；
+                // 若只取最先命中的 bigram（"管理"/"委员"等泛词），摘要会被无关出现干扰甚至截断。
+                var anchor = FindBestAnchor(query, content);
+                snippet = ExtractSnippet(content, string.IsNullOrEmpty(anchor) ? queryTokens[0] : anchor, 1500);
             }
             catch { /* snippet extraction failure is non-critical */ }
             results.Add(new KbResult { Path = path, Snippet = snippet, Score = score });
@@ -197,12 +201,54 @@ public class KnowledgeSearchService : IDisposable
 
     private static string ExtractSnippet(string content, string keyword, int maxLen)
     {
-        var idx = content.IndexOf(keyword, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0) return content.Length > maxLen ? content[..maxLen] + "\n..." : content;
-        var start = Math.Max(0, idx - maxLen / 3);
-        var len = Math.Min(maxLen, content.Length - start);
-        return (start > 0 ? "..." : "") + content.Substring(start, len) + (start + len < content.Length ? "\n..." : "");
+        if (string.IsNullOrEmpty(keyword))
+            return content.Length > maxLen ? content[..maxLen] + "\n..." : content;
+
+        // 聚合关键词的所有出现位置，避免只取第一处（如关键词首次出现在目录、
+        // 而正文答案在后面，导致检索摘要与问题无关）。
+        var sb = new StringBuilder();
+        var searchFrom = 0;
+        var found = 0;
+        while (sb.Length < maxLen)
+        {
+            var idx = content.IndexOf(keyword, searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) break;
+            found++;
+            var start = Math.Max(0, idx - 120);
+            var end = Math.Min(content.Length, idx + keyword.Length + 160);
+            if (sb.Length > 0) sb.Append("\n···\n");
+            sb.Append(NormalizeWhitespace(content[start..end]));
+            searchFrom = idx + Math.Max(1, keyword.Length);
+        }
+
+        if (found == 0)
+            return content.Length > maxLen ? content[..maxLen] + "\n..." : content;
+
+        var result = sb.ToString();
+        return result.Length > maxLen ? result[..maxLen] + "\n..." : result;
     }
+
+    /// <summary>在 query 中寻找与文档内容的最长公共连续子串（如人名、机构全称），用于精准定位摘要锚点。</summary>
+    private static string FindBestAnchor(string query, string content)
+    {
+        string? best = null;
+        foreach (Match seg in Regex.Matches(query, @"[\p{IsCJKUnifiedIdeographs}a-z0-9]+"))
+        {
+            var s = seg.Value;
+            for (int i = 0; i < s.Length; i++)
+            {
+                var j = i;
+                while (j < s.Length && content.Contains(s[i..(j + 1)], StringComparison.OrdinalIgnoreCase))
+                    j++;
+                if (j - i >= 2 && (best is null || j - i > best.Length))
+                    best = s[i..j];
+            }
+        }
+        return best ?? "";
+    }
+
+    /// <summary>把连续空白（含换行）压成单个空格，修复文档中因换行被拆断的内容（如"张宝\n庭"）。</summary>
+    private static string NormalizeWhitespace(string text) => Regex.Replace(text, @"\s+", " ");
 
     public void Dispose()
     {

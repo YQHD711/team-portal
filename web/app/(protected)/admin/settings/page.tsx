@@ -18,12 +18,11 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   "系统参数": Settings2,
 };
 
-/** 4 套预设主题（与 globals.css 的 data-theme 对应） */
+/** 3 种品牌色调（与 globals.css 的 data-theme 对应；明暗由顶栏个人切换） */
 const THEMES = [
-  { key: "indigo", name: "深空靛蓝", dot: "linear-gradient(135deg,#5e6ad2,#7170ff)", light: false },
-  { key: "sky", name: "深空天青", dot: "linear-gradient(135deg,#0ea5e9,#38bdf8)", light: false },
-  { key: "light", name: "日光蓝", dot: "linear-gradient(135deg,#ffffff,#ffffff)", light: true },
-  { key: "warm", name: "暖白", dot: "linear-gradient(135deg,#9c4d10,#b25e15)", light: false },
+  { key: "indigo", name: "靛蓝", dot: "linear-gradient(135deg,#5e6ad2,#7170ff)" },
+  { key: "sky", name: "天青", dot: "linear-gradient(135deg,#0ea5e9,#38bdf8)" },
+  { key: "warm", name: "暖橙", dot: "linear-gradient(135deg,#9c4d10,#b25e15)" },
 ];
 
 export default function SettingsPage() {
@@ -116,7 +115,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">系统设置</h1>
           <p className="text-sm text-muted mt-1">全局配置 — 所有参数均可在线调整，无需修改代码或重启</p>
@@ -142,8 +141,8 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-surface-subtle">
           <Palette className="h-4 w-4 text-muted" />
           <div>
-            <h2 className="font-semibold text-sm">配色主题</h2>
-            <p className="text-xs text-muted">由管理员统一决定团队主题，保存后全局立即生效</p>
+            <h2 className="font-semibold text-sm">品牌色调</h2>
+            <p className="text-xs text-muted">由管理员统一决定团队主色；明暗深浅由队员在顶栏自行切换</p>
           </div>
         </div>
         <div className="p-5">
@@ -157,7 +156,7 @@ export default function SettingsPage() {
                   }`}>
                   <span
                     className="w-7 h-7 rounded-full shrink-0"
-                    style={{ background: t.dot, ...(t.light ? { border: "1px solid var(--border)" } : {}) }}
+                    style={{ background: t.dot }}
                   />
                   <span className="text-xs font-medium">{t.name}</span>
                   {active && <Check className="h-3.5 w-3.5 text-primary" />}
@@ -206,8 +205,8 @@ export default function SettingsPage() {
                   {items.map(s => {
                     const isSecret = s.key.includes("Key") || s.key.includes("Secret") || s.key.includes("Sign");
                     return (
-                      <div key={s.key} className="flex items-center gap-4 px-5 py-3 hover:bg-surface-hover/50">
-                        <div className="flex-1 min-w-0">
+                      <div key={s.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 hover:bg-surface-hover/50">
+                        <div className="flex-1 min-w-[220px]">
                           <div className="text-sm font-medium">{s.description}</div>
                           <div className="text-xs text-muted font-mono mt-0.5">{s.key}</div>
                         </div>
@@ -215,7 +214,7 @@ export default function SettingsPage() {
                           type={isSecret ? "password" : "text"}
                           value={s.value}
                           onChange={e => updateValue(cat, s.key, e.target.value)}
-                          className="w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
                         />
                       </div>
                     );

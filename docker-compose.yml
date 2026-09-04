@@ -3,21 +3,28 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-      target: dev
+      target: prod  # 服务器 1.8GB 内存,dev 模式 Turbopack 编译会 OOM;prod 模式 standalone build ~200MB
+      args:
+        # 大陆服务器 npm 默认源被限速/超时,切到 npmmirror (web/Dockerfile 有 ARG NPM_REGISTRY)
+        NPM_REGISTRY: https://registry.npmmirror.com
+        # Next.js 16 dev 模式 allowedDevOrigins:prod 模式不读这个,但保留以便回退
+        ALLOWED_DEV_ORIGINS: ${ALLOWED_DEV_ORIGINS:-8.137.161.160}
+        # build 时 next.config.ts 读取 API_PROXY_URL,必须注入;走 compose 网络访问 backend
+        API_PROXY_URL: http://backend:8080
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
       - API_PROXY_URL=http://backend:8080
-    volumes:
-      - ./web:/app
-      - /app/node_modules
-      - /app/.next
+      - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+    # prod 模式不需要 bind mount 源码(standalone 自包含);也不需要 npm install
+    volumes: []
     depends_on:
       - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -35,12 +42,15 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - AI_SERVICE_URL=http://ai-service:9001
       - AiService__BaseUrl=http://ai-service:9001
+      # ArduPilot WebTools 静态文件根目录(/webtools-content 与 volumes 挂载点一致)
       - WebTools__Root=/webtools-content
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
-      - Cors__Origins=http://localhost:3000
+      # CORS 从 .env 读取 (默认回退 localhost,生产部署覆盖 .env 即可)
+      - Cors__Origins=${CORS__ORIGINS:-http://localhost:3000}
     volumes:
       - ./data:/data
-      - ../ardupilot_log_analysis/WebTools:/webtools-content:ro
+      # 把宿主机 ArduPilot WebTools 静态文件挂进 backend 容器(详见 deploy/README-WEBTOOLS.md)
+      - ./webtools-content:/webtools-content:ro
     depends_on:
       - ai-service
     restart: unless-stopped

@@ -154,9 +154,9 @@ export default function Home() {
             <h3 className="text-sm font-semibold tracking-tight">库存分布</h3>
             <Link href="/inventory" className="text-xs text-primary font-medium">全部 →</Link>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
             <CategoryDonut data={donut} total={totalMaterial} />
-            <div className="flex-1 space-y-2.5">
+            <div className="w-full sm:flex-1 space-y-2.5">
               {donut.length === 0 && <div className="text-sm text-faint">{loaded ? "暂无物料数据" : <Skeleton />}</div>}
               {donut.map((d, i) => {
                 const pct = totalMaterial ? Math.round((d.value / totalMaterial) * 100) : 0;

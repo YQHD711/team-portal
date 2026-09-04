@@ -20,8 +20,8 @@ interface Props {
 /** 归还弹窗（A级物料需上传照片 + 功能测试说明） */
 export default function ReturnModal({ target, condition, onCondition, notes, onNotes, photoUrl, photoName, uploading, submitting, fileRef, onUpload, onClose, onSubmit }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => !submitting && onClose()}>
-      <div className="w-full max-w-lg rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => !submitting && onClose()}>
+      <div className="w-full max-w-lg my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">归还物料</h2>
           <button onClick={() => !submitting && onClose()} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>

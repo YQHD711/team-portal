@@ -75,10 +75,11 @@ public static class FileEndpoints
         });
 
         // Upload
-        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db, LogService log, HttpContext ctx) =>
+        g.MapPost("/upload", async (IFormFile file, string? visibility, ClaimsPrincipal user, AppDbContext db, LogService log, SettingsService settings, HttpContext ctx) =>
         {
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
-            if (file.Length > 100 * 1024 * 1024) return Results.Problem("Max 100MB", statusCode: 400);
+            var maxMB = await settings.GetInt("Files:MaxUploadMB", 100);
+            if (file.Length > maxMB * 1024L * 1024L) return Results.Problem($"文件超过最大限制 {maxMB}MB", statusCode: 400);
 
             // 文件名规范化：拒绝路径分隔符、.. 等危险字符（虽然存储名用 GUID，原始名仍会入库/渲染）
             var rawName = file.FileName ?? "";

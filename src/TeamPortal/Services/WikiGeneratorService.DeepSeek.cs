@@ -14,11 +14,11 @@ public partial class WikiGeneratorService
     //  AI Agent Core — DeepSeek function calling
     // ════════════════════════════════════════
 
-    private async Task<string> CallDeepSeekWithTools(string systemPrompt, string userMessage, List<ToolDef> tools, string taskDesc)
+    private async Task<string> CallDeepSeekWithTools(string systemPrompt, string userMessage, List<ToolDef> tools, string taskDesc, string? modelName = null)
     {
         var apiKey = await GetApiKey();
         var baseUrl = await GetBaseUrl();
-        var model = _options.ContentModel;
+        var model = modelName ?? _options.ContentModel;
 
         var messages = new List<object>
         {

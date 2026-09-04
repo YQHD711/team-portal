@@ -16,7 +16,7 @@ public static class SearchEndpoints
             var keyword = q.ToLower().Trim();
 
             // Knowledge base
-            var kbResults = ks.Search(keyword).Take(5).Select(r => new { type = "knowledge", title = System.IO.Path.GetFileName(r.Path), snippet = r.Snippet, path = r.Path });
+            var kbResults = ks.Search(keyword).Take(5).Select(r => new { type = "knowledge", title = System.IO.Path.GetFileName(r.Path), snippet = r.Snippet, path = $"/admin/knowledge?path={Uri.EscapeDataString(r.Path)}&q={Uri.EscapeDataString(keyword)}" });
 
             // Inventory
             var items = await db.InventoryItems

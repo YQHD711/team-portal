@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { GitBranch, Upload, Loader2, CheckCircle, XCircle, Clock, RefreshCw, Globe, Building2, Lock, Languages, Trash2 } from "lucide-react";
@@ -25,19 +25,33 @@ export default function WikiImportPage() {
   const [visibility, setVisibility] = useState("public");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [model, setModel] = useState("");
+  const [customCatalogJson, setCustomCatalogJson] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const { user } = useCurrentUser();
   const isStaff = user?.role === "admin" || user?.role === "部长";
   const fileRef = useRef<HTMLInputElement>(null);
+  const initedRef = useRef(false);
 
   const fetchTasks = () => api.get<TaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
   const deleteTask = async (id: string) => { if (confirm("确定删除？")) { await api.delete(`/api/wiki/tasks/${id}`); fetchTasks(); } };
+  const fetchModels = () => {
+    api.get<{ availableModels?: string[]; contentModel?: string }>("/api/wiki/settings")
+      .then(s => {
+        if (s.availableModels?.length) {
+          setAvailableModels(s.availableModels);
+          if (!initedRef.current && s.contentModel) { setModel(s.contentModel); initedRef.current = true; }
+        }
+      }).catch(() => {});
+  };
+  useEffect(() => { fetchModels(); }, []);
 
   const submitGit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gitUrl || !projectName) return;
     setSubmitting(true); setMessage("");
     try {
-      await api.post("/api/wiki/submit-git", { url: gitUrl, projectName, targetFolder: targetFolder || undefined, visibility });
+      await api.post("/api/wiki/submit-git", { url: gitUrl, projectName, targetFolder: targetFolder || undefined, visibility, model: model || undefined, customCatalogJson: customCatalogJson || undefined });
       setMessage("✅ 已提交，后台正在处理...");
       setGitUrl(""); setProjectName(""); fetchTasks();
     } catch (err) { setMessage("❌ " + (err instanceof Error ? err.message : "提交失败")); }
@@ -57,6 +71,8 @@ export default function WikiImportPage() {
       params.set("projectName", projectName);
       if (targetFolder) params.set("targetFolder", targetFolder);
       params.set("visibility", visibility);
+      if (model) params.set("model", model);
+      if (customCatalogJson) params.set("customCatalogJson", customCatalogJson);
       const res = await fetch(`/api/wiki/submit-zip?${params}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
       if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: "Failed" }))).detail);
       setMessage("✅ ZIP 已提交，后台正在处理...");
@@ -70,7 +86,7 @@ export default function WikiImportPage() {
     if (!gitUrl || !projectName) return;
     setSubmitting(true); setMessage("");
     try {
-      await api.post("/api/wiki/submit-translate", { url: gitUrl, projectName, targetFolder: targetFolder || "公共", visibility });
+      await api.post("/api/wiki/submit-translate", { url: gitUrl, projectName, targetFolder: targetFolder || "公共", visibility, model: model || undefined, customCatalogJson: customCatalogJson || undefined });
       setMessage("✅ 翻译任务已提交，后台正在处理...");
       setGitUrl(""); setProjectName(""); fetchTasks();
     } catch (err) { setMessage("❌ " + (err instanceof Error ? err.message : "提交失败")); }
@@ -125,6 +141,24 @@ export default function WikiImportPage() {
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">生成模型（可选，不选则用全局默认）</label>
+          <select value={model} onChange={e => setModel(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <option value="">使用全局默认</option>
+            {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            自定义目录结构（可选 JSON，留空则 AI 自动生成）
+            <a className="ml-2 text-xs text-faint hover:text-sky-500 cursor-pointer" onClick={() => setCustomCatalogJson(JSON.stringify([
+              { path: "getting-started", title: "快速开始", children: [{ path: "getting-started/installation", title: "安装指南" }] },
+              { path: "core-modules", title: "核心模块" }
+            ], null, 2))}>插入示例</a>
+          </label>
+          <textarea value={customCatalogJson} onChange={e => setCustomCatalogJson(e.target.value)} rows={6} placeholder='例如: [{"path":"getting-started","title":"快速开始"}]'
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
         <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-sm">
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "translate" ? <Languages className="h-4 w-4" /> : tab === "git" ? <GitBranch className="h-4 w-4" /> : <Upload className="h-4 w-4" />}

@@ -31,6 +31,11 @@ export default function AdminProfileDetailPage() {
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [flightTypes, setFlightTypes] = useState<string[]>([]);
   const [skills, setSkills] = useState("");
+  const [username, setUsername] = useState("");
+  const [role, setRole] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [password, setPassword] = useState("");
+  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
 
   // Training form
   const [showTrainingForm, setShowTrainingForm] = useState(false);
@@ -66,10 +71,15 @@ export default function AdminProfileDetailPage() {
       setEmergencyPhone(data.emergencyPhone || "");
       setFlightTypes(data.flightTypes ? data.flightTypes.split(",").filter(Boolean) : []);
       setSkills(data.skills || "");
+      setUsername(data.username);
+      setRole(data.role);
+      setDepartmentId(data.departmentId ? String(data.departmentId) : "");
     }).catch(() => router.push("/admin/profiles")).finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchProfile(); }, [userId]);
+
+  useEffect(() => { api.get<{ id: number; name: string }[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
 
   // 切换认证 tab 时拉取该队员的考核通过记录(管理端全部,前端按 userId 过滤)
   useEffect(() => {
@@ -90,6 +100,11 @@ export default function AdminProfileDetailPage() {
       emergencyContact: emergencyContact || null, emergencyPhone: emergencyPhone || null,
       flightTypes: flightTypes.join(",") || null,
       skills: skills || null
+    });
+    await api.put(`/api/admin/users/${userId}`, {
+      username: username || null, role: role || null,
+      departmentId: departmentId ? Number(departmentId) : null,
+      password: password || null
     });
     setEditInfo(false); setSaving(false);
     fetchProfile();
@@ -197,6 +212,9 @@ export default function AdminProfileDetailPage() {
           emergencyPhone={emergencyPhone} setEmergencyPhone={setEmergencyPhone}
           flightTypes={flightTypes} setFlightTypes={setFlightTypes}
           skills={skills} setSkills={setSkills} bio={bio} setBio={setBio}
+          username={username} setUsername={setUsername} role={role} setRole={setRole}
+          departmentId={departmentId} setDepartmentId={setDepartmentId} password={password} setPassword={setPassword}
+          departments={departments}
           saving={saving} onSave={saveInfo} />
       )}
 

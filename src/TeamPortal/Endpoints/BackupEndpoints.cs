@@ -87,7 +87,7 @@ public static class BackupEndpoints
         });
 
         // Delete a backup
-        backup.MapDelete("/{fileName}", (string fileName, BackupService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        backup.MapDelete("/{fileName}", async (string fileName, BackupService svc, TrashService trash, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             var ip = LogService.ClientIp(ctx);
             var ok = svc.DeleteBackup(fileName);
@@ -98,7 +98,10 @@ public static class BackupEndpoints
                     data: new { success = false, error = "备份文件不存在或为最新备份" }, ipAddress: ip);
                 return Results.Problem("删除失败：备份文件不存在或为最新备份", statusCode: 400);
             }
-            log.Info("backup", $"Backup deleted by {user.Identity?.Name}: {fileName}");
+            // 记录到回收站，可恢复
+            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+            await trash.MoveToTrash("backup", 0, $"备份 {fileName}", new { fileName }, uid, user.Identity?.Name ?? "unknown");
+            log.Info("backup", $"Backup moved to trash by {user.Identity?.Name}: {fileName}");
             log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "backup", targetId: fileName,
                 data: new { success = true }, ipAddress: ip);
             return Results.Ok(new { success = true });

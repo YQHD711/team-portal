@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className="h-full antialiased touch-manipulation"
+      className="h-full antialiased touch-manipulation dark"
       suppressHydrationWarning
     >
       <body className="min-h-full bg-background text-foreground font-sans">

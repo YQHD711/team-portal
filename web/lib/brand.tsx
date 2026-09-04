@@ -11,7 +11,7 @@ export interface BrandConfig {
   description: string;
   logoUrl: string | null;
   primaryColor: string | null;
-  theme: string; // indigo | sky | light | warm
+  theme: string; // indigo | sky | warm
 }
 
 /** 兜底默认值（接口失败/未返回时使用），与后端 SettingsService 默认值保持一致 */
@@ -25,7 +25,7 @@ const DEFAULT_BRAND: BrandConfig = {
   theme: "indigo",
 };
 
-const THEMES = ["indigo", "sky", "light", "warm"] as const;
+const THEMES = ["indigo", "sky", "warm"] as const;
 
 /** 应用主题：设置 <html data-theme> 触发 globals.css 的多套配色变量 */
 function applyTheme(brand: BrandConfig) {

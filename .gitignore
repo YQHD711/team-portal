@@ -63,3 +63,12 @@ Thumbs.db
 certbot/
 deploy/nginx.prod.generated.conf
 deploy/nginx.temp.conf
+
+# Local artifacts
+.pytest_cache/
+*.bak
+*.bak.*
+next-env.d.ts
+
+# wiki 内容仓（独立 git 仓,可由翻译流程再生）
+webtools-content/

@@ -31,6 +31,9 @@ public partial class WikiGeneratorService
     private string _currentTaskId = "";
     private readonly List<string> _processedFiles = new();
     private string _catalogJson = "[]";
+    private string? _currentModel;
+    private string? _currentCatalogModel;
+    private string? _customCatalogJson;
 
     private static readonly HashSet<string> ExcludedDirs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -72,21 +75,21 @@ public partial class WikiGeneratorService
     //  Public API — 任务管理
     // ════════════════════════════════════════
 
-    public async Task<WikiTask> SubmitGit(string url, string projectName, string targetFolder, int userId, string visibility = "public")
+    public async Task<WikiTask> SubmitGit(string url, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
     {
-        var task = new WikiTask { Type = "git", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
+        var task = new WikiTask { Type = "git", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
-    public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId, string visibility = "public")
+    public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
     {
-        var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
+        var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
-    public async Task<WikiTask> SubmitTranslate(string url, string projectName, string targetFolder, int userId, string visibility = "public")
+    public async Task<WikiTask> SubmitTranslate(string url, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
     {
-        var task = new WikiTask { Type = "translate", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility };
+        var task = new WikiTask { Type = "translate", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
@@ -139,6 +142,10 @@ public partial class WikiGeneratorService
             _projectName = task.ProjectName;
             _targetFolder = task.TargetFolder;
             _processedFiles.Clear();
+            // 任务级 model(覆盖全局 CatalogModel/ContentModel);用户自定义目录直接跳过 AI catalog 生成
+            _currentModel = task.Model ?? _options.ContentModel;
+            _currentCatalogModel = task.Model ?? _options.CatalogModel;
+            _customCatalogJson = task.CustomCatalogJson;
 
             // Step 1: Prepare workspace
             task.Status = "preparing"; await _db.SaveChangesAsync();

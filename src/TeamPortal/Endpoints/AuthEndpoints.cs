@@ -66,6 +66,14 @@ public static class AuthEndpoints
             return Results.Ok(new { message = "已作废" });
         }).RequireAuthorization("AdminOnly");
 
+        app.MapDelete("/api/admin/invite-codes/{id:int}", async (int id, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        {
+            var ok = await auth.DeleteInviteCode(id);
+            log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "invite-code", targetId: id.ToString(),
+                data: new { success = ok }, ipAddress: LogService.ClientIp(ctx));
+            return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("邀请码不存在", statusCode: 404);
+        }).RequireAuthorization("AdminOnly");
+
         // ── CSV Import (admin) ──
         app.MapPost("/api/admin/users/import-csv", async (HttpRequest req, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
@@ -111,10 +119,11 @@ public static class AuthEndpoints
 
             if (idClaim is null) return Results.Problem("Not authenticated", statusCode: 401);
 
-            var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
+            var u = await db.Users.Include(u => u.Department).Include(u => u.InvitedByUser).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
             var department = u?.Department?.Name;
+            var invitedBy = u?.InvitedByUser?.Username;
 
-            return Results.Ok(new { Id = int.Parse(idClaim), Username = username, Role = role, Department = department });
+            return Results.Ok(new { Id = int.Parse(idClaim), Username = username, Role = role, Department = department, InvitedBy = invitedBy });
         }).RequireAuthorization();
 
         app.MapPut("/api/auth/change-password", async (ChangePasswordRequest? req, ClaimsPrincipal user, AuthService auth, NotificationService notify, LogService log, HttpContext ctx) =>
@@ -133,6 +142,6 @@ public static class AuthEndpoints
 }
 
 public record RegisterRequest(string Username, string Password, string? InviteCode = null);
-public record GenerateInviteReq(int? DepartmentId, int MaxUses, int DaysValid);
+public record GenerateInviteReq(int? DepartmentId, int? MaxUses = 1, int? DaysValid = 30);
 public record LoginRequest(string Username, string Password);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);

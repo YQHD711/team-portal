@@ -14,16 +14,31 @@ interface Props {
   flightTypes: string[]; setFlightTypes: React.Dispatch<React.SetStateAction<string[]>>;
   skills: string; setSkills: (v: string) => void;
   bio: string; setBio: (v: string) => void;
+  username: string; setUsername: (v: string) => void;
+  role: string; setRole: (v: string) => void;
+  departmentId: string; setDepartmentId: (v: string) => void;
+  password: string; setPassword: (v: string) => void;
+  departments: { id: number; name: string }[];
   saving: boolean;
   onSave: () => void;
 }
 
 /** 基本信息 Tab（查看模式 + 编辑模式） */
-export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCancelEdit, level, setLevel, flightHours, setFlightHours, firstFlight, setFirstFlight, emergencyContact, setEmergencyContact, emergencyPhone, setEmergencyPhone, flightTypes, setFlightTypes, skills, setSkills, bio, setBio, saving, onSave }: Props) {
+export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCancelEdit, level, setLevel, flightHours, setFlightHours, firstFlight, setFirstFlight, emergencyContact, setEmergencyContact, emergencyPhone, setEmergencyPhone, flightTypes, setFlightTypes, skills, setSkills, bio, setBio, username, setUsername, role, setRole, departmentId, setDepartmentId, password, setPassword, departments, saving, onSave }: Props) {
   return (
     <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
       {editInfo ? (
         <>
+          {/* 账号信息（管理员编辑） */}
+          <div className="space-y-3 border-b border-border pb-4 mb-1">
+            <h3 className="text-sm font-semibold text-muted">账号信息</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">用户名</label><input value={username} onChange={e => setUsername(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
+              <div><label className="block text-sm font-medium mb-1">角色</label><select value={role} onChange={e => setRole(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"><option value="member">成员</option><option value="部长">部长</option><option value="admin">管理员</option></select></div>
+              <div><label className="block text-sm font-medium mb-1">部门</label><select value={departmentId} onChange={e => setDepartmentId(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"><option value="">未分配</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+              <div><label className="block text-sm font-medium mb-1">重置密码</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="留空不修改" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" /></div>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium mb-1">飞手等级</label><select value={level} onChange={e => setLevel(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">{LEVELS.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
             <div><label className="block text-sm font-medium mb-1">飞行小时</label><input type="number" step="0.5" value={flightHours} onChange={e => setFlightHours(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>

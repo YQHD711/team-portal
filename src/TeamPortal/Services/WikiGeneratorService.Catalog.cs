@@ -11,6 +11,8 @@ public partial class WikiGeneratorService
 
     private async Task<string> GenerateCatalog()
     {
+        // 用户自定义目录：直接用，跳过 AI catalog 生成
+        if (!string.IsNullOrEmpty(_customCatalogJson)) { _catalogJson = _customCatalogJson; return _catalogJson; }
         var maxTopItems = _complexityScore <= 2 ? "1-4" : _complexityScore >= 4 ? "5-10" : "3-7";
         var maxDepth = _complexityScore <= 2 ? "2" : "3";
         var scopeHint = _complexityScore <= 2 ? "简单项目，目录结构简洁即可，不要过度拆分" : "覆盖项目所有核心模块";
@@ -69,7 +71,7 @@ README:
             new("write_catalog", "Save the catalog JSON. MUST call this to complete.", new { json = new { type = "string", description = "Catalog JSON array" } }),
         };
 
-        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, "Catalog");
+        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, "Catalog", _currentCatalogModel);
         return _catalogJson;
     }
 }

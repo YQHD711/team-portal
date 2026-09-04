@@ -59,7 +59,7 @@ public class BackupService
     {
         Directory.CreateDirectory(_backupDir);
 
-        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var timestamp = DateTime.UtcNow.AddHours(8).ToString("yyyyMMdd-HHmmss"); // 北京时间(UTC+8)，与前端显示的本地时间一致
         var backupPath = Path.Combine(_backupDir, $"{timestamp}_{tag}.db");
 
         _log.Info("backup", $"Creating backup: {Path.GetFileName(backupPath)}");
@@ -193,8 +193,37 @@ public class BackupService
             return false;
         }
 
-        File.Delete(path);
-        _log.Info("backup", $"Backup deleted: {fileName}");
+        // 软删除：移到回收目录，可恢复（回收站）
+        var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
+        Directory.CreateDirectory(trashDir);
+        var dest = Path.Combine(trashDir, fileName);
+        if (File.Exists(dest)) File.Delete(dest);
+        File.Move(path, dest);
+        _log.Info("backup", $"Backup moved to trash: {fileName}");
+        return true;
+    }
+
+    /// <summary>从回收目录还原备份文件。</summary>
+    public bool RestoreBackupFromTrash(string fileName)
+    {
+        var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
+        var src = Path.Combine(trashDir, fileName);
+        if (!File.Exists(src)) return false;
+        var dest = Path.Combine(_backupDir, fileName);
+        if (File.Exists(dest)) File.Delete(dest);
+        File.Move(src, dest);
+        _log.Info("backup", $"Backup restored from trash: {fileName}");
+        return true;
+    }
+
+    /// <summary>彻底删除回收站里的备份文件。</summary>
+    public bool DeleteBackupForever(string fileName)
+    {
+        var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
+        var src = Path.Combine(trashDir, fileName);
+        if (!File.Exists(src)) return false;
+        File.Delete(src);
+        _log.Info("backup", $"Backup deleted forever: {fileName}");
         return true;
     }
 

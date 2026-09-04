@@ -10,7 +10,7 @@ interface TrashItem {
 }
 
 const tableLabels: Record<string, string> = {
-  InventoryItem: "零件", BatteryRecord: "电池", IncidentRecord: "事故记录",
+  InventoryItem: "零件", BatteryRecord: "电池", IncidentRecord: "事故记录", backup: "备份文件",
 };
 
 export default function TrashPage() {

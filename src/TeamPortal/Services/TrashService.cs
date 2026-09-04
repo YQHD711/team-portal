@@ -10,7 +10,8 @@ public class TrashService
     private readonly AppDbContext _db;
     private readonly LogService _log;
 
-    public TrashService(AppDbContext db, LogService log) { _db = db; _log = log; }
+    private readonly BackupService _backup;
+    public TrashService(AppDbContext db, LogService log, BackupService backup) { _db = db; _log = log; _backup = backup; }
 
     public async Task<TrashItem> MoveToTrash(string table, int originalId, string title, object data, int userId, string userName)
     {
@@ -43,6 +44,10 @@ public class TrashService
         {
             switch (item.OriginalTable)
             {
+                case "backup":
+                    var bf = JsonSerializer.Deserialize<Dictionary<string, string>>(item.DataJson);
+                    if (bf is null || !bf.TryGetValue("fileName", out var fn) || !_backup.RestoreBackupFromTrash(fn)) return false;
+                    break;
                 case "InventoryItem":
                     var inv = JsonSerializer.Deserialize<InventoryItem>(item.DataJson);
                     if (inv is not null) { inv.Id = 0; _db.InventoryItems.Add(inv); }
@@ -70,6 +75,12 @@ public class TrashService
     {
         var item = await _db.TrashItems.FindAsync(id);
         if (item is null) return false;
+        if (item.OriginalTable == "backup")
+        {
+            var bf = JsonSerializer.Deserialize<Dictionary<string, string>>(item.DataJson);
+            if (bf is not null && bf.TryGetValue("fileName", out var fn))
+                _backup.DeleteBackupForever(fn);
+        }
         _db.TrashItems.Remove(item);
         await _db.SaveChangesAsync();
         return true;

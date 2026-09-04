@@ -55,10 +55,11 @@ public static class AdminEndpoints
         {
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
-            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, role, dept);
+            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept);
             if (ok)
             {
                 var changes = new List<string>();
+                if (req.Username is not null) changes.Add($"username→{req.Username}");
                 if (req.Role is not null) changes.Add($"role→{req.Role}");
                 if (req.DepartmentId.HasValue) changes.Add($"dept→{req.DepartmentId}");
                 if (req.Password is not null) changes.Add("password-reset");
@@ -148,6 +149,16 @@ public static class AdminEndpoints
             catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
         });
 
+        admin.MapPost("/knowledge/rename", async (RenameKnowledgeReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
+        {
+            req = req with { Path = Uri.UnescapeDataString(req.Path), NewPath = Uri.UnescapeDataString(req.NewPath) };
+            var (role, dept, _) = await GetUserCtx(user, db);
+            var actor = user.Identity?.Name ?? "unknown";
+            if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            try { svc.Rename(req.Path, req.NewPath); log.Info("knowledge", $"Renamed: {req.Path} → {req.NewPath} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { newPath = req.NewPath }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库重命名", $"{actor} 将 {req.Path} 重命名为 {req.NewPath}", targetRole: "staff"); return Results.Ok(new { success = true }); }
+            catch (Exception e) { log.Error("knowledge", $"Rename failed: {req.Path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
+        });
+
         // ── Document upload ──
         admin.MapPost("/documents/upload", async (IFormFile file, string? folder, ClaimsPrincipal user, DocumentService docSvc, AppDbContext db, BaiduNetdiskService baidu, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -206,7 +217,8 @@ public static class AdminEndpoints
 }
 
 public record CreateUserReq(string Username, string Password, string? Role, int? DepartmentId);
-public record UpdateUserReq(string? Role, int? DepartmentId, string? Password);
+public record UpdateUserReq(string? Role, int? DepartmentId, string? Password, string? Username = null);
 public record CreateDeptReq(string Name, string? Description);
 public record UpdateDeptReq(string Name, string? Description);
 public record KnowledgeWriteReq(string Path, string? Content);
+public record RenameKnowledgeReq(string Path, string NewPath);

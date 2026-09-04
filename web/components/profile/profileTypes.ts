@@ -1,7 +1,7 @@
 /* 队员档案详情页共享类型与常量（profiles/[userId] 页面及其子组件共用） */
 
 export interface FullProfile {
-  id: number; userId: number; username: string; role: string; department: string | null;
+  id: number; userId: number; username: string; role: string; department: string | null; departmentId: number | null;
   level: string; totalFlightHours: number; firstFlightDate: string | null;
   bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; skills: string | null; updatedAt: string;
   trainingRecords: TrainingRecord[]; competitionRecords: CompetitionRecord[];

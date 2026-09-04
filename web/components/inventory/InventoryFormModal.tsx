@@ -20,8 +20,8 @@ interface Props {
 /** 添加/编辑零件弹窗（表单 + 库位编码四段录入） */
 export default function InventoryFormModal({ editItem, form, setForm, locRoom, setLocRoom, locCabinet, setLocCabinet, locShelf, setLocShelf, locPos, setLocPos, roomOpts, departments, buildLocCode, calcGrade, onClose, onSubmit }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editItem ? "编辑零件" : "添加零件"}</h2><button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -69,7 +69,7 @@ export default function InventoryFormModal({ editItem, form, setForm, locRoom, s
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">库位编码 <span className="text-faint text-xs">室-架-层-位</span></label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               <select value={locRoom} onChange={e => setLocRoom(e.target.value)}
                 className="rounded-lg border border-border bg-surface px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <option value="">室</option>

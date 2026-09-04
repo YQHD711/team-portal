@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import { Ticket, Plus, X, Copy, Clock, Loader2 } from "lucide-react";
 
 interface InviteCode {
@@ -45,6 +46,12 @@ export default function InviteCodesPage() {
     fetchCodes();
   };
 
+  const remove = async (id: number) => {
+    if (!confirm("确定删除此邀请码？此操作不可撤销。")) return;
+    await api.delete(`/api/admin/invite-codes/${id}`);
+    fetchCodes();
+  };
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
   return (
@@ -62,7 +69,7 @@ export default function InviteCodesPage() {
 
       {showForm && (
         <div className="rounded-xl border p-4 space-y-3 bg-surface">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium mb-1">归属部门</label>
               <select value={deptId} onChange={e => setDeptId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
@@ -108,7 +115,7 @@ export default function InviteCodesPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <code className="text-sm font-mono font-bold bg-surface-subtle px-2 py-0.5 rounded">{c.code}</code>
-                  <button onClick={() => { navigator.clipboard.writeText(c.code); setCopied(c.code); setTimeout(() => setCopied(""), 2000); }}
+                  <button onClick={() => { copyText(c.code); setCopied(c.code); setTimeout(() => setCopied(""), 2000); }}
                     className="text-faint hover:text-sky-500" title="复制">
                     {copied === c.code ? <span className="text-xs text-success">已复制</span> : <Copy className="h-3.5 w-3.5" />}
                   </button>
@@ -116,6 +123,7 @@ export default function InviteCodesPage() {
                 <div className="text-xs text-faint mt-1 space-x-3">
                   <span>使用 {c.useCount}{c.maxUses ? `/${c.maxUses}` : ""} 次</span>
                   {c.departmentName && <span>归属: {c.departmentName}</span>}
+                  {c.createdBy && <span>创建人: {c.createdBy}</span>}
                   {c.expiresAt && <span>过期: {new Date(c.expiresAt).toLocaleDateString("zh-CN")}</span>}
                   <span>创建: {new Date(c.createdAt).toLocaleDateString("zh-CN")}</span>
                 </div>
@@ -126,7 +134,7 @@ export default function InviteCodesPage() {
                 <X className="h-4 w-4" />作废
               </button>
             )}
-            {c.isRevoked && <span className="text-xs text-faint bg-surface-subtle px-2 py-1 rounded">已作废</span>}
+            {c.isRevoked && <div className="flex items-center gap-2"><span className="text-xs text-faint bg-surface-subtle px-2 py-1 rounded">已作废</span><button onClick={() => remove(c.id)} className="text-xs text-danger hover:underline">删除</button></div>}
           </div>
         ))}
       </div>

@@ -140,6 +140,21 @@ public class KnowledgeService
         else throw new InvalidOperationException("File not found");
     }
 
+    /// <summary>重命名或移动文件/目录（目录结构调整）。</summary>
+    public void Rename(string relativePath, string newRelativePath)
+    {
+        var fullPath = ResolvePath(relativePath);
+        var newFullPath = ResolvePath(newRelativePath);
+        if (fullPath is null || newFullPath is null) throw new InvalidOperationException("Invalid path");
+        if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new InvalidOperationException("File not found");
+        if (File.Exists(newFullPath) || Directory.Exists(newFullPath)) throw new InvalidOperationException("目标已存在");
+        var newDir = Path.GetDirectoryName(newFullPath);
+        if (newDir is not null) Directory.CreateDirectory(newDir);
+        if (Directory.Exists(fullPath)) Directory.Move(fullPath, newFullPath);
+        else File.Move(fullPath, newFullPath);
+        _log.Info("knowledge", $"Renamed: {relativePath} → {newRelativePath}");
+    }
+
     public bool CanAccess(string relativePath, string? role, string? department)
     {
         if (role == "admin") return true;
