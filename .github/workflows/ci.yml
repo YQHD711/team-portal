@@ -82,7 +82,7 @@ jobs:
           target: prod
           push: true
           build-args: |
-            NPM_REGISTRY=https://registry.npmmirror.com
+            NPM_REGISTRY=https://registry.npmjs.org
             ALLOWED_DEV_ORIGINS=8.137.161.160
             API_PROXY_URL=http://backend:8080
           tags: |
