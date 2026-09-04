@@ -199,11 +199,14 @@ public class SecurityTests
         var db = CreateContext();
         var auth = new AuthService(db, CreateConfig(), CreateLog(db), CreateSettings(db));
 
-        // B-1 修复后注册默认需要 inviteCode:seed 一条有效码
+        // B-1 修复后注册默认需要 inviteCode:seed 创建者 + 有效码
+        var creator = new User { Username = "creator", PasswordHash = "x", Role = "admin", CreatedAt = DateTime.UtcNow };
+        db.Users.Add(creator);
+        await db.SaveChangesAsync();
         db.InviteCodes.Add(new InviteCode
         {
             Code = "TEST-CODE", MaxUses = 100,
-            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedByUserId = 0
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedByUserId = creator.Id
         });
         await db.SaveChangesAsync();
 
