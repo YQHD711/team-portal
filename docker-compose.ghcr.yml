@@ -1,0 +1,18 @@
+# 预构建镜像叠加配置 — 使用 CI 推送到 ghcr.io 的镜像，服务器零构建
+# 用法: bash deploy/deploy.sh
+# 原理: 叠加此文件后，三个服务改用 ghcr 镜像(由 GitHub Actions 构建)，
+#       本地 build 配置保留但镜像已存在时不会触发，正常流程不在服务器上构建。
+# 回滚: bash deploy/deploy.sh sha-abc1234 (任意已推送的 commit 短 hash)
+
+services:
+  frontend:
+    image: ghcr.io/yqhd711/teamportal-frontend:${TEAMPORTAL_IMAGE_TAG:-latest}
+    pull_policy: missing
+
+  backend:
+    image: ghcr.io/yqhd711/teamportal-backend:${TEAMPORTAL_IMAGE_TAG:-latest}
+    pull_policy: missing
+
+  ai-service:
+    image: ghcr.io/yqhd711/teamportal-ai-service:${TEAMPORTAL_IMAGE_TAG:-latest}
+    pull_policy: missing

@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     branches: [main, master]
 
 jobs:
+  # ── 测试（PR 和 main 推送都跑）──
   test-csharp:
     runs-on: ubuntu-latest
     defaults:
@@ -38,3 +39,65 @@ jobs:
           python-version: "3.11"
       - run: cd ai-service && pip install -r requirements-dev.txt
       - run: cd tests/ai && python -m pytest
+
+  # ── CD：测试全绿后构建镜像并推送 ghcr.io（仅 main 推送触发）──
+  # 服务器零构建：deploy/deploy.sh 拉取镜像直接启动，彻底规避 1.8G 内存 OOM
+  build-push:
+    name: Build & Push Images (ghcr)
+    needs: [test-csharp, test-web, test-python]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 计算镜像 tag（ghcr 要求全小写）
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 后端：dotnet 10
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./src/TeamPortal
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-backend:latest
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-backend:sha-${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      # 前端：Next.js standalone（与 docker-compose.yml 的 build args 保持一致）
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          target: prod
+          push: true
+          build-args: |
+            NPM_REGISTRY=https://registry.npmmirror.com
+            ALLOWED_DEV_ORIGINS=8.137.161.160
+            API_PROXY_URL=http://backend:8080
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-frontend:latest
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-frontend:sha-${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      # AI 服务：python 3.11
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./ai-service
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-ai-service:latest
+            ghcr.io/${{ env.OWNER_LC }}/teamportal-ai-service:sha-${{ github.sha }}
+          cache-from: type=gha,scope=ai
+          cache-to: type=gha,scope=ai,mode=max
