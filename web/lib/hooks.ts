@@ -19,6 +19,7 @@ export interface CurrentUser {
   username: string;
   role: string;
   department: string | null;
+  departmentId: number | null;
 }
 
 /** 与后端 GET /api/notifications 返回结构一致 */

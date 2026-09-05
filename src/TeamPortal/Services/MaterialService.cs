@@ -30,20 +30,26 @@ public class MaterialService
         if (quantity <= 0) throw new InvalidOperationException("数量必须大于0");
         if (item.Quantity < quantity) throw new InvalidOperationException("库存不足");
 
-        // 审批流转规则：
-        //  管理员领用 → 直接放行（管理员即终审人）
-        //  部长领用   → A级 跳过部长审直接到管理员终审；B级 直接放行（部长即部长审审批人）
-        //  普通成员   → A/B级 需部长审（A级再管理员终审）；C级 自助放行
+        // 审批流转规则(以申请人所在部门为准):
+        //  admin 自领用 → 直接放行(管理员即终审人)
+        //  部长自领用   → A级 进管理员终审;B/C级 直接放行(部长即部长审审批人)
+        //  普通成员 C级 → 自助放行(耗材)
+        //  普通成员 A/B级 → 本部门有部长则部长审(A再进 admin 终审);
+        //                   未分配部门 / 部门无部长 → 直接进管理员审批,避免无人可批
+        var requester = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId)
+            ?? throw new InvalidOperationException("用户不存在");
+        role ??= requester.Role;
         var isAdminSelf = role == "admin";
         var isDeptHeadSelf = role == "部长";
-        var status = isAdminSelf
-            ? "approved"
-            : item.Grade switch
-            {
-                "A" => isDeptHeadSelf ? "pending_admin" : "pending_dept",
-                "B" => isDeptHeadSelf ? "approved" : "pending_dept",
-                _ => "approved",
-            };
+        string status;
+        if (isAdminSelf || item.Grade == "C") status = "approved";
+        else if (isDeptHeadSelf) status = item.Grade == "A" ? "pending_admin" : "approved";
+        else
+        {
+            var hasLeader = requester.DepartmentId.HasValue &&
+                await _db.Users.AnyAsync(u => u.Role == "部长" && u.DepartmentId == requester.DepartmentId);
+            status = hasLeader ? "pending_dept" : "pending_admin";
+        }
         var req = new CheckoutRequest
         {
             InventoryItemId = itemId, RequesterUserId = userId, Quantity = quantity,
@@ -111,7 +117,8 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
     public async Task<CheckoutRequest?> ApproveAdmin(int requestId, int approverUserId)
     {
         var req = await _db.CheckoutRequests.Include(r => r.Item).FirstOrDefaultAsync(r => r.Id == requestId);
-        if (req is null || req.Status != "pending_admin" || req.Grade != "A") return null;
+        // 无部门/部门无部长的 A/B 级申请直接在此一次性通过(不再要求先经部长审)
+        if (req is null || req.Status != "pending_admin") return null;
         req.Status = "approved"; req.ApprovedAt = DateTime.UtcNow; req.AdminApproverUserId = approverUserId;
         var item = req.Item!;
         // 原子扣库存(A级终审即扣),失败抛库存不足
@@ -151,7 +158,8 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
     {
         var q = _db.CheckoutRequests.Include(r => r.Item).Include(r => r.Requester).AsQueryable();
         if (role == "admin") q = q.Where(r => r.Status == "pending_admin");
-        else if (role == "部长" && departmentId.HasValue) q = q.Where(r => r.Status == "pending_dept" && r.Item!.DepartmentId == departmentId);
+        else if (role == "部长" && departmentId.HasValue)
+            q = q.Where(r => r.Status == "pending_dept" && r.Requester!.DepartmentId == departmentId);
         else return new();
         return await q.OrderByDescending(r => r.CreatedAt).ToListAsync();
     }

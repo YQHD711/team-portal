@@ -75,13 +75,23 @@ describe("仪表盘", () => {
     expect(screen.getByText("¥1.2k")).toBeInTheDocument();
   });
 
-  it("低库存警告显示零件名与补货链接", async () => {
-    mockedIsStaff.mockReturnValue(false);
+  it("staff 低库存警告显示零件名与补货链接", async () => {
+    mockedIsStaff.mockReturnValue(true);
     render(<Home />);
 
     expect(await screen.findByText("低库存预警")).toBeInTheDocument();
     expect(screen.getByText(/螺旋桨/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /补货/ })).toHaveAttribute("href", "/inventory");
+  });
+
+  it("普通成员不显示低库存预警卡片", async () => {
+    mockedIsStaff.mockReturnValue(false);
+    render(<Home />);
+
+    await screen.findByText("团队成员");
+    expect(screen.queryByText("低库存预警")).not.toBeInTheDocument();
+    expect(screen.queryByText(/螺旋桨/)).not.toBeInTheDocument();
+    expect(screen.queryByText("库存充足")).not.toBeInTheDocument();
   });
 
   it("无团队动态时显示空状态", async () => {

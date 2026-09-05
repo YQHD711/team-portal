@@ -105,11 +105,12 @@ public static class DashboardEndpoints
             object payload;
             if (!isStaff)
             {
+                // 成员:不下发 lowStock(库存预警属运营,仅 staff 可见),避免前端感知阈值
                 payload = new
                 {
                     users = await usersTask, inventory = await inventoryTask,
                     inventoryTotal = await inventoryTotalTask, departments = await departmentsTask,
-                    monthNewItems = await monthNewItemsTask, lowStock = await lowStockTask,
+                    monthNewItems = await monthNewItemsTask,
                     activeWiki = await activeWikiTask, recentIncidents = await recentIncidentsTask,
                     completedWiki = await completedWikiTask,
                     categoryCounts = await categoryCountsTask,

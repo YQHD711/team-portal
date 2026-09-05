@@ -23,7 +23,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
         {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="p-3"><div className="h-16 shimmer rounded-lg" /></div>) :
          items.length === 0 ? <div className="p-8 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2" />暂无零件</div> :
          items.map(item => (
-          <div key={item.id} className={`p-3 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
+          <div key={item.id} className={`p-3 ${isStaff && item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
             <div className="flex items-start justify-between mb-2">
               <div>
                 <div className="font-medium text-sm">{item.name}</div>
@@ -41,7 +41,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
             </div>
             <div className="flex items-center justify-between">
               <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-faint"}`}>{statusOpts.find(s => s.value === item.status)?.label || item.status}</span>
-              <span className={`text-lg font-bold ${item.quantity === 0 ? "text-danger" : item.quantity < LOW_THRESHOLD ? "text-amber-500" : ""}`}>{item.quantity}</span>
+              <span className={`text-lg font-bold ${isStaff ? (item.quantity === 0 ? "text-danger" : item.quantity < LOW_THRESHOLD ? "text-amber-500" : "") : ""}`}>{item.quantity}</span>
             </div>
           </div>
         ))}
@@ -54,13 +54,13 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
             {loading ? Array.from({ length: 3 }).map((_, i) => <tr key={i}>{Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 shimmer rounded" /></td>)}</tr>) :
              items.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
              items.map(item => (
-              <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
+              <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${isStaff && item.quantity < LOW_THRESHOLD ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
                 <td className="px-4 py-3"><span className="font-medium">{item.name}</span><span className="block text-xs text-faint sm:hidden">{item.category}</span></td>
                 <td className="px-4 py-3 text-muted hidden sm:table-cell">{item.category}</td>
                 <td className="px-4 py-3 text-center">
                   <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${item.grade === "A" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : item.grade === "B" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-zinc-100 text-muted dark:bg-zinc-800 dark:text-faint"}`}>{item.grade || "C"}</span>
                 </td>
-                <td className={`px-4 py-3 text-right font-medium tabular-nums ${item.quantity === 0 ? "text-danger" : item.quantity < LOW_THRESHOLD ? "text-warning" : ""}`}>{item.quantity}</td>
+                <td className={`px-4 py-3 text-right font-medium tabular-nums ${isStaff ? (item.quantity === 0 ? "text-danger" : item.quantity < LOW_THRESHOLD ? "text-warning" : "") : ""}`}>{item.quantity}</td>
                 <td className="px-4 py-3 text-muted hidden md:table-cell text-xs font-mono">{item.locationCode || "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-faint"}`}>

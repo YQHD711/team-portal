@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { ArrowLeft, User, GraduationCap, Trophy, Loader2, BadgeCheck } from "lucide-react";
 import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
 import ProfileHeader from "@/components/profile/ProfileHeader";
@@ -36,6 +37,12 @@ export default function AdminProfileDetailPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [password, setPassword] = useState("");
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
+  // 编辑门禁:admin 可改任何成员;部长仅可改本部门其他成员(未分配/跨部门/自己 → 只读)
+  const { user: me } = useCurrentUser();
+  const canManage = me?.role === "admin"
+    || (me?.role === "部长" && !!profile?.departmentId
+        && profile.departmentId === (me.departmentId ?? null)
+        && profile.userId !== me.id);
 
   // Training form
   const [showTrainingForm, setShowTrainingForm] = useState(false);
@@ -215,7 +222,7 @@ export default function AdminProfileDetailPage() {
           username={username} setUsername={setUsername} role={role} setRole={setRole}
           departmentId={departmentId} setDepartmentId={setDepartmentId} password={password} setPassword={setPassword}
           departments={departments}
-          saving={saving} onSave={saveInfo} />
+          saving={saving} onSave={saveInfo} readOnly={!canManage} />
       )}
 
       {/* Tab: Training */}
@@ -226,7 +233,7 @@ export default function AdminProfileDetailPage() {
           trainDate={trainDate} setTrainDate={setTrainDate} trainExaminer={trainExaminer} setTrainExaminer={setTrainExaminer}
           trainNotes={trainNotes} setTrainNotes={setTrainNotes} editTrainId={editTrainId}
           saving={saving} onSave={saveTraining} onCancelForm={cancelTrainingForm}
-          onEdit={editTraining} onDelete={deleteTraining} />
+          onEdit={editTraining} onDelete={deleteTraining} readOnly={!canManage} />
       )}
 
       {/* Tab: Competitions */}
@@ -237,7 +244,7 @@ export default function AdminProfileDetailPage() {
           compEvent={compEvent} setCompEvent={setCompEvent} compRanking={compRanking} setCompRanking={setCompRanking}
           compCert={compCert} setCompCert={setCompCert} compNotes={compNotes} setCompNotes={setCompNotes}
           editCompId={editCompId} saving={saving} onSave={saveCompetition} onCancelForm={cancelCompForm}
-          onEdit={editCompetition} onDelete={deleteCompetition} />
+          onEdit={editCompetition} onDelete={deleteCompetition} readOnly={!canManage} />
       )}
 
       {/* Tab: Certifications */}

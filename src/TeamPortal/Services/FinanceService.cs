@@ -8,9 +8,9 @@ public class FinanceService
 {
     private readonly AppDbContext _db;
     private readonly LogService _log;
-    private readonly NotificationService _notif;
+    private readonly NotificationService? _notif;
 
-    public FinanceService(AppDbContext db, LogService log, NotificationService notif) { _db = db; _log = log; _notif = notif; }
+    public FinanceService(AppDbContext db, LogService log, NotificationService? notif = null) { _db = db; _log = log; _notif = notif; }
 
     // ── Requests ──
 
@@ -24,7 +24,7 @@ public class FinanceService
         _db.PurchaseRequests.Add(req);
         await _db.SaveChangesAsync();
         _log.Info("finance", $"Purchase request created: {itemName} x{quantity} ¥{estimatedPrice}");
-        _notif.Notify("新的采购申请", $"{itemName} x{quantity} (¥{estimatedPrice})", "/finance", targetRole: "staff");
+        _notif?.Notify("新的采购申请", $"{itemName} x{quantity} (¥{estimatedPrice})", "/finance", targetRole: "staff");
         return req;
     }
 
@@ -46,7 +46,7 @@ public class FinanceService
         req.Status = "approved"; req.ApproverUserId = approverId; req.ApprovedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         _log.Info("finance", $"Purchase request #{id} approved: {req.ItemName}");
-        _notif.Notify("采购已批准", $"{req.ItemName} 已批准采购", "/finance", req.RequesterUserId);
+        _notif?.Notify("采购已批准", $"{req.ItemName} 已批准采购", "/finance", req.RequesterUserId);
         return true;
     }
 
@@ -57,7 +57,7 @@ public class FinanceService
         req.Status = "rejected"; req.ApproverUserId = approverId; req.RejectReason = reason;
         await _db.SaveChangesAsync();
         _log.Warn("finance", $"Purchase request #{id} rejected: {req.ItemName} - {reason}");
-        _notif.Notify("采购被拒绝", $"{req.ItemName}: {reason}", "/finance", req.RequesterUserId);
+        _notif?.Notify("采购被拒绝", $"{req.ItemName}: {reason}", "/finance", req.RequesterUserId);
         return true;
     }
 
@@ -86,7 +86,7 @@ public class FinanceService
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
         _log.Info("finance", $"Purchase #{id} received + inventory added: {req.ItemName} x{req.Quantity}");
-        _notif.Notify("采购已入库", $"{req.ItemName} x{req.Quantity} 已入库", "/inventory");
+        _notif?.Notify("采购已入库", $"{req.ItemName} x{req.Quantity} 已入库", "/inventory");
         return true;
     }
 

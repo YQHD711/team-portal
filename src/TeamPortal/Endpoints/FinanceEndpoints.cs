@@ -28,8 +28,13 @@ public static class FinanceEndpoints
     {
         var group = app.MapGroup("/api/finance").RequireAuthorization();
 
-        // ── Stats ──
-        group.MapGet("/stats", async (FinanceService svc) => Results.Ok(await svc.GetStats()));
+        // ── Stats(全队支出等运营数据仅 staff;队员看自己的申请即可) ──
+        group.MapGet("/stats", async (ClaimsPrincipal user, AppDbContext db, FinanceService svc) =>
+        {
+            var (role, _) = await GetCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看统计", statusCode: 403);
+            return Results.Ok(await svc.GetStats());
+        });
 
         // ── Purchase Requests ──
         group.MapGet("/requests", async (string? status, ClaimsPrincipal user, AppDbContext db, FinanceService svc) =>
@@ -45,18 +50,22 @@ public static class FinanceEndpoints
             return Results.Ok(await svc.GetRequests(status, null));
         });
 
-        group.MapGet("/requests/{id:int}", async (int id, FinanceService svc) =>
+        group.MapGet("/requests/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FinanceService svc) =>
         {
             var r = await svc.GetRequest(id);
-            return r is not null ? Results.Ok(r) : Results.Problem("Not found", statusCode: 404);
+            if (r is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, _) = await GetCtx(user, db);
+            // 队员仅可看自己的申请,其余一律 404 防枚举
+            if (!IsStaff(role) && r.RequesterUserId != GetUserId(user))
+                return Results.Problem("Not found", statusCode: 404);
+            return Results.Ok(r);
         });
 
         group.MapPost("/requests", async (CreatePurchaseReq req, ClaimsPrincipal user, AppDbContext db, FinanceService svc, LogService log, HttpContext ctx) =>
         {
             var userId = GetUserId(user);
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
-            var (role, _) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可申请", statusCode: 403);
+            // 队员也可发起采购申请(审批仍为 admin-only)
             if (string.IsNullOrWhiteSpace(req.ItemName)) return Results.Problem("物品名称不能为空", statusCode: 400);
             var r = await svc.CreateRequest(userId.Value, req.ItemName, req.Quantity, req.EstimatedPrice, req.Reason);
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "purchase", targetId: r.Id.ToString(),

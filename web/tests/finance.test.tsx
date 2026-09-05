@@ -23,8 +23,8 @@ const pendingReq = {
   rejectReason: null, createdAt: "2026-09-01T10:00:00Z",
 };
 
-const staffUser = { id: 1, username: "admin", role: "admin", department: null };
-const memberUser = { id: 2, username: "王睿翔", role: "member", department: null };
+const staffUser = { id: 1, username: "admin", role: "admin", department: null, departmentId: null };
+const memberUser = { id: 2, username: "王睿翔", role: "member", department: null, departmentId: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -108,6 +108,25 @@ describe("采购审批页", () => {
     expect(screen.queryByRole("button", { name: "全部申请" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "月度报表" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "我的申请" })).toBeInTheDocument();
+  });
+
+  it("队员可发起采购申请,且不拉取全队统计", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
+    render(<FinancePage />);
+
+    await screen.findByText("桨叶");
+    // 队员可见申请入口;全队统计不对队员请求
+    expect(screen.getByRole("button", { name: "申请采购" })).toBeInTheDocument();
+    expect(mockedGet).not.toHaveBeenCalledWith("/api/finance/stats");
+
+    fireEvent.click(screen.getByRole("button", { name: "申请采购" }));
+    fireEvent.change(screen.getByPlaceholderText("如：螺旋桨 1045"), { target: { value: "备用电机" } });
+    fireEvent.change(screen.getByPlaceholderText("说明采购原因..."), { target: { value: "备件补充" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith("/api/finance/requests", expect.objectContaining({ itemName: "备用电机", reason: "备件补充" }))
+    );
   });
 
   it("admin 可见全部申请与月度报表 Tab", async () => {

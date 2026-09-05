@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import { User, GraduationCap, Trophy, Save, Loader2, BadgeCheck, Tag } from "lucide-react";
 import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
 
-const LEVELS = ["学员", "初级", "中级", "高级", "教练"];
 const FLIGHT_TYPES = ["固定翼", "多旋翼", "穿越机", "凤凰飞行器", "龙飞行器", "直升机", "其他"];
 const LEVEL_COLORS: Record<string, string> = {
   "学员": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -26,9 +25,7 @@ export default function ProfilePage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Edit form state
-  const [level, setLevel] = useState("");
-  const [flightHours, setFlightHours] = useState("");
+  // Edit form state(等级/时长属组织评定,成员不可自改 → 仅自填字段)
   const [firstFlight, setFirstFlight] = useState("");
   const [bio, setBio] = useState("");
   const [emergencyContact, setEmergencyContact] = useState("");
@@ -42,8 +39,6 @@ export default function ProfilePage() {
   useEffect(() => {
     api.get<Profile>("/api/profile").then(data => {
       setProfile(data);
-      setLevel(data.level);
-      setFlightHours(String(data.totalFlightHours));
       setFirstFlight(data.firstFlightDate ? data.firstFlightDate.slice(0, 10) : "");
       setBio(data.bio || "");
       setEmergencyContact(data.emergencyContact || "");
@@ -67,15 +62,13 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       await api.put("/api/profile", {
-        level, flightHours: parseFloat(flightHours) || 0,
         firstFlight: firstFlight || null, bio: bio || null,
         emergencyContact: emergencyContact || null, emergencyPhone: emergencyPhone || null,
         flightTypes: flightTypes.join(",") || null,
         skills: skills || null
       });
       setProfile(prev => prev ? {
-        ...prev, level, totalFlightHours: parseFloat(flightHours) || 0,
-        firstFlightDate: firstFlight || null, bio, emergencyContact, emergencyPhone,
+        ...prev, firstFlightDate: firstFlight || null, bio, emergencyContact, emergencyPhone,
         flightTypes: flightTypes.join(",") || null, skills: skills || null
       } : null);
       setEditMode(false);
@@ -124,16 +117,6 @@ export default function ProfilePage() {
           {editMode ? (
             <>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">飞手等级</label>
-                  <select value={level} onChange={e => setLevel(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
-                    {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">累计飞行小时</label>
-                  <input type="number" step="0.5" value={flightHours} onChange={e => setFlightHours(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
-                </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">首次飞行日期</label>
                   <input type="date" value={firstFlight} onChange={e => setFirstFlight(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
