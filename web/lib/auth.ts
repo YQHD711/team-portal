@@ -24,7 +24,10 @@ function decodeRole(): string | null {
   const token = getToken();
   if (!token) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    // atob 返回的是 Latin-1 字节串,直接 JSON.parse 会把中文(如角色"部长")解码成乱码,
+    // 导致 isStaff()/isAdmin() 误判 → 部长度访问 /admin 被 AuthGuard 弹回仪表盘。
+    const bytes = Uint8Array.from(atob(token.split(".")[1]), c => c.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(bytes));
     return payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ?? null;
   } catch {
     return null;
