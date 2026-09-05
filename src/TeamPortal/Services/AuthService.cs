@@ -81,8 +81,15 @@ public class AuthService
 
     // ── Invite Codes ──
 
-    public async Task<InviteCode> GenerateInviteCode(int createdByUserId, int? deptId, int? maxUses = null, int? daysValid = null)
+    /// <summary>
+    /// 部长可生成邀请码,但只能指定“自己的部门”或“不限”;admin 不限。
+    /// actorRole/actorDeptId 由端点从当前登录用户读取。
+    /// </summary>
+    public async Task<InviteCode> GenerateInviteCode(int createdByUserId, int? deptId, string? actorRole, int? actorDeptId,
+        int? maxUses = null, int? daysValid = null)
     {
+        if (actorRole == "部长" && deptId.HasValue && deptId != actorDeptId)
+            throw new InvalidOperationException("部长仅可为本部门生成邀请码");
         var uses = maxUses ?? 1;
         var days = daysValid ?? 30;
         var code = Guid.NewGuid().ToString("N")[..8].ToUpper();
@@ -97,9 +104,12 @@ public class AuthService
         return invite;
     }
 
-    public async Task<List<object>> GetInviteCodes()
-        => await _db.InviteCodes.Include(c => c.Department).Include(c => c.CreatedByUser)
-            .OrderByDescending(c => c.CreatedAt)
+    /// <summary>admin 看全部;部长仅看自己生成的邀请码(互相隔离)。</summary>
+    public async Task<List<object>> GetInviteCodes(string? actorRole, int? actorId)
+    {
+        var q = _db.InviteCodes.Include(c => c.Department).Include(c => c.CreatedByUser).AsQueryable();
+        if (actorRole == "部长") q = q.Where(c => c.CreatedByUserId == actorId);
+        return await q.OrderByDescending(c => c.CreatedAt)
             .Select(c => new
             {
                 c.Id, c.Code, c.DepartmentId,
@@ -107,23 +117,36 @@ public class AuthService
                 c.MaxUses, c.UsedCount, c.IsRevoked, c.ExpiresAt, c.CreatedAt,
                 CreatedBy = c.CreatedByUser != null ? c.CreatedByUser.Username : null
             }).ToListAsync<object>();
-
-    public async Task<bool> RevokeInviteCode(int id)
-    {
-        var code = await _db.InviteCodes.FindAsync(id);
-        if (code is null) return false;
-        code.IsRevoked = true;
-        await _db.SaveChangesAsync();
-        return true;
     }
 
-    public async Task<bool> DeleteInviteCode(int id)
+    public enum InviteOp { Ok, NotFound, Forbidden }
+
+    private async Task<InviteOp> GuardOwner(int id, string? actorRole, int? actorId)
     {
+        var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Id == id);
+        if (code is null) return InviteOp.NotFound;
+        if (actorRole != "admin" && code.CreatedByUserId != actorId) return InviteOp.Forbidden;
+        return InviteOp.Ok;
+    }
+
+    public async Task<InviteOp> RevokeInviteCode(int id, string? actorRole, int? actorId)
+    {
+        var guard = await GuardOwner(id, actorRole, actorId);
+        if (guard != InviteOp.Ok) return guard;
         var code = await _db.InviteCodes.FindAsync(id);
-        if (code is null) return false;
-        _db.InviteCodes.Remove(code);
+        code!.IsRevoked = true;
         await _db.SaveChangesAsync();
-        return true;
+        return InviteOp.Ok;
+    }
+
+    public async Task<InviteOp> DeleteInviteCode(int id, string? actorRole, int? actorId)
+    {
+        var guard = await GuardOwner(id, actorRole, actorId);
+        if (guard != InviteOp.Ok) return guard;
+        var code = await _db.InviteCodes.FindAsync(id);
+        _db.InviteCodes.Remove(code!);
+        await _db.SaveChangesAsync();
+        return InviteOp.Ok;
     }
 
     // ── CSV Import ──

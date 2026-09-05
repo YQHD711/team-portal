@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { copyText } from "@/lib/clipboard";
 import { Ticket, Plus, X, Copy, Clock, Loader2 } from "lucide-react";
 
@@ -12,6 +13,8 @@ interface InviteCode {
   createdAt: string; createdBy: string;
 }
 
+interface Dept { id: number; name: string; }
+
 export default function InviteCodesPage() {
   const [codes, setCodes] = useState<InviteCode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,11 +24,17 @@ export default function InviteCodesPage() {
   const [daysValid, setDaysValid] = useState("30");
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState("");
+  const [depts, setDepts] = useState<Dept[]>([]);
+  const { user: me } = useCurrentUser();
+  const isAdmin = me?.role === "admin";
+  // 部长生成邀请码只可选本部门或"不限";admin 可选全部
+  const selectableDepts = isAdmin ? depts : depts.filter(d => d.id === me?.departmentId);
 
   const fetchCodes = () => {
     api.get<InviteCode[]>("/api/admin/invite-codes").then(setCodes).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(() => { fetchCodes(); }, []);
+  useEffect(() => { api.get<Dept[]>("/api/admin/departments").then(setDepts).catch(() => {}); }, []);
 
   const generate = async () => {
     setGenerating(true);
@@ -74,13 +83,9 @@ export default function InviteCodesPage() {
               <label className="block text-xs font-medium mb-1">归属部门</label>
               <select value={deptId} onChange={e => setDeptId(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
                 <option value="">不限</option>
-                <option value="1">飞训部</option>
-                <option value="2">电子部</option>
-                <option value="3">工程部</option>
-                <option value="4">办公室</option>
-                <option value="5">集群部</option>
-                <option value="6">文创部</option>
+                {selectableDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
+              {!isAdmin && <p className="text-xs text-faint mt-1">部长仅可为本部门生成邀请码</p>}
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">最大使用次数</label>

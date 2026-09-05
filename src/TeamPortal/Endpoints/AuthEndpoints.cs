@@ -7,6 +7,14 @@ namespace TeamPortal.Endpoints;
 
 public static class AuthEndpoints
 {
+    private static async Task<(int id, string role, int? deptId)?> ActorCtx(ClaimsPrincipal user, AppDbContext db)
+    {
+        var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (idClaim is null || !int.TryParse(idClaim, out var id)) return null;
+        var u = await db.Users.AsNoTracking().Where(x => x.Id == id).Select(x => new { x.Role, x.DepartmentId }).FirstOrDefaultAsync();
+        return u is null ? null : (id, u.Role, u.DepartmentId);
+    }
+
     public static void MapAuthEndpoints(this WebApplication app)
     {
         app.MapPost("/api/auth/register", async (RegisterRequest? req, AuthService auth, NotificationService notify, LogService log, HttpContext ctx) =>
@@ -43,36 +51,55 @@ public static class AuthEndpoints
             }
         });
 
-        // ── Invite Codes (admin) ──
-        app.MapGet("/api/admin/invite-codes", async (AuthService auth) =>
-            Results.Ok(await auth.GetInviteCodes())
-        ).RequireAuthorization("AdminOnly");
-
-        app.MapPost("/api/admin/invite-codes", async (GenerateInviteReq req, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        // ── Invite Codes (admin 看/管全部;部长可生成+只管理自己生成的) ──
+        app.MapGet("/api/admin/invite-codes", async (ClaimsPrincipal user, AppDbContext db, AuthService auth) =>
         {
-            var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var code = await auth.GenerateInviteCode(uid, req.DepartmentId, req.MaxUses, req.DaysValid);
-            log.Audit("invite", user.Identity?.Name ?? "unknown", targetType: "invite-code", targetId: code.Id.ToString(),
-                data: new { departmentId = req.DepartmentId, maxUses = req.MaxUses, daysValid = req.DaysValid },
-                ipAddress: LogService.ClientIp(ctx), userId: uid);
-            return Results.Created($"/api/admin/invite-codes/{code.Id}", code);
-        }).RequireAuthorization("AdminOnly");
+            var actor = await ActorCtx(user, db);
+            if (actor is null) return Results.Problem("未登录", statusCode: 401);
+            return Results.Ok(await auth.GetInviteCodes(actor.Value.role, actor.Value.id));
+        }).RequireAuthorization("StaffOnly");
 
-        app.MapPost("/api/admin/invite-codes/{id:int}/revoke", async (int id, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        app.MapPost("/api/admin/invite-codes", async (GenerateInviteReq req, ClaimsPrincipal user, AppDbContext db, AuthService auth, LogService log, HttpContext ctx) =>
         {
-            await auth.RevokeInviteCode(id);
+            var actor = await ActorCtx(user, db);
+            if (actor is null) return Results.Problem("未登录", statusCode: 401);
+            try
+            {
+                var code = await auth.GenerateInviteCode(actor.Value.id, req.DepartmentId, actor.Value.role, actor.Value.deptId, req.MaxUses, req.DaysValid);
+                log.Audit("invite", user.Identity?.Name ?? "unknown", targetType: "invite-code", targetId: code.Id.ToString(),
+                    data: new { departmentId = req.DepartmentId, maxUses = req.MaxUses, daysValid = req.DaysValid },
+                    ipAddress: LogService.ClientIp(ctx), userId: actor.Value.id);
+                return Results.Created($"/api/admin/invite-codes/{code.Id}", code);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
+        }).RequireAuthorization("StaffOnly");
+
+        app.MapPost("/api/admin/invite-codes/{id:int}/revoke", async (int id, ClaimsPrincipal user, AppDbContext db, AuthService auth, LogService log, HttpContext ctx) =>
+        {
+            var actor = await ActorCtx(user, db);
+            if (actor is null) return Results.Problem("未登录", statusCode: 401);
+            var op = await auth.RevokeInviteCode(id, actor.Value.role, actor.Value.id);
+            if (op == AuthService.InviteOp.NotFound) return Results.Problem("邀请码不存在", statusCode: 404);
+            if (op == AuthService.InviteOp.Forbidden) return Results.Problem("只能管理自己生成的邀请码", statusCode: 403);
             log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "invite-code", targetId: id.ToString(),
-                data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
+                data: new { success = true }, ipAddress: LogService.ClientIp(ctx), userId: actor.Value.id);
             return Results.Ok(new { message = "已作废" });
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("StaffOnly");
 
-        app.MapDelete("/api/admin/invite-codes/{id:int}", async (int id, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        app.MapDelete("/api/admin/invite-codes/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, AuthService auth, LogService log, HttpContext ctx) =>
         {
-            var ok = await auth.DeleteInviteCode(id);
+            var actor = await ActorCtx(user, db);
+            if (actor is null) return Results.Problem("未登录", statusCode: 401);
+            var op = await auth.DeleteInviteCode(id, actor.Value.role, actor.Value.id);
+            if (op == AuthService.InviteOp.NotFound) return Results.Problem("邀请码不存在", statusCode: 404);
+            if (op == AuthService.InviteOp.Forbidden) return Results.Problem("只能管理自己生成的邀请码", statusCode: 403);
             log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "invite-code", targetId: id.ToString(),
-                data: new { success = ok }, ipAddress: LogService.ClientIp(ctx));
-            return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("邀请码不存在", statusCode: 404);
-        }).RequireAuthorization("AdminOnly");
+                data: new { success = true }, ipAddress: LogService.ClientIp(ctx), userId: actor.Value.id);
+            return Results.Ok(new { message = "已删除" });
+        }).RequireAuthorization("StaffOnly");
 
         // ── CSV Import (admin) ──
         app.MapPost("/api/admin/users/import-csv", async (HttpRequest req, AuthService auth, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
