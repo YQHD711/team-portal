@@ -12,9 +12,10 @@ interface OperationPage { total: number; items: OperationEntry[]; }
 const actionLabels: Record<string, string> = {
   login: "登录", register: "注册", logout: "登出", "change-password": "修改密码",
   checkout: "领用申请", checkin: "归还", "damage-report": "报损", stocktake: "盘点",
-  reject: "驳回", approve: "审批", backup: "备份", restore: "恢复",
+  reject: "驳回", approve: "审批", "dept-approve": "部长审批", "admin-approve": "管理员审批",
   import: "导入", create: "创建", update: "修改", delete: "删除",
   settings: "系统设置", invite: "邀请", upload: "上传",
+  purchase: "标记已购买", receive: "收货入库",
 };
 
 const actionColors: Record<string, string> = {
@@ -35,6 +36,10 @@ const actionColors: Record<string, string> = {
   "damage-report": "bg-warning/15 text-warning",
   stocktake: "bg-info/15 text-info",
   invite: "bg-info/15 text-info",
+  "dept-approve": "bg-info/15 text-info",
+  "admin-approve": "bg-info/15 text-info",
+  purchase: "bg-primary/15 text-primary",
+  receive: "bg-success/15 text-success",
 };
 
 const actionLabel = (a: string) => actionLabels[a] ?? a;

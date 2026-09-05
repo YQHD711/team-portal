@@ -80,10 +80,11 @@ public static class FinanceEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可审批", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
+            var itemName = await db.PurchaseRequests.AsNoTracking().Where(r => r.Id == id).Select(r => r.ItemName).FirstOrDefaultAsync();
             var ok = await svc.Approve(id, userId);
-            if (ok) log.Info("finance", $"Purchase #{id} approved by {actor}");
+            if (ok) log.Info("finance", $"Purchase #{id} approved by {actor}: {itemName}");
             log.Audit("approve", actor, targetType: "purchase", targetId: id.ToString(),
-                data: new { success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { item = itemName, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return ok ? Results.Ok(new { message = "已批准" }) : Results.Problem("审批失败（状态不是待审批）", statusCode: 400);
         });
 
@@ -93,10 +94,11 @@ public static class FinanceEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可审批", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
+            var itemName = await db.PurchaseRequests.AsNoTracking().Where(r => r.Id == id).Select(r => r.ItemName).FirstOrDefaultAsync();
             var ok = await svc.Reject(id, userId, req.Reason ?? "未说明原因");
-            if (ok) log.Warn("finance", $"Purchase #{id} rejected by {actor}: {req.Reason}");
+            if (ok) log.Warn("finance", $"Purchase #{id} rejected by {actor}: {itemName} ({req.Reason})");
             log.Audit("reject", actor, targetType: "purchase", targetId: id.ToString(),
-                data: new { reason = req.Reason, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { item = itemName, reason = req.Reason, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return ok ? Results.Ok(new { message = "已拒绝" }) : Results.Problem("操作失败", statusCode: 400);
         });
 
@@ -106,10 +108,11 @@ public static class FinanceEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
+            var itemName = await db.PurchaseRequests.AsNoTracking().Where(r => r.Id == id).Select(r => r.ItemName).FirstOrDefaultAsync();
             var ok = await svc.MarkPurchased(id, req.ActualPrice);
-            if (ok) log.Info("finance", $"Purchase #{id} marked purchased by {actor}: ¥{req.ActualPrice}");
-            log.Audit("update", actor, targetType: "purchase", targetId: id.ToString(),
-                data: new { status = "purchased", actualPrice = req.ActualPrice, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            if (ok) log.Info("finance", $"Purchase #{id} marked purchased by {actor}: {itemName} ¥{req.ActualPrice}");
+            log.Audit("purchase", actor, targetType: "purchase", targetId: id.ToString(),
+                data: new { item = itemName, status = "purchased", actualPrice = req.ActualPrice, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return ok ? Results.Ok(new { message = "已标记为已购买" }) : Results.Problem("操作失败", statusCode: 400);
         });
 
@@ -119,10 +122,11 @@ public static class FinanceEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
+            var itemName = await db.PurchaseRequests.AsNoTracking().Where(r => r.Id == id).Select(r => r.ItemName).FirstOrDefaultAsync();
             var ok = await svc.MarkReceived(id);
-            if (ok) log.Info("finance", $"Purchase #{id} received by {actor}");
-            log.Audit("update", actor, targetType: "purchase", targetId: id.ToString(),
-                data: new { status = "received", success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            if (ok) log.Info("finance", $"Purchase #{id} received by {actor}: {itemName}");
+            log.Audit("receive", actor, targetType: "purchase", targetId: id.ToString(),
+                data: new { item = itemName, status = "received", success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return ok ? Results.Ok(new { message = "已入库" }) : Results.Problem("操作失败（状态不是已购买）", statusCode: 400);
         });
 

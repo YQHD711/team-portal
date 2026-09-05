@@ -26,6 +26,18 @@ public static class MaterialEndpoints
     private static bool IsStaff(string? r) => r == "admin" || r == "部长";
     private static bool IsAdmin(string? r) => r == "admin";
 
+    /// <summary>审计 Data 可读化:按 itemId 反查零件名</summary>
+    private static async Task<string?> ItemNameAsync(AppDbContext db, int itemId)
+        => await db.InventoryItems.AsNoTracking().Where(i => i.Id == itemId).Select(i => i.Name).FirstOrDefaultAsync();
+
+    private static async Task<Dictionary<int, string>> UserNamesByIdsAsync(AppDbContext db, IEnumerable<int> ids)
+    {
+        var list = ids.Distinct().ToList();
+        if (list.Count == 0) return new Dictionary<int, string>();
+        return await db.Users.AsNoTracking().Where(u => list.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Username);
+    }
+
     public static void MapMaterialEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/material").RequireAuthorization();
@@ -42,9 +54,10 @@ public static class MaterialEndpoints
             {
                 var (role, _, _, _) = await GetCtx(user, db);
                 var result = await svc.CreateCheckout(req.ItemId, userId.Value, req.Quantity, req.Note ?? "", role);
+                var itemName = await ItemNameAsync(db, req.ItemId);
                 log.Info("inventory", $"Checkout requested: item#{req.ItemId} x{req.Quantity} -> {result.Status} by {user.Identity?.Name}");
                 log.Audit("checkout", user.Identity?.Name ?? "unknown", targetType: "material", targetId: result.Id.ToString(),
-                    data: new { itemId = req.ItemId, quantity = req.Quantity, status = result.Status }, ipAddress: ip, userId: userId);
+                    data: new { item = itemName, itemId = req.ItemId, quantity = req.Quantity, status = result.Status }, ipAddress: ip, userId: userId);
                 return Results.Created($"/api/material/checkout/{result.Id}", result);
             }
             catch (InvalidOperationException ex)
@@ -66,7 +79,7 @@ public static class MaterialEndpoints
         });
 
         // 部长审批
-        group.MapPost("/checkout/{id:int}/approve-dept", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
+        group.MapPost("/checkout/{id:int}/approve-dept", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _, deptId, userId) = await GetCtx(user, db);
             // 领用审批按申请人部门流转:仅该部门部长审批;管理员只走 /approve-admin
@@ -79,6 +92,8 @@ public static class MaterialEndpoints
                 var req = await svc.ApproveDept(id, userId!.Value);
                 if (req is null) return Results.Problem("申请不存在或状态不正确", statusCode: 400);
                 log.Info("inventory", $"Checkout #{id} dept-approved by {user.Identity?.Name}");
+                log.Audit("dept-approve", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
+                    data: new { item = detail.Item?.Name, requester = detail.Requester?.Username, quantity = detail.Quantity, grade = detail.Grade, status = req.Status }, ipAddress: LogService.ClientIp(ctx), userId: userId);
                 return Results.Ok(req);
             }
             catch (InvalidOperationException ex)
@@ -88,15 +103,18 @@ public static class MaterialEndpoints
         });
 
         // 管理员审批
-        group.MapPost("/checkout/{id:int}/approve-admin", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
+        group.MapPost("/checkout/{id:int}/approve-admin", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
             if (!IsAdmin(role)) return Results.Problem("仅管理员可终审", statusCode: 403);
             try
             {
                 var req = await svc.ApproveAdmin(id, userId!.Value);
-                if (req is null) return Results.Problem("申请不存在或状态不正确（需为A级待管理员审批）", statusCode: 400);
+                if (req is null) return Results.Problem("申请不存在或状态不正确（需为待管理员审批）", statusCode: 400);
+                var requesterName = await db.Users.AsNoTracking().Where(u => u.Id == req.RequesterUserId).Select(u => u.Username).FirstOrDefaultAsync();
                 log.Info("inventory", $"Checkout #{id} admin-approved by {user.Identity?.Name}");
+                log.Audit("admin-approve", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
+                    data: new { item = req.Item?.Name, requester = requesterName, quantity = req.Quantity, grade = req.Grade, status = req.Status }, ipAddress: LogService.ClientIp(ctx), userId: userId);
                 return Results.Ok(req);
             }
             catch (InvalidOperationException ex)
@@ -120,7 +138,7 @@ public static class MaterialEndpoints
             if (req is null) return Results.Problem("无法驳回（状态不正确）", statusCode: 400);
             log.Warn("inventory", $"Checkout #{id} rejected by {user.Identity?.Name}: {body.Reason}");
             log.Audit("reject", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { reason = body.Reason }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { item = req.Item?.Name, quantity = req.Quantity, reason = body.Reason }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(req);
         });
 
@@ -156,9 +174,10 @@ public static class MaterialEndpoints
                     body.Condition ?? "normal", body.HasPhoto,
                     body.TestNotes, body.PhotoUrl);
                 if (record is null) return Results.Problem("领用申请不存在或已归还", statusCode: 400);
+                var itemName = await db.CheckoutRequests.AsNoTracking().Where(r => r.Id == id).Select(r => r.Item!.Name).FirstOrDefaultAsync();
                 log.Info("inventory", $"Checkin for checkout #{id} by {user.Identity?.Name} cond={body.Condition}");
                 log.Audit("checkin", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                    data: new { condition = body.Condition, hasPhoto = body.HasPhoto, testNotes = body.TestNotes }, ipAddress: ip, userId: userId);
+                    data: new { item = itemName, condition = body.Condition, hasPhoto = body.HasPhoto, testNotes = body.TestNotes }, ipAddress: ip, userId: userId);
                 return Results.Ok(record);
             }
             catch (InvalidOperationException ex)
@@ -175,9 +194,9 @@ public static class MaterialEndpoints
             var (role, _, _, userId) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可发起盘点", statusCode: 403);
             var st = await svc.StartStocktake(body.Type ?? "weekly", body.Grade ?? "A", userId!.Value);
-            log.Info("inventory", $"Stocktake started: {st.Type}/{st.Grade} by {user.Identity?.Name}");
+            log.Info("inventory", $"Stocktake started: {st.Type}/{st.Grade} ({st.Items.Count} 项) by {user.Identity?.Name}");
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: st.Id.ToString(),
-                data: new { type = st.Type, grade = st.Grade, action = "start" }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { type = st.Type, grade = st.Grade, action = "start", itemCount = st.Items.Count }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Created($"/api/material/stocktake/{st.Id}", st);
         });
 
@@ -208,9 +227,10 @@ public static class MaterialEndpoints
             var (role, _, _, userId) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
             await svc.AssignStocktakeItems(id, body.Items ?? new());
+            var assignedNames = await UserNamesByIdsAsync(db, body.Items?.Values ?? Enumerable.Empty<int>());
             log.Info("inventory", $"Stocktake #{id} assigned {body.Items?.Count ?? 0} items by {user.Identity?.Name}");
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { action = "assign", itemCount = body.Items?.Count ?? 0 }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { action = "assign", itemCount = body.Items?.Count ?? 0, members = assignedNames.Values.Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList() }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(new { message = "已分派" });
         });
 
@@ -222,9 +242,20 @@ public static class MaterialEndpoints
             if (body.UserIds is null || body.UserIds.Count == 0)
                 return Results.Problem("请指定至少一名队员", statusCode: 400);
             await svc.AutoAssignStocktake(id, body.UserIds);
+            var autoCounts = await db.StocktakeItems
+                .Where(si => si.StocktakeId == id && si.CheckedByUserId != null)
+                .GroupBy(si => si.CheckedByUserId!.Value)
+                .Select(g => new { UserId = g.Key, N = g.Count() })
+                .ToListAsync();
+            var autoNames = await UserNamesByIdsAsync(db, autoCounts.Select(c => c.UserId));
             log.Info("inventory", $"Stocktake #{id} auto-assigned to {body.UserIds.Count} members by {user.Identity?.Name}");
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { action = "auto-assign", memberCount = body.UserIds.Count }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new
+                {
+                    action = "auto-assign", memberCount = body.UserIds.Count,
+                    itemCount = autoCounts.Sum(c => c.N),
+                    members = autoCounts.Select(c => $"{autoNames.GetValueOrDefault(c.UserId) ?? c.UserId.ToString()}×{c.N}").ToList()
+                }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(new { message = "已自动分派" });
         });
 
@@ -244,9 +275,14 @@ public static class MaterialEndpoints
             if (body.Results is null || body.Results.Count == 0)
                 return Results.Problem("请提交至少一项结果", statusCode: 400);
             await svc.BatchCheckStocktakeItems(id, userId.Value, body.Results);
+            var checkedItemIds = body.Results.Select(r => r.ItemId).ToList();
+            var checkedNames = await db.InventoryItems.AsNoTracking().Where(i => checkedItemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, i => i.Name);
+            var checkedItems = body.Results
+                .Select(r => $"{checkedNames.GetValueOrDefault(r.ItemId) ?? r.ItemId.ToString()} → {r.ActualQty}{(string.IsNullOrWhiteSpace(r.Note) ? "" : $" ({r.Note})")}")
+                .Take(20).ToList();
             log.Info("inventory", $"Stocktake #{id} batch-checked {body.Results.Count} items by {user.Identity?.Name}");
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { action = "batch-check", itemCount = body.Results.Count }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { action = "batch-check", itemCount = body.Results.Count, items = checkedItems }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(new { message = $"已提交 {body.Results.Count} 项盘点结果" });
         });
 
@@ -256,9 +292,12 @@ public static class MaterialEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
             var st = await svc.CompleteStocktake(id);
             if (st is null) return Results.Problem("盘点不存在或已完成", statusCode: 400);
+            var diffSummary = st.Items.Where(x => x.Difference != 0)
+                .Select(x => $"{x.InventoryItem?.Name ?? $"item#{x.InventoryItemId}"}:{(x.Difference > 0 ? "+" : "")}{x.Difference}")
+                .Take(20).ToList();
             log.Info("inventory", $"Stocktake #{id} completed by {user.Identity?.Name}");
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { action = "complete" }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { action = "complete", itemCount = st.Items.Count, diffCount = st.Items.Count(x => x.Difference != 0), adjusted = diffSummary }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(st);
         });
 
@@ -269,9 +308,10 @@ public static class MaterialEndpoints
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
             var report = await svc.CreateDamageReport(body.ItemId, userId.Value,
                 body.Type ?? "damage", body.Description ?? "", body.IsApprovedTest);
+            var itemName = await ItemNameAsync(db, body.ItemId);
             log.Info("inventory", $"Damage report #{report.Id} created: item#{body.ItemId} type={body.Type ?? "damage"} by {user.Identity?.Name}");
             log.Audit("damage-report", user.Identity?.Name ?? "unknown", targetType: "material", targetId: report.Id.ToString(),
-                data: new { itemId = body.ItemId, type = body.Type ?? "damage", isApprovedTest = body.IsApprovedTest }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { item = itemName, itemId = body.ItemId, type = body.Type ?? "damage", isApprovedTest = body.IsApprovedTest }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Created($"/api/material/damage-report/{report.Id}", report);
         });
 
