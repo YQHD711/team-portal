@@ -807,3 +807,6 @@ static string DefaultRoomLayoutJson(string roomCode) => $$"""
       ]
     }
     """;
+
+// 供集成测试(WebApplicationFactory<Program>)引用的入口标记
+public partial class Program { }
