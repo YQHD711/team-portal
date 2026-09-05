@@ -85,6 +85,8 @@ rm ~/teamportal/deploy/AUTO_DEPLOY_OFF        # ③ 调试完恢复自动跟踪
 | 5 | **服务器上禁止任何构建**（前端尤其致命） | 内存红线：dotnet/next build 会让 1.8G 机器 SSH 都连不上 |
 | 6 | **wiki-nginx 归 docker-compose.wiki.yml 管** | 主 compose up 加 --remove-orphans 会误删 wiki |
 | 7 | root 跑 git 操作会污染 .git 属主 | deploy.sh 已内置 `sudo -u admin` 防护，别绕过 |
+| 8 | **裸 gitignore 规则会吞源码**：`logs/` 匹配任意深度，仓库重建时把 `web/app/.../admin/logs/` 页面从索引剔除 → CI 镜像 404 | 规则一律限定根目录 `/logs/`；服务器工作区的孤儿文件会让本地一切正常，极具迷惑性 |
+| 9 | **CI 干净 checkout ≠ 服务器工作区** | 调试"线上缺东西"先 `git ls-files` 确认文件真的入库了；E2E 已加路由完整性守卫防复发 |
 
 ---
 
