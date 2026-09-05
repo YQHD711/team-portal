@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
