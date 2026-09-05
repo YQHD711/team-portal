@@ -50,8 +50,10 @@ tmp_*.cs
 .codegraph/
 
 # Runtime logs / test reports (开发期生成,不入仓)
-logs/
-!logs/.gitkeep
+# ⚠ 只忽略根目录 logs/,不能用裸 logs/ —— 否则会误伤源码里的 logs 目录
+#   (2026-09-05 血泪教训: 裸规则吞掉了 web/app/(protected)/admin/logs/ 前端页面)
+/logs/
+!/logs/.gitkeep
 test-results/
 !test-results/.gitkeep
 
@@ -72,3 +74,7 @@ next-env.d.ts
 
 # wiki 内容仓（独立 git 仓,可由翻译流程再生）
 webtools-content/
+
+# deploy 运行时数据
+deploy/.deployed_sha
+deploy/auto-deploy.log
