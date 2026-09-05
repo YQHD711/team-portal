@@ -77,7 +77,7 @@ public static class FinanceEndpoints
         group.MapPost("/requests/{id:int}/approve", async (int id, ClaimsPrincipal user, AppDbContext db, FinanceService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _) = await GetCtx(user, db);
-            if (!IsAdmin(role)) return Results.Problem("仅管理员可审批", statusCode: 403);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可审批", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.Approve(id, userId);
@@ -90,7 +90,7 @@ public static class FinanceEndpoints
         group.MapPost("/requests/{id:int}/reject", async (int id, RejectReq req, ClaimsPrincipal user, AppDbContext db, FinanceService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _) = await GetCtx(user, db);
-            if (!IsAdmin(role)) return Results.Problem("仅管理员可审批", statusCode: 403);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可审批", statusCode: 403);
             var userId = GetUserId(user) ?? 0;
             var actor = user.Identity?.Name ?? "unknown";
             var ok = await svc.Reject(id, userId, req.Reason ?? "未说明原因");

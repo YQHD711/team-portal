@@ -176,7 +176,7 @@ export default function FinancePage() {
 
               {/* Action buttons */}
               <div className="flex gap-2 pt-1 border-t border-border">
-                {r.status === "pending" && isAdmin && (
+                {r.status === "pending" && isStaff && (
                   <div className="flex gap-2 w-full">
                     <button onClick={()=>approve(r.id)} className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-success px-4 py-2.5 text-sm font-medium text-white hover:bg-success transition-colors"><Check className="h-4 w-4"/>批准采购</button>
                     <button onClick={()=>reject(r.id)} className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-medium text-danger hover:bg-red-100 transition-colors"><X className="h-4 w-4"/>拒绝</button>
