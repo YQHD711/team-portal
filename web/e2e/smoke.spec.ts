@@ -31,21 +31,21 @@ const pendingReq = {
   id: 1, itemName: "桨叶", quantity: 2, estimatedPrice: 120, actualPrice: null,
   reason: "训练损耗", status: "pending", requester: { username: "张唐智嘉" },
   approver: null, approvedAt: null, purchasedAt: null, receivedAt: null,
-  rejectReason: null, createdAt: "2026-09-01T10:00:00Z",
+  rejectReason: null, createdAt: "2026-09-05T10:00:00Z",
 };
 
-const stats = { pending: 1, approved: 0, purchased: 0, received: 0, totalSpent: 360, thisMonth: 120 };
+const stats = { pending: 1, approved: 0, purchased: 0, received: 0, totalSpent: 360, thisMonth: 1200 };
 
 const items = [
   { id: 1, name: "桨叶", category: "动力系统", quantity: 2, locationCode: "201-01-A-01", status: "available", grade: "B", unitPrice: 45, updatedAt: "2026-09-01T10:00:00Z" },
-  { id: 2, name: "飞控板", category: "飞控系统", quantity: 5, locationCode: "201-02-B-03", status: "in_use", grade: "A", unitPrice: 1200, updatedAt: "2026-09-01T10:00:00Z" },
-  { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "201-01-C-02", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 2, name: "飞控板", category: "飞控系统", quantity: 5, locationCode: "201-01-B-02", status: "in_use", grade: "A", unitPrice: 1200, updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "1012-C-01-03", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-interface MockState { approveCalls: number }
+const state = { approveCalls: 0 };
 
-/** 拦截全部 /api/* 请求，按路径分发 mock 响应 */
-async function mockApi(page: Page, role: string, state: MockState = { approveCalls: 0 }) {
+/** 统一 mock 所有 /api/* 请求（按路径+方法分发） */
+async function mockApi(page: Page, role: string) {
   await page.route("**/api/**", async (route: Route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
@@ -53,20 +53,22 @@ async function mockApi(page: Page, role: string, state: MockState = { approveCal
     const json = (data: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
 
-    if (path === "/api/public/brand") return json(brand);
     if (path === "/api/auth/login" && method === "POST") return json({ token: makeToken(role) });
-    if (path === "/api/auth/me") return json({ id: 1, username: "e2e-user", role, department: null });
+    if (path === "/api/auth/me") return json({ id: 1, username: "e2e-" + role, role, department: null });
     if (path.startsWith("/api/notifications")) return json([]);
+    if (path === "/api/public/brand") return json(brand);
     if (path === "/api/dashboard") return json(dashData);
     if (path === "/api/finance/requests" || path === "/api/finance/requests/all") return json([pendingReq]);
     if (path === "/api/finance/stats") return json(stats);
-    if (path === "/api/finance/requests/1/approve") { state.approveCalls += 1; return json({}); }
+    if (/\/api\/finance\/requests\/\d+\/approve$/.test(path) && method === "POST") {
+      state.approveCalls += 1;
+      return json({});
+    }
+    if (/\/api\/finance\/requests\/\d+\/reject$/.test(path) && method === "POST") return json({});
     if (path.startsWith("/api/inventory")) return json(items);
     if (path === "/api/admin/departments") return json([]);
     if (path === "/api/storage/layouts") return json([]);
-    // 兜底：其余接口返回空成功（AI 面板等非关键调用）
-    if (method === "POST") return json({});
-    return json([]);
+    return json({});
   });
   return state;
 }
@@ -130,5 +132,18 @@ test.describe("冒烟流程", () => {
     await expect(page.getByRole("heading", { name: "零件库存" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "添加零件" })).toHaveCount(0);
     await expect(page.getByText(/导入 Excel/)).toHaveCount(0);
+  });
+});
+
+test.describe("路由完整性守卫", () => {
+  // 防止源码被构建遗漏(如被 .gitignore 误伤)导致整页 404
+  test("关键路由不存在404", async ({ request }) => {
+    for (const route of [
+      "/admin/logs", "/admin/users", "/admin/settings", "/admin/backup",
+      "/finance", "/inventory", "/profile", "/flightlog",
+    ]) {
+      const res = await request.get(route);
+      expect(res.status(), `${route} 不应是404(路由疑似被构建遗漏)`).not.toBe(404);
+    }
   });
 });
