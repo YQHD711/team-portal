@@ -20,19 +20,41 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
     {
         // 任意请求(包括404)都会触发 EndpointDataSource 全量构建——
         // 若存在端点注册错误,这里会抛异常而不是返回404
-        var client = _factory.CreateClient();
-        var res = await client.GetAsync("/api/__route_building_probe__");
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-routesmoke-{Guid.NewGuid():N}.db");
+        var client = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+        }).CreateClient();
+        try
+        {
+            var res = await client.GetAsync("/api/__route_building_probe__");
 
-        Assert.True((int)res.StatusCode >= 200 && (int)res.StatusCode < 600,
-            "路由构建异常:端点注册阶段抛出异常(常见原因:多路由参数缺[FromBody])");
+            Assert.True((int)res.StatusCode >= 200 && (int)res.StatusCode < 600,
+                "路由构建异常:端点注册阶段抛出异常(常见原因:多路由参数缺[FromBody])");
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { }
+        }
     }
 
     [Fact]
     public async Task AuthLogin_RouteExists()
     {
         // 登录端点必须真实可达(POST 语义,GET 应返回 405 而非 404)
-        var client = _factory.CreateClient();
-        var res = await client.GetAsync("/api/auth/login");
-        Assert.NotEqual(HttpStatusCode.NotFound, res.StatusCode);
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-routesmoke-{Guid.NewGuid():N}.db");
+        var client = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+        }).CreateClient();
+        try
+        {
+            var res = await client.GetAsync("/api/auth/login");
+            Assert.NotEqual(HttpStatusCode.NotFound, res.StatusCode);
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { }
+        }
     }
 }
