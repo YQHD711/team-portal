@@ -45,19 +45,21 @@ export default function FinancePage() {
 
   const fetchAll = () => api.get<PurchaseReq[]>("/api/finance/requests/all").then(setRequests);
   const fetchReport = () => api.get<MonthlyReport>(`/api/finance/report/monthly?year=${reportYear}&month=${reportMonth}`).then(setReport);
+  /** 刷新当前所处列表:审批/变更发生在“全部申请”时应刷新 all,否则刷新我的申请 */
+  const reload = () => { if (tab === "all") fetchAll(); else fetchData(); };
 
   const submitRequest = async () => {
     await api.post("/api/finance/requests", { itemName, quantity: parseInt(qty)||1, estimatedPrice: parseFloat(price)||0, reason });
     setShowForm(false); setItemName(""); setQty("1"); setPrice(""); setReason("");
-    fetchData();
+    reload();
   };
 
-  const approve = (id: number) => api.post(`/api/finance/requests/${id}/approve`, {}).then(fetchData);
+  const approve = (id: number) => api.post(`/api/finance/requests/${id}/approve`, {}).then(reload);
   const reject = async (id: number) => {
     const reason = prompt("拒绝原因：");
     if (!reason) return;
     await api.post(`/api/finance/requests/${id}/reject`, { reason });
-    fetchData();
+    reload();
   };
   const [purchaseId, setPurchaseId] = useState<number | null>(null);
   const [purchasePrice, setPurchasePrice] = useState("");
@@ -65,9 +67,9 @@ export default function FinancePage() {
   const markPurchased = async () => {
     if (!purchaseId || !purchasePrice) return;
     await api.post(`/api/finance/requests/${purchaseId}/purchase`, { actualPrice: parseFloat(purchasePrice) });
-    setPurchaseId(null); setPurchasePrice(""); fetchData();
+    setPurchaseId(null); setPurchasePrice(""); reload();
   };
-  const markReceived = (id: number) => api.post(`/api/finance/requests/${id}/receive`, {}).then(fetchData);
+  const markReceived = (id: number) => api.post(`/api/finance/requests/${id}/receive`, {}).then(reload);
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 

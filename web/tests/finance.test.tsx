@@ -136,4 +136,22 @@ describe("采购审批页", () => {
     expect(await screen.findByRole("button", { name: "全部申请" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "月度报表" })).toBeInTheDocument();
   });
+
+  it("在“全部申请”tab 审批后直接刷新 all 列表,无需切换 tab", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<FinancePage />);
+
+    // 进入“全部申请”
+    fireEvent.click(await screen.findByRole("button", { name: "全部申请" }));
+    const allCalls = () => mockedGet.mock.calls.filter(c => c[0] === "/api/finance/requests/all");
+    await waitFor(() => expect(allCalls().length).toBe(1));
+
+    // 审批
+    const approveBtn = await screen.findByRole("button", { name: /批准采购/ });
+    fireEvent.click(approveBtn);
+    await waitFor(() => expect(mockedPost).toHaveBeenCalledWith("/api/finance/requests/1/approve", {}));
+
+    // 应再次刷新 all,而不是卡在“我的申请”数据
+    await waitFor(() => expect(allCalls().length).toBe(2));
+  });
 });
