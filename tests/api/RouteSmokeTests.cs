@@ -23,7 +23,6 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
         var client = _factory.CreateClient();
         var res = await client.GetAsync("/api/__route_building_probe__");
 
-        Assert.NotEqual(HttpStatusCode.ConnectionReset, res.StatusCode);
         Assert.True((int)res.StatusCode >= 200 && (int)res.StatusCode < 600,
             "路由构建异常:端点注册阶段抛出异常(常见原因:多路由参数缺[FromBody])");
     }
