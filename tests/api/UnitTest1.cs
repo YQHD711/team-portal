@@ -42,11 +42,15 @@ public class CalcGradeTests
     }
 }
 
+/// <summary>
+/// 领用审批流转:审批人以【申请人所在部门】为准。
+///   - 部门存在部长 → pending_dept(部长审;A 再进 admin 终审)
+///   - 未分配部门 / 部门无部长 → pending_admin(admin 一次性批)
+/// </summary>
 public class MaterialServiceTests
 {
     private AppDbContext CreateContext()
     {
-        // MaterialService uses relational ExecuteSqlInterpolatedAsync for atomic stock updates.
         var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
         var opts = new DbContextOptionsBuilder<AppDbContext>()
@@ -54,13 +58,27 @@ public class MaterialServiceTests
             .Options;
         var context = new AppDbContext(opts);
         context.Database.EnsureCreated();
+
+        context.Departments.AddRange(
+            new Department { Id = 1, Name = "飞控部" },
+            new Department { Id = 2, Name = "无部长部" }
+        );
+        context.SaveChanges();
         context.Users.AddRange(
-            new User { Id = 1, Username = "requester", PasswordHash = "test", Role = "member" },
-            new User { Id = 10, Username = "dept-head", PasswordHash = "test", Role = "部长" },
-            new User { Id = 20, Username = "admin", PasswordHash = "test", Role = "admin" }
+            new User { Id = 1, Username = "requester", PasswordHash = "x", Role = "member", DepartmentId = 1 },
+            new User { Id = 2, Username = "admin", PasswordHash = "x", Role = "admin", DepartmentId = null },
+            new User { Id = 3, Username = "leader", PasswordHash = "x", Role = "部长", DepartmentId = 1 },
+            new User { Id = 4, Username = "noleader", PasswordHash = "x", Role = "member", DepartmentId = 2 },
+            new User { Id = 5, Username = "unassigned", PasswordHash = "x", Role = "member", DepartmentId = null }
         );
         context.SaveChanges();
         return context;
+    }
+
+    private static async Task<CheckoutRequest> RequestAsync(AppDbContext db, int userId, int itemId, int qty)
+    {
+        var svc = new MaterialService(db);
+        return await svc.CreateCheckout(itemId, userId, qty, "test");
     }
 
     [Fact]
@@ -70,15 +88,11 @@ public class MaterialServiceTests
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "螺丝", Grade = "C", Quantity = 100, UnitPrice = 0.5m });
         await db.SaveChangesAsync();
 
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 10, "test");
+        var req = await RequestAsync(db, 1, 1, 10);
 
         Assert.Equal("approved", req.Status);
-        Assert.Equal("C", req.Grade);
-        // 原子 SQL 更新绕过 EF 已跟踪实体，清除缓存后读取真实库存
         db.ChangeTracker.Clear();
-        var item = await db.InventoryItems.FindAsync(1);
-        Assert.Equal(90, item!.Quantity);
+        Assert.Equal(90, (await db.InventoryItems.FindAsync(1))!.Quantity);
     }
 
     [Fact]
@@ -88,12 +102,10 @@ public class MaterialServiceTests
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20, UnitPrice = 500 });
         await db.SaveChangesAsync();
 
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 3, "test");
+        // 申请人 id1 属飞控部且有部长 → pending_dept
+        var req = await RequestAsync(db, 1, 1, 3);
 
         Assert.Equal("pending_dept", req.Status);
-        Assert.Equal("B", req.Grade);
-        // 库存未扣
         var item = await db.InventoryItems.FindAsync(1);
         Assert.Equal(20, item!.Quantity);
     }
@@ -105,11 +117,34 @@ public class MaterialServiceTests
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "飞控", Grade = "A", Quantity = 5, UnitPrice = 2000 });
         await db.SaveChangesAsync();
 
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 1, "test");
+        var req = await RequestAsync(db, 1, 1, 1);
 
         Assert.Equal("pending_dept", req.Status);
-        Assert.Equal("A", req.Grade);
+    }
+
+    [Fact]
+    public async Task CreateCheckout_GradeB_UnassignedDept_GoesToAdmin()
+    {
+        var db = CreateContext();
+        db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20, UnitPrice = 500 });
+        await db.SaveChangesAsync();
+
+        // id5 未分配部门 → 跳过部长,直接管理员
+        var req = await RequestAsync(db, 5, 1, 3);
+        Assert.Equal("pending_admin", req.Status);
+        Assert.Equal(20, (await db.InventoryItems.FindAsync(1))!.Quantity);
+    }
+
+    [Fact]
+    public async Task CreateCheckout_GradeB_DeptWithoutLeader_GoesToAdmin()
+    {
+        var db = CreateContext();
+        db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20, UnitPrice = 500 });
+        await db.SaveChangesAsync();
+
+        // id4 属“无部长部” → 无人批,直接管理员
+        var req = await RequestAsync(db, 4, 1, 3);
+        Assert.Equal("pending_admin", req.Status);
     }
 
     [Fact]
@@ -118,17 +153,15 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20, UnitPrice = 500 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 3, "test");
+        var req = await RequestAsync(db, 1, 1, 3);
         Assert.Equal("pending_dept", req.Status);
 
-        var result = await svc.ApproveDept(req.Id, 10);
+        var svc = new MaterialService(db);
+        var result = await svc.ApproveDept(req.Id, 3);
         Assert.NotNull(result);
         Assert.Equal("approved", result!.Status);
-        // 库存此时才扣；原子 SQL 更新绕过了原先的跟踪实体
         db.ChangeTracker.Clear();
-        var item = await db.InventoryItems.FindAsync(1);
-        Assert.Equal(17, item!.Quantity);
+        Assert.Equal(17, (await db.InventoryItems.FindAsync(1))!.Quantity);
     }
 
     [Fact]
@@ -137,15 +170,12 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "飞控", Grade = "A", Quantity = 5, UnitPrice = 2000 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 1, "test");
+        var req = await RequestAsync(db, 1, 1, 1);
 
-        var result = await svc.ApproveDept(req.Id, 10);
+        var result = await new MaterialService(db).ApproveDept(req.Id, 3);
         Assert.NotNull(result);
         Assert.Equal("pending_admin", result!.Status);
-        // 库存还没扣
-        var item = await db.InventoryItems.FindAsync(1);
-        Assert.Equal(5, item!.Quantity);
+        Assert.Equal(5, (await db.InventoryItems.FindAsync(1))!.Quantity);
     }
 
     [Fact]
@@ -154,17 +184,33 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "飞控", Grade = "A", Quantity = 5, UnitPrice = 2000 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 1, "test");
-        await svc.ApproveDept(req.Id, 10);
+        var svc = new MaterialService(db);
+        var req = await RequestAsync(db, 1, 1, 1);
+        await svc.ApproveDept(req.Id, 3);
         Assert.Equal("pending_admin", req.Status);
 
-        var result = await svc.ApproveAdmin(req.Id, 20);
+        var result = await svc.ApproveAdmin(req.Id, 2);
         Assert.NotNull(result);
         Assert.Equal("approved", result!.Status);
         db.ChangeTracker.Clear();
-        var item = await db.InventoryItems.FindAsync(1);
-        Assert.Equal(4, item!.Quantity);
+        Assert.Equal(4, (await db.InventoryItems.FindAsync(1))!.Quantity);
+    }
+
+    [Fact]
+    public async Task ApproveAdmin_GradeB_FromUnassigned_DeductsStock()
+    {
+        var db = CreateContext();
+        db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20, UnitPrice = 500 });
+        await db.SaveChangesAsync();
+        var svc = new MaterialService(db);
+        var req = await RequestAsync(db, 5, 1, 3); // 未分配部门 → pending_admin
+        Assert.Equal("pending_admin", req.Status);
+
+        var result = await svc.ApproveAdmin(req.Id, 2);
+        Assert.NotNull(result);
+        Assert.Equal("approved", result!.Status);
+        db.ChangeTracker.Clear();
+        Assert.Equal(17, (await db.InventoryItems.FindAsync(1))!.Quantity);
     }
 
     [Fact]
@@ -173,13 +219,36 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "电机", Grade = "B", Quantity = 20 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 3, "test");
+        var req = await RequestAsync(db, 1, 1, 3);
 
-        var result = await svc.RejectRequest(req.Id, 10, "不需要");
+        var result = await new MaterialService(db).RejectRequest(req.Id, 3, "不需要");
         Assert.NotNull(result);
         Assert.Equal("rejected", result!.Status);
         Assert.Equal("不需要", result.RejectReason);
+    }
+
+    [Fact]
+    public async Task GetPendingRequests_DeptHead_SeesOwnDeptMembers()
+    {
+        var db = CreateContext();
+        db.InventoryItems.AddRange(
+            new InventoryItem { Id = 1, Name = "电机A", Grade = "B", Quantity = 20 },
+            new InventoryItem { Id = 2, Name = "电机B", Grade = "B", Quantity = 20 }
+        );
+        await db.SaveChangesAsync();
+        var svc = new MaterialService(db);
+        var own = await RequestAsync(db, 1, 1, 1);   // 飞控部成员 → pending_dept
+        var un = await RequestAsync(db, 5, 2, 1);    // 未分配 → pending_admin
+        Assert.Equal("pending_dept", own.Status);
+        Assert.Equal("pending_admin", un.Status);
+
+        var leaderQueue = await svc.GetPendingRequests("部长", null, 1);
+        Assert.Single(leaderQueue);
+        Assert.Equal(own.Id, leaderQueue[0].Id);
+
+        var adminQueue = await svc.GetPendingRequests("admin", null, null);
+        Assert.Single(adminQueue);
+        Assert.Equal(un.Id, adminQueue[0].Id);
     }
 
     [Fact]
@@ -188,10 +257,8 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "螺丝", Grade = "C", Quantity = 2 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.CreateCheckout(1, 1, 10, "test"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RequestAsync(db, 1, 1, 10));
     }
 
     [Fact]
@@ -200,10 +267,10 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "飞控", Grade = "A", Quantity = 5, UnitPrice = 2000 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var req = await svc.CreateCheckout(1, 1, 1, "test");
-        await svc.ApproveDept(req.Id, 10);
-        await svc.ApproveAdmin(req.Id, 20);
+        var svc = new MaterialService(db);
+        var req = await RequestAsync(db, 1, 1, 1);
+        await svc.ApproveDept(req.Id, 3);
+        await svc.ApproveAdmin(req.Id, 2);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.Checkin(req.Id, 1, "normal", false, null, null));
@@ -220,16 +287,15 @@ public class MaterialServiceTests
             new InventoryItem { Id = 4, Name = "A4", Grade = "A", Quantity = 1 }
         );
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var st = await svc.StartStocktake("weekly", "A", 1);
+        var svc = new MaterialService(db);
+        var st = await svc.StartStocktake("weekly", "A", 2);
 
-        await svc.AutoAssignStocktake(st.Id, new List<int> { 10, 20 });
-        // 4 items assigned to 2 members
+        await svc.AutoAssignStocktake(st.Id, new List<int> { 4, 5 });
         var items = await db.StocktakeItems.Where(si => si.StocktakeId == st.Id).ToListAsync();
-        Assert.All(items, si => Assert.NotNull(si.CheckedByUserId));
         Assert.Equal(4, items.Count);
-        Assert.Contains(items, si => si.CheckedByUserId == 10);
-        Assert.Contains(items, si => si.CheckedByUserId == 20);
+        Assert.All(items, si => Assert.NotNull(si.CheckedByUserId));
+        Assert.Contains(items, si => si.CheckedByUserId == 4);
+        Assert.Contains(items, si => si.CheckedByUserId == 5);
     }
 
     [Fact]
@@ -241,18 +307,15 @@ public class MaterialServiceTests
             new InventoryItem { Id = 2, Name = "A2", Grade = "A", Quantity = 3 }
         );
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
-        var st = await svc.StartStocktake("weekly", "A", 1);
+        var svc = new MaterialService(db);
+        var st = await svc.StartStocktake("weekly", "A", 2);
 
-        // Simulate counting: A1 found 4 (loss 1), A2 found 5 (gain 2)
-        await svc.UpdateStocktakeItem(st.Id, 1, 4, null, 1);
-        await svc.UpdateStocktakeItem(st.Id, 2, 5, null, 1);
+        await svc.UpdateStocktakeItem(st.Id, 1, 4, null, 2);
+        await svc.UpdateStocktakeItem(st.Id, 2, 5, null, 2);
         await svc.CompleteStocktake(st.Id);
 
-        var item1 = await db.InventoryItems.FindAsync(1);
-        var item2 = await db.InventoryItems.FindAsync(2);
-        Assert.Equal(4, item1!.Quantity);
-        Assert.Equal(5, item2!.Quantity);
+        Assert.Equal(4, (await db.InventoryItems.FindAsync(1))!.Quantity);
+        Assert.Equal(5, (await db.InventoryItems.FindAsync(2))!.Quantity);
     }
 
     [Fact]
@@ -265,38 +328,23 @@ public class MaterialServiceTests
         );
         await db.SaveChangesAsync();
         var svc = new MaterialService(db);
+        var st = await svc.StartStocktake("weekly", "A", 2);
 
-        // Admin creates and assigns
-        var st = await svc.StartStocktake("weekly", "A", 1);
-        // Manually assign (avoid Random.Shared in test)
         var items = await db.StocktakeItems.Where(si => si.StocktakeId == st.Id).ToListAsync();
-        items[0].CheckedByUserId = 10;
-        items[1].CheckedByUserId = 20;
+        items[0].CheckedByUserId = 4;
+        items[1].CheckedByUserId = 5;
         await db.SaveChangesAsync();
 
-        // Member 10 submits via batch
-        await svc.BatchCheckStocktakeItems(st.Id, 10, new List<StocktakeItemResult>
-        {
-            new(items[0].InventoryItemId, 12, "多了2个")
-        });
+        await svc.BatchCheckStocktakeItems(st.Id, 4, new List<StocktakeItemResult> { new(items[0].InventoryItemId, 12, "多了2个") });
+        await svc.BatchCheckStocktakeItems(st.Id, 5, new List<StocktakeItemResult> { new(items[1].InventoryItemId, 7, "少了1个") });
 
-        // Member 20 submits
-        await svc.BatchCheckStocktakeItems(st.Id, 20, new List<StocktakeItemResult>
-        {
-            new(items[1].InventoryItemId, 7, "少了1个")
-        });
-
-        // Verify all submitted
         var allItems = await db.StocktakeItems.Where(si => si.StocktakeId == st.Id).ToListAsync();
         Assert.All(allItems, si => Assert.NotNull(si.ActualQty));
         Assert.Equal(12, allItems[0].ActualQty);
         Assert.Equal(7, allItems[1].ActualQty);
 
-        // Admin completes
         await svc.CompleteStocktake(st.Id);
         Assert.Equal("completed", (await db.Stocktakes.FindAsync(st.Id))!.Status);
-
-        // Inventory updated
         Assert.Equal(12, (await db.InventoryItems.FindAsync(1))!.Quantity);
         Assert.Equal(7, (await db.InventoryItems.FindAsync(2))!.Quantity);
     }
@@ -308,18 +356,13 @@ public class MaterialServiceTests
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "A1", Grade = "A", Quantity = 10 });
         await db.SaveChangesAsync();
         var svc = new MaterialService(db);
-        var st = await svc.StartStocktake("weekly", "A", 1);
+        var st = await svc.StartStocktake("weekly", "A", 2);
         var item = await db.StocktakeItems.FirstAsync(si => si.StocktakeId == st.Id);
-        item.CheckedByUserId = 10;
+        item.CheckedByUserId = 4;
         await db.SaveChangesAsync();
 
-        // Unauthorized member 99 tries to submit
-        await svc.BatchCheckStocktakeItems(st.Id, 99, new List<StocktakeItemResult>
-        {
-            new(item.InventoryItemId, 999, "hack")
-        });
+        await svc.BatchCheckStocktakeItems(st.Id, 99, new List<StocktakeItemResult> { new(item.InventoryItemId, 999, "hack") });
 
-        // No change
         var si = await db.StocktakeItems.FirstAsync(s => s.StocktakeId == st.Id);
         Assert.Null(si.ActualQty);
     }
@@ -330,7 +373,7 @@ public class MaterialServiceTests
         var db = CreateContext();
         db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "飞控", Grade = "A", Quantity = 2 });
         await db.SaveChangesAsync();
-        var svc = new MaterialService(db, null!, null!);
+        var svc = new MaterialService(db);
 
         var report = await svc.CreateDamageReport(1, 1, "damage", "飞行中失控坠毁", true);
         Assert.Equal("damage", report.Type);

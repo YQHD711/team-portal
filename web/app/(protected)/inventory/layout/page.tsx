@@ -126,7 +126,7 @@ export default function StorageLayoutPage() {
                 return (
                   <button key={l.id} onClick={() => setSelected(l)}
                     className="relative text-left rounded-xl border border-border bg-surface p-4 hover:border-sky-400 hover:shadow-sm transition-all">
-                    {s.lowCount > 0 && (
+                    {isStaff && s.lowCount > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 inline-flex items-center rounded-full bg-danger text-white text-xs font-bold px-2 py-0.5">
                         {s.lowCount} 预警
                       </span>

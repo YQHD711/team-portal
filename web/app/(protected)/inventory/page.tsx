@@ -49,6 +49,8 @@ export default function InventoryPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const { user } = useCurrentUser();
   const role = user?.role ?? "";
+  // 库存预警文案仅 staff 可见;队员只见普通数量/状态
+  const isStaff = role === "admin" || role === "部长";
   const [roomOpts, setRoomOpts] = useState<string[]>(FALLBACK_ROOMS);
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
@@ -183,7 +185,7 @@ export default function InventoryPage() {
 
       {importMsg && <div className="text-sm p-2 rounded-lg bg-info/10 text-info">{importMsg}</div>}
 
-      {lowItems.length > 0 && (
+      {isStaff && lowItems.length > 0 && (
         <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           <span className="text-sm text-warning"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {LOW_THRESHOLD} 件）</span>

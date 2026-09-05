@@ -37,10 +37,10 @@ export default function FinancePage() {
 
   const fetchData = () => {
     setLoading(true);
-    Promise.all([
-      api.get<PurchaseReq[]>("/api/finance/requests").then(setRequests).catch(()=>{}),
-      api.get<Stats>("/api/finance/stats").then(setStats).catch(()=>{}),
-    ]).finally(() => setLoading(false));
+    // 全队支出统计仅 staff 拉取;队员只见自己的申请
+    const tasks: Promise<unknown>[] = [api.get<PurchaseReq[]>("/api/finance/requests").then(setRequests).catch(()=>{})];
+    if (isStaff) tasks.push(api.get<Stats>("/api/finance/stats").then(setStats).catch(()=>{}));
+    Promise.all(tasks).finally(() => setLoading(false));
   };
 
   const fetchAll = () => api.get<PurchaseReq[]>("/api/finance/requests/all").then(setRequests);
@@ -75,11 +75,12 @@ export default function FinancePage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold">采购申请</h1><p className="text-sm text-muted">申请 · 审批 · 购买 · 入库 · 报表</p></div>
-        {isStaff && <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"><Plus className="h-4 w-4"/>申请采购</button>}
+        {/* 队员也可发起采购申请(审批仍为管理员) */}
+        <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"><Plus className="h-4 w-4"/>申请采购</button>
       </div>
 
-      {/* Stats */}
-      {stats && (
+      {/* Stats(全队支出仅 staff) */}
+      {isStaff && stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="rounded-xl border p-3 bg-surface text-center"><div className="text-xl font-bold text-warning">{stats.pending}</div><div className="text-xs text-faint">待审批</div></div>
           <div className="rounded-xl border p-3 bg-surface text-center"><div className="text-xl font-bold text-primary">{stats.approved}</div><div className="text-xs text-faint">已批准</div></div>

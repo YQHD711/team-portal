@@ -25,8 +25,8 @@ const items = [
   { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "201-01-C-02", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-const staffUser = { id: 1, username: "admin", role: "admin", department: null };
-const memberUser = { id: 2, username: "王睿翔", role: "member", department: null };
+const staffUser = { id: 1, username: "admin", role: "admin", department: null, departmentId: null };
+const memberUser = { id: 2, username: "王睿翔", role: "member", department: null, departmentId: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -72,6 +72,14 @@ describe("零件库存页", () => {
     await screen.findAllByText("桨叶");
     expect(screen.queryByRole("button", { name: /添加零件/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/导入 Excel/)).not.toBeInTheDocument();
+  });
+
+  it("成员不可见低库存预警横幅(库存预警仅 staff)", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("桨叶");
+    expect(screen.queryByText(/种零件库存不足/)).not.toBeInTheDocument();
   });
 
   it("搜索触发带参数的接口请求", async () => {

@@ -98,9 +98,11 @@ export default function Home() {
   const stats = [
     { label: "团队成员", value: data?.users, icon: Users, color: "bg-primary/15 text-primary", foot: <span className="text-faint">{data?.departments ?? 0} 个部门</span> },
     { label: "库存物料", value: data?.inventoryTotal, icon: Package, color: "bg-info/15 text-info",
-      foot: (data?.lowStock?.length ?? 0) > 0
-        ? <span className="text-danger font-semibold">↓ {data?.lowStock.length} 项低库存</span>
-        : <span className="text-success">库存充足</span> },
+      foot: isStaff
+        ? (data?.lowStock?.length ?? 0) > 0
+          ? <span className="text-danger font-semibold">↓ {data?.lowStock.length} 项低库存</span>
+          : <span className="text-success">库存充足</span>
+        : <span className="text-faint">库存实时同步</span> },
     ...(isStaff
       ? [
           { label: "库存总价值", value: data ? formatMoney(data.inventoryValue) : null, icon: DollarSign, color: "bg-success/15 text-success", foot: <span className="text-faint">按单价 × 数量估算</span> },
@@ -147,8 +149,8 @@ export default function Home() {
         ))}
       </div>
 
-      {/* 库存分布 + 低库存预警 */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4">
+      {/* 库存分布(全员可见);低库存预警仅 staff 展示 */}
+      <div className={`grid gap-4 ${isStaff ? "lg:grid-cols-[1.15fr_0.85fr]" : ""}`}>
         <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold tracking-tight">库存分布</h3>
@@ -174,6 +176,7 @@ export default function Home() {
           </div>
         </div>
 
+        {isStaff && (
         <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold tracking-tight">低库存预警</h3>
@@ -201,6 +204,7 @@ export default function Home() {
             <div className="text-sm text-faint py-4">{loaded ? "暂无低库存物料" : <Skeleton />}</div>
           )}
         </div>
+        )}
       </div>
 
       {/* 团队动态 + 最近事故 */}

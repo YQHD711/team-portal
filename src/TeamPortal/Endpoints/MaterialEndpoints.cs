@@ -66,8 +66,12 @@ public static class MaterialEndpoints
         // 部长审批
         group.MapPost("/checkout/{id:int}/approve-dept", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
         {
-            var (role, _, _, userId) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可审批", statusCode: 403);
+            var (role, _, deptId, userId) = await GetCtx(user, db);
+            // 领用审批按申请人部门流转:仅该部门部长审批;管理员只走 /approve-admin
+            if (role != "部长") return Results.Problem("仅本部门部长可审批", statusCode: 403);
+            var detail = await svc.GetRequest(id);
+            if (detail is null || detail.Requester?.DepartmentId != deptId)
+                return Results.Problem("申请不存在或非本部门队员的领用", statusCode: 400);
             try
             {
                 var req = await svc.ApproveDept(id, userId!.Value);
@@ -102,8 +106,14 @@ public static class MaterialEndpoints
         // 驳回
         group.MapPost("/checkout/{id:int}/reject", async (int id, CheckoutRejectReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
-            var (role, _, _, userId) = await GetCtx(user, db);
+            var (role, _, deptId, userId) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可驳回", statusCode: 403);
+            if (role == "部长")
+            {
+                var detail = await svc.GetRequest(id);
+                if (detail is null || detail.Requester?.DepartmentId != deptId)
+                    return Results.Problem("申请不存在或非本部门队员的领用", statusCode: 400);
+            }
             var req = await svc.RejectRequest(id, userId!.Value, body.Reason ?? "未说明原因");
             if (req is null) return Results.Problem("无法驳回（状态不正确）", statusCode: 400);
             log.Warn("inventory", $"Checkout #{id} rejected by {user.Identity?.Name}: {body.Reason}");

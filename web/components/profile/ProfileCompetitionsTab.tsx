@@ -17,17 +17,21 @@ interface Props {
   onCancelForm: () => void;
   onEdit: (c: CompetitionRecord) => void;
   onDelete: (id: number) => void;
+  /** 只读模式(无权编辑该成员时):隐藏添加/编辑/删除 */
+  readOnly?: boolean;
 }
 
 /** 参赛记录 Tab（添加表单 + 记录列表 + 编辑/删除） */
-export default function ProfileCompetitionsTab({ records, showForm, onToggleForm, compName, setCompName, compDate, setCompDate, compEvent, setCompEvent, compRanking, setCompRanking, compCert, setCompCert, compNotes, setCompNotes, editCompId, saving, onSave, onCancelForm, onEdit, onDelete }: Props) {
+export default function ProfileCompetitionsTab({ records, showForm, onToggleForm, compName, setCompName, compDate, setCompDate, compEvent, setCompEvent, compRanking, setCompRanking, compCert, setCompCert, compNotes, setCompNotes, editCompId, saving, onSave, onCancelForm, onEdit, onDelete, readOnly = false }: Props) {
   return (
     <div className="space-y-4">
-      <button onClick={onToggleForm}
-        className="inline-flex items-center gap-1 text-sm text-sky-600 hover:text-sky-700 font-medium">
-        <Plus className="h-4 w-4" />添加参赛记录
-      </button>
-      {showForm && (
+      {!readOnly && (
+        <button onClick={onToggleForm}
+          className="inline-flex items-center gap-1 text-sm text-sky-600 hover:text-sky-700 font-medium">
+          <Plus className="h-4 w-4" />添加参赛记录
+        </button>
+      )}
+      {showForm && !readOnly && (
         <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-xs font-medium mb-1">比赛名称 *</label><input value={compName} onChange={e => setCompName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" /></div>
@@ -57,8 +61,8 @@ export default function ProfileCompetitionsTab({ records, showForm, onToggleForm
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {c.certificate && <a href={c.certificate} target="_blank" className="text-xs text-sky-500 hover:underline">证书</a>}
-              <button onClick={() => onEdit(c)} className="p-1 rounded hover:bg-surface-hover text-faint"><Pencil className="h-4 w-4" /></button>
-              <button onClick={() => onDelete(c.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 className="h-4 w-4" /></button>
+              {!readOnly && <button onClick={() => onEdit(c)} className="p-1 rounded hover:bg-surface-hover text-faint"><Pencil className="h-4 w-4" /></button>}
+              {!readOnly && <button onClick={() => onDelete(c.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 className="h-4 w-4" /></button>}
             </div>
           </div>
         ))}

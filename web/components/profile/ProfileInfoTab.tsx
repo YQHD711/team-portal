@@ -21,10 +21,12 @@ interface Props {
   departments: { id: number; name: string }[];
   saving: boolean;
   onSave: () => void;
+  /** 只读模式(无权编辑该成员时):隐藏编辑入口 */
+  readOnly?: boolean;
 }
 
 /** 基本信息 Tab（查看模式 + 编辑模式） */
-export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCancelEdit, level, setLevel, flightHours, setFlightHours, firstFlight, setFirstFlight, emergencyContact, setEmergencyContact, emergencyPhone, setEmergencyPhone, flightTypes, setFlightTypes, skills, setSkills, bio, setBio, username, setUsername, role, setRole, departmentId, setDepartmentId, password, setPassword, departments, saving, onSave }: Props) {
+export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCancelEdit, level, setLevel, flightHours, setFlightHours, firstFlight, setFirstFlight, emergencyContact, setEmergencyContact, emergencyPhone, setEmergencyPhone, flightTypes, setFlightTypes, skills, setSkills, bio, setBio, username, setUsername, role, setRole, departmentId, setDepartmentId, password, setPassword, departments, saving, onSave, readOnly = false }: Props) {
   return (
     <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
       {editInfo ? (
@@ -99,7 +101,10 @@ export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCance
             </div>
           )}
           {profile.bio && <div><span className="text-muted text-sm">简介</span><p className="mt-1 text-sm">{profile.bio}</p></div>}
-          <div className="flex justify-end"><button onClick={onStartEdit} className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-accent-hover">编辑档案</button></div>
+          <div className="flex justify-end">{readOnly
+            ? <span className="text-xs text-faint">仅管理员和本部门部长可编辑</span>
+            : <button onClick={onStartEdit} className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-accent-hover">编辑档案</button>}
+          </div>
         </>
       )}
     </div>
