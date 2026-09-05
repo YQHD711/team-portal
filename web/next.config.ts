@@ -14,9 +14,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // 大文件上传(multipart)走 /api rewrites 时需要放宽 body size
     // 默认 proxyClientMaxBodySize=10MB + serverActions 默认 1MB 都会 reset 超过限制的连接
-    proxyClientMaxBodySize: "100mb",
+    // 与后端 Kestrel MaxRequestBodySize / Settings Files:MaxUploadMB 三处同步(均 1GB)
+    proxyClientMaxBodySize: "1gb",
     serverActions: {
-      bodySizeLimit: "100mb",
+      bodySizeLimit: "1gb",
     },
   },
   // 关闭尾斜杠重定向：WebTools 代理需要保留 /webtools/xxx/ 的尾斜杠

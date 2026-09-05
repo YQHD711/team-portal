@@ -16,6 +16,12 @@ using TeamPortal.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── 大文件上传支持(1GB) ──
+// 需与 Next.js proxyClientMaxBodySize/serverActions.bodySizeLimit 及 Settings Files:MaxUploadMB 三处同步
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+    o.MultipartBodyLengthLimit = 1024L * 1024 * 1024);
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1024L * 1024 * 1024);
+
 // ── Validate required secrets ──
 // Jwt:Key 优先来自环境变量 JWT__KEY(生产必须配置);开发环境缺失时运行时生成随机密钥,
 // 不再使用任何硬编码可猜字符串。随机密钥重启后失效(已签发 token 全部作废),见启动 WARN 日志。

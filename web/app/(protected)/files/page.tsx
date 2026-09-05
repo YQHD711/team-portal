@@ -47,7 +47,7 @@ export default function FilesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div><h1 className="text-2xl font-bold">资源共享</h1><p className="text-sm text-muted">上传和下载队内共享文件，支持任意格式（最大 100MB）</p></div>
+      <div><h1 className="text-2xl font-bold">资源共享</h1><p className="text-sm text-muted">上传和下载队内共享文件，支持任意格式（最大 1GB）</p></div>
 
       <form onSubmit={handleUpload} className="rounded-xl border border-border bg-surface p-5 space-y-3">
         <div className="flex flex-wrap gap-3 items-end">

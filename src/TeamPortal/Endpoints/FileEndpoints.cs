@@ -10,14 +10,9 @@ public static class FileEndpoints
 {
     private static string UploadDir() => Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "files"));
 
-    /// <summary>上传类型白名单：常见文档/图片/压缩格式。svg 有 XSS 风险已排除；下载统一强制 attachment。</summary>
-    private static readonly HashSet<string> AllowedUploadExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx",
-        ".md", ".txt", ".json",
-        ".zip", ".rar", ".7z",
-        ".jpg", ".jpeg", ".png", ".gif", ".webp"
-    };
+    /// <summary>上传类型白名单已移除(2026-09-05 开放任意格式)。安全底线:
+    /// 1) 双扩展名混淆检测(DangerousExtSegments) 2) 已知类型 magic-byte 校验
+    /// 3) 存储名用 GUID 4) 下载统一强制 Content-Disposition: attachment。</summary>
 
     /// <summary>带点号包裹的危险扩展名段(双扩展名混淆检测用)</summary>
     private static readonly string[] DangerousExtSegments = [".php.", ".asp.", ".aspx.", ".jsp.", ".exe.", ".sh.", ".js.", ".html.", ".htm.", ".svg."];
@@ -86,12 +81,8 @@ public static class FileEndpoints
             if (rawName.Contains('/') || rawName.Contains('\\') || rawName.Contains(".."))
                 return Results.Problem("文件名包含非法字符（路径分隔符或 ..）", statusCode: 400);
 
-            // 扩展名白名单（.html/.svg/.exe 等一律拒绝）
+            // 任意格式开放;无扩展名的文件也允许(存储名带 GUID 隔离)
             var uploadExt = Path.GetExtension(rawName);
-            if (string.IsNullOrEmpty(uploadExt) || !AllowedUploadExtensions.Contains(uploadExt))
-                return Results.Problem(
-                    $"不支持的文件类型 {uploadExt}。允许: pdf/doc/docx/xls/xlsx/csv/ppt/pptx/md/txt/json/zip/rar/7z/jpg/jpeg/png/gif/webp",
-                    statusCode: 415);
 
             // 双扩展名混淆（shell.php.jpg、a.asp.png 等）:白名单只认最后一个扩展名,需额外拦截
             // 危险扩展名段必须带点号包裹,避免误伤 doc.v2.docx、2026-08-10.log.pdf 等正常多段文件名
@@ -106,19 +97,20 @@ public static class FileEndpoints
             var storedName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
             var path = Path.Combine(UploadDir(), storedName);
 
-            // D-2 fix: read first bytes into a buffer for magic-byte check BEFORE committing to disk
+            // 流式写盘:先 peek 前 8 字节做 magic-byte 校验,再流式拷贝
+            // (旧实现把整个文件读进 MemoryStream——1GB 文件会打爆 1.8G 内存,2026-09-05 修复)
             await using (var fs = File.Create(path))
-            using (var peekMs = new MemoryStream())
             {
-                await file.CopyToAsync(peekMs);
-                var all = peekMs.ToArray();
-                var head = all.Length >= 8 ? all.Take(8).ToArray() : all;
-                if (!MagicByteMatches(uploadExt, head))
+                using var stream = file.OpenReadStream();
+                var head = new byte[8];
+                var headLen = await stream.ReadAsync(head, 0, 8);
+                if (!MagicByteMatches(uploadExt, head.Take(headLen).ToArray()))
                 {
                     try { File.Delete(path); } catch { }
                     return Results.Problem($"文件内容与扩展名 {uploadExt} 不匹配（magic-byte 校验失败）", statusCode: 415);
                 }
-                await fs.WriteAsync(all);
+                await fs.WriteAsync(head, 0, headLen);
+                await stream.CopyToAsync(fs);
             }
 
             var sf = new SharedFile

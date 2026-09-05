@@ -119,7 +119,7 @@ public class SettingsService
             new() { Key = "Wiki:PollingIntervalSec", Value = "30", Category = "系统参数", Description = "Wiki 任务轮询间隔（秒）" },
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
-            new() { Key = "Files:MaxUploadMB", Value = "100", Category = "系统参数", Description = "资源共享/上传文件最大大小（MB）；同步需要调整 Next.js proxyClientMaxBodySize/serverActions.bodySizeLimit 与后端 Kestrel MaxRequestBodySize" },
+            new() { Key = "Files:MaxUploadMB", Value = "1024", Category = "系统参数", Description = "资源共享/上传文件最大大小（MB），上限 1024；同步需要调整 Next.js proxyClientMaxBodySize/serverActions.bodySizeLimit 与后端 Kestrel MaxRequestBodySize（均已设 1GB）" },
             new() { Key = "Brand:TeamName", Value = "雏鹰之翼", Category = "品牌", Description = "团队名称（登录页/侧边栏/仪表盘）" },
             new() { Key = "Brand:TeamSubtitle", Value = "航模队", Category = "品牌", Description = "团队副标题（显示在队名旁）" },
             new() { Key = "Brand:SystemTitle", Value = "", Category = "品牌", Description = "系统标题（留空自动用“队名 · 副标题管理系统”）" },

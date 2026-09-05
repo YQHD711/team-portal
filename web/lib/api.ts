@@ -2,7 +2,7 @@
 
 const API_BASE = ""; // Relative URL — proxied through Next.js rewrites
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
-const UPLOAD_TIMEOUT = 180000; // 3 minutes — 大文件上传(multipart)+ Next.js rewrites 转发
+const UPLOAD_TIMEOUT = 1800000; // 30 minutes — 大文件上传(最高1GB)+ Next.js rewrites 转发
 
 function isBrowser() {
   return typeof window !== "undefined";
