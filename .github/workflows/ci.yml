@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, master]
 
+# 同一分支连续推送时取消还在跑的旧流水线，避免排队浪费时间
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── 测试（PR 和 main 推送都跑）──
   test-csharp:
@@ -40,11 +45,29 @@ jobs:
       - run: cd ai-service && pip install -r requirements-dev.txt
       - run: cd tests/ai && python -m pytest
 
+  # E2E 冒烟：生产构建 + Playwright（后端接口全 mock，验证前端路由/守卫/交互闭环）
+  e2e-smoke:
+    name: E2E Smoke (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+
   # ── CD：测试全绿后构建镜像并推送 ghcr.io（仅 main 推送触发）──
   # 服务器零构建：deploy/deploy.sh 拉取镜像直接启动，彻底规避 1.8G 内存 OOM
   build-push:
     name: Build & Push Images (ghcr)
-    needs: [test-csharp, test-web, test-python]
+    needs: [test-csharp, test-web, test-python, e2e-smoke]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -101,3 +124,23 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/teamportal-ai-service:sha-${{ github.sha }}
           cache-from: type=gha,scope=ai
           cache-to: type=gha,scope=ai,mode=max
+
+  # ── 告警：任何环节失败都推飞书群（需配置 secret FEISHU_WEBHOOK_URL，未配置则静默跳过）──
+  notify:
+    name: Notify (Feishu)
+    needs: [test-csharp, test-web, test-python, e2e-smoke, build-push]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送飞书告警
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          if [ -z "${FEISHU_WEBHOOK_URL}" ]; then
+            echo "未配置 FEISHU_WEBHOOK_URL secret，跳过通知。"
+            echo "配置方法：飞书群 → 设置 → 群机器人 → 添加自定义机器人(安全设置勾'自定义关键词'填 CI) → 复制 webhook 地址 → GitHub 仓库 Settings → Secrets and variables → Actions → New repository secret，名称 FEISHU_WEBHOOK_URL"
+            exit 0
+          fi
+          curl -sS -X POST "${FEISHU_WEBHOOK_URL}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"❌ TeamPortal CI 失败\\n分支: ${GITHUB_REF_NAME}\\n提交: ${GITHUB_SHA:0:7}\\n触发: ${GITHUB_EVENT_NAME} @ ${GITHUB_ACTOR}\\n日志: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}}"
