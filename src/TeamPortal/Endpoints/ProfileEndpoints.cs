@@ -120,7 +120,7 @@ public static class ProfileEndpoints
         });
 
         // 培训记录
-        adminGroup.MapPost("/{userId:int}/training", async (int userId, AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPost("/{userId:int}/training", async (int userId, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             if (string.IsNullOrWhiteSpace(req.CourseName))
@@ -129,7 +129,7 @@ public static class ProfileEndpoints
             return Results.Created($"/api/admin/profiles/{userId}/training/{record.Id}", record);
         });
 
-        adminGroup.MapPut("/{userId:int}/training/{id:int}", async (int userId, int id, AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPut("/{userId:int}/training/{id:int}", async (int userId, int id, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.UpdateTrainingRecord(id, req.CourseName, req.Score, req.ExamDate, req.Examiner, req.Notes);
@@ -174,7 +174,7 @@ public static class ProfileEndpoints
         });
 
         // 参赛记录
-        adminGroup.MapPost("/{userId:int}/competitions", async (int userId, AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPost("/{userId:int}/competitions", async (int userId, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             if (string.IsNullOrWhiteSpace(req.CompetitionName))
@@ -183,14 +183,14 @@ public static class ProfileEndpoints
             return Results.Created($"/api/admin/profiles/{userId}/competitions/{record.Id}", record);
         });
 
-        adminGroup.MapPut("/{userId:int}/competitions/{id:int}", async (int userId, int id, AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPut("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.UpdateCompetitionRecord(id, req.CompetitionName, req.Date, req.Event, req.Ranking, req.Certificate, req.Notes);
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("记录不存在", statusCode: 404);
         });
 
-        adminGroup.MapDelete("/{userId:int}/competitions/{id:int}", async (int userId, int id, AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapDelete("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.DeleteCompetitionRecord(id);

@@ -190,7 +190,7 @@ public static class MaterialEndpoints
             return st is not null ? Results.Ok(st) : Results.Problem("Not found", statusCode: 404);
         });
 
-        group.MapPut("/stocktake/{id:int}/item/{itemId:int}", async (int id, int itemId, StocktakeItemReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
+        group.MapPut("/stocktake/{id:int}/item/{itemId:int}", async (int id, int itemId, [FromBody] StocktakeItemReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
