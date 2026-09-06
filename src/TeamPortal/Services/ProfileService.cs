@@ -169,6 +169,76 @@ public class ProfileService
         return true;
     }
 
+    // ── Admin: 参赛记录 CSV 批量导入(仅管理员) ──
+
+    /// <summary>解析 CSV(队员名,比赛名称,日期,项目,名次,证书,备注),逐行写入参赛记录;队员不存在则跳过。</summary>
+    public async Task<(int Imported, List<(string Username, string Reason)> Skipped)> ImportCompetitionsCsv(string csv)
+    {
+        var imported = 0;
+        var skipped = new List<(string, string)>();
+        var rows = SplitCsvLines(csv);
+        if (rows.Count == 0) return (0, skipped);
+
+        var users = await _db.Users.AsNoTracking()
+            .Select(u => new { u.Id, u.Username }).ToListAsync();
+        var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var u in users) byName.TryAdd(u.Username, u.Id);
+
+        var added = new List<CompetitionRecord>();
+        foreach (var cols in rows)
+        {
+            if (cols.Count == 0) continue;
+            var name = cols[0].Trim();
+            if (string.IsNullOrEmpty(name)) continue;
+            if (string.Equals(name, "队员名", StringComparison.OrdinalIgnoreCase)) continue; // 表头
+            if (!byName.TryGetValue(name, out var uid))
+            {
+                skipped.Add((name, "队员不存在"));
+                continue;
+            }
+            var comp = cols.Count > 1 ? cols[1].Trim() : "";
+            if (string.IsNullOrEmpty(comp)) { skipped.Add((name, "缺少比赛名称")); continue; }
+            DateTime? date = null;
+            if (cols.Count > 2 && !string.IsNullOrWhiteSpace(cols[2]))
+            {
+                if (!DateTime.TryParseExact(cols[2].Trim(), new[] { "yyyy-MM-dd", "yyyy/M/d", "yyyy/MM/dd" }, null, System.Globalization.DateTimeStyles.None, out var d))
+                { skipped.Add((name, $"日期格式无效:{cols[2].Trim()}")); continue; }
+                date = d;
+            }
+            var evt = cols.Count > 3 ? cols[3].Trim() : null;
+            var ranking = cols.Count > 4 ? cols[4].Trim() : null;
+            var cert = cols.Count > 5 ? cols[5].Trim() : null;
+            var notes = cols.Count > 6 ? cols[6].Trim() : null;
+            added.Add(new CompetitionRecord
+            {
+                UserId = uid, CompetitionName = comp, Date = date ?? DateTime.UtcNow,
+                Event = evt, Ranking = ranking, Certificate = cert, Notes = notes
+            });
+            imported++;
+        }
+        if (added.Count > 0)
+        {
+            _db.CompetitionRecords.AddRange(added);
+            await _db.SaveChangesAsync();
+            _log.Info("profile", $"Competitions imported via CSV: {added.Count} rows");
+        }
+        return (imported, skipped);
+    }
+
+    private static List<List<string>> SplitCsvLines(string csv)
+    {
+        var lines = new List<List<string>>();
+        foreach (var raw in csv.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = raw.Trim().TrimEnd('\r');
+            if (line.Length == 0) continue;
+            // 简单按逗号切分(去掉每格首尾空白)
+            var cols = line.Split(',').Select(c => c.Trim().Trim('"')).ToList();
+            lines.Add(cols);
+        }
+        return lines;
+    }
+
     // ── Admin: list all profiles ──
 
     public async Task<List<object>> ListAllProfiles()

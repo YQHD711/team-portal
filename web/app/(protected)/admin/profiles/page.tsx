@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { User, Search, Loader2, BadgeCheck } from "lucide-react";
+import { useCurrentUser } from "@/lib/hooks";
+import { User, Search, Loader2, BadgeCheck, Upload } from "lucide-react";
 
 interface UserInfo { id: number; username: string; role: string; department: string | null; departmentId: number | null; invitedBy: string | null; }
 interface ProfileBrief { userId: number; skills: string | null; }
@@ -23,6 +24,24 @@ export default function AdminProfilesPage() {
   const [certs, setCerts] = useState<Certification[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const { user: me } = useCurrentUser();
+  const isAdmin = me?.role === "admin";
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const importCompetitions = async () => {
+    const file = fileRef.current?.files?.[0];
+    if (!file) { alert("请选择 CSV 文件"); return; }
+    const token = localStorage.getItem("token");
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const res = await fetch("/api/admin/competitions/import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const data = await res.json();
+      if (!res.ok) { setImportMsg({ ok: false, text: data.detail || "导入失败" }); return; }
+      const skipTxt = data.skipped?.length ? `；跳过 ${data.skipped.length} 条（${data.skipped.slice(0, 3).map((s: { username: string; reason: string }) => `${s.username}:${s.reason}`).join("，")}${data.skipped.length > 3 ? "…" : ""}）` : "";
+      setImportMsg({ ok: true, text: data.message + skipTxt });
+    } catch { setImportMsg({ ok: false, text: "导入失败：请检查文件" }); }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -67,6 +86,21 @@ export default function AdminProfilesPage() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索队员姓名或部门..."
           className="w-full rounded-xl border border-border bg-surface pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50/30" />
       </div>
+
+      {/* 参赛记录 CSV 批量导入(仅管理员) */}
+      {isAdmin && (
+        <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium">导入参赛记录(CSV)：</label>
+            <input ref={fileRef} type="file" accept=".csv" className="text-sm w-64 file:mr-3 file:px-3 file:py-1 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700" />
+            <button onClick={importCompetitions} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+              <Upload className="h-4 w-4" />导入
+            </button>
+          </div>
+          <p className="text-xs text-faint">CSV 列: 队员名,比赛名称,日期(yyyy-MM-dd),参赛项目,名次,证书链接,备注（队员不存在或日期无效会跳过）</p>
+          {importMsg && <p className={`text-sm ${importMsg.ok ? "text-success" : "text-danger"}`}>{importMsg.text}</p>}
+        </div>
+      )}
 
       {/* Grouped list */}
       {[...groups, ...(unassigned.length > 0 ? [{ dept: "未分配", members: unassigned }] : [])].map(({ dept, members }) => (
