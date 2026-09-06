@@ -1,6 +1,6 @@
 # 雏鹰之翼航模队管理系统 — 架构设计文档
 
-> 创建: 2026-06-22 | 更新: 2026-07-04 | 状态: 已上线 v1.0
+> 创建: 2026-06-22 | 更新: 2026-09-06 | 状态: 已上线 v1.0
 
 ---
 
@@ -16,12 +16,14 @@
 - 管理后台: 用户/部门/资料 CRUD + 权限系统
 - 文档上传: PDF/DOCX/MD 自动提取文本入库
 
-**角色系统:**
+**角色系统（2026-09 更新）:**
 | 角色 | 权限范围 |
 |---|---|
-| 管理员 | 全部功能，可管理所有部门和用户 |
-| 部长 | 本部门成员管理 + 本部门知识库编辑 + 文档上传 |
-| 成员 | 查看公共 + 本部门知识库，使用功能模块 |
+| admin | 全部功能。另独享：系统设置 / 系统日志 / 回收站 / 备份恢复 / 云存储 / AI 管理员、部门增删改、添加/删除队员、邀请码全量、领用管理员终审 |
+| 部长（按部门） | 组织架构/盘点/档案等**只在本部门内自主**：可编辑本部门任何非 admin（含同部门部长、自己）的账号（角色 member↔部长、可调部门）、盘点管理权（仅自己发起的）；可生成并管理自己发出的邀请码。**不可**：见/动其它部门与未分配成员、触碰 admin、授予 admin、进 6 个 admin-only 管理页 |
+| member | 查看公共仪表盘/库存、发起领用与采购申请（走审批）、提交自己的盘点任务（仅进行中）、编辑自己档案的自填字段 |
+
+> 前端 `/admin` 导航按角色收敛；`/api/admin/logs`、`/api/admin/trash`、部门写接口、users 增/删为 AdminOnly，users 改由后端按“部长本部门内、不可 admin”校验。
 
 ---
 
@@ -154,6 +156,37 @@ POST /api/inventory                                    → 新增零件
 PUT  /api/inventory/{id}                               → 更新数量
 ```
 
+### 盘点 (Stocktake · /api/material)
+
+流程与状态机：
+
+```
+发起(staff) → in_progress
+   ├ pause ⇄ resume(暂停=成员停提,发起者可继续编辑)
+   ├ cancel → cancelled(作废留痕,不改库存)
+   └ delete → 硬删(任何未合并状态含作废可删)
+全部项有实盘 → finalize → pending_merge(结果冻结)
+复核       → merge   → completed(差异一次性写回库存,终态)
+```
+
+管理权：**发起者 + admin** 全权（编辑单行实盘/备注纠错、改派核查人[清空该行需重核]、增/删盘点项、暂停/恢复/取消/删除/两步合并）；其它部长只读；成员仅提交自己的任务（仅 in_progress，暂停即拒）。
+
+关键端点：
+
+```
+POST   /api/material/stocktake/start  { type, grade }
+POST   /api/material/stocktake/{id}/finalize          # 完成盘点(冻结结果)
+POST   /api/material/stocktake/{id}/merge             # 合并入库(差异入账)
+POST   /api/material/stocktake/{id}/pause|resume|cancel
+DELETE /api/material/stocktake/{id}
+POST   /api/material/stocktake/{id}/items  { inventoryItemId }        # 补项
+DELETE /api/material/stocktake/{id}/items/{inventoryItemId}           # 移除项
+POST   /api/material/stocktake/{id}/items/{inventoryItemId}/assign { userId }
+PUT    /api/material/stocktake/{id}/item/{itemId} { actualQty, note } # 发起者纠错
+POST   /api/material/stocktake/{id}/batch-check                        # 成员提交
+GET    /api/material/stocktake/my-tasks                                # 我的任务
+```
+
 ### 飞行日志
 
 ```
@@ -173,13 +206,15 @@ POST /api/ai/search   { query }                       → [{ source, snippet, ..
 ```
 GET    /api/admin/stats                                → 系统统计
 GET    /api/admin/users                                → 用户列表
-POST   /api/admin/users        { username, password, role, departmentId }
-PUT    /api/admin/users/{id}   { role, departmentId, password }
-DELETE /api/admin/users/{id}
+POST   /api/admin/users        { username, password, role, departmentId }  # AdminOnly(部长用邀请码)
+PUT    /api/admin/users/{id}   { role, departmentId, password }             # 部长可改本部门非admin(不可admin)
+DELETE /api/admin/users/{id}                                                # AdminOnly
 GET    /api/admin/departments                          → 部门列表
-POST   /api/admin/departments  { name, description }
-PUT    /api/admin/departments/{id}
-DELETE /api/admin/departments/{id}
+POST   /api/admin/departments  { name, description }                        # AdminOnly
+PUT    /api/admin/departments/{id}                                          # AdminOnly
+DELETE /api/admin/departments/{id}                                          # AdminOnly
+POST   /api/admin/invite-codes { departmentId,maxUses,daysValid }           # staff;部长仅本部门或不限
+GET    /api/admin/invite-codes                                              # admin 全部;部长仅自己的
 POST   /api/admin/knowledge/write  { path, content }   → 写入文档
 DELETE /api/admin/knowledge/delete?path=...             → 删除文档
 POST   /api/admin/documents/upload (multipart/form-data) → 上传文档
