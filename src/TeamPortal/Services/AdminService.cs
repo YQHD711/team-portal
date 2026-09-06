@@ -47,14 +47,22 @@ public class AdminService
         return user;
     }
 
-    public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? username, string? currentRole, string? currentDept)
+    public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? username,
+        string? currentRole, string? currentDept, int currentUserId)
     {
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
-        if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
-        // Non-admin may not promote anyone to admin/部长 — only admin can write those role values (C-1 fix)
-        if (currentRole != "admin" && userRole is not null && (userRole == "admin" || userRole == "部长"))
-            return false;
+
+        // 部长在“本部门内”最大自主:可编辑自己或本部门任意非 admin(含同部门其他部长、可授予部长、可调部门);
+        // 但永不触碰 admin,永不授予 admin,不能编辑他部门成员。
+        if (currentRole != "admin")
+        {
+            if (user.Role == "admin") return false;                     // 不可操作 admin
+            var actorSelf = currentUserId == id;
+            var sameDept = user.Department?.Name == currentDept;
+            if (!actorSelf && !sameDept) return false;                  // 部长只能动自己或本部门成员
+            if (userRole is not null && userRole == "admin") return false; // 不可授予 admin
+        }
 
         var changes = new List<string>();
         if (!string.IsNullOrWhiteSpace(username) && user.Username != username)

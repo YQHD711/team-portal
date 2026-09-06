@@ -10,6 +10,9 @@ import { DeptFormModal, UserFormModal } from "./OrgModals";
 interface Props {
   users: OrgUser[];
   depts: Dept[];
+  isAdmin: boolean;
+  /** 部长视角限定本部门;admin 为 null(全量) */
+  ownDeptId: number | null;
   passedCertsByUser: Map<number, Certification[]>;
   examPassesByUser: Map<number, ExamPass[]>;
   skillsByUser: Map<number, string | null>;
@@ -23,13 +26,14 @@ const ROLE_BADGE: Record<string, string> = {
   member: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
 };
 
-export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skillsByUser, examsByDept, onChanged }: Props) {
+export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, examPassesByUser, skillsByUser, examsByDept, onChanged }: Props) {
   const [deptModal, setDeptModal] = useState<{ open: boolean; edit: Dept | null }>({ open: false, edit: null });
   const [userModal, setUserModal] = useState<{ open: boolean; edit: OrgUser | null }>({ open: false, edit: null });
 
-  // Group users by department, 未分配 last
-  const groups = depts.map(d => ({ dept: d, members: users.filter(u => u.departmentId === d.id) }));
-  const unassigned = users.filter(u => !u.departmentId || !depts.some(d => d.id === u.departmentId));
+  // 部长只看自己部门;admin 看全部(未分配仅 admin 展示)
+  const viewDepts = isAdmin ? depts : depts.filter(d => d.id === ownDeptId);
+  const groups = viewDepts.map(d => ({ dept: d, members: users.filter(u => u.departmentId === d.id) }));
+  const unassigned = isAdmin ? users.filter(u => !u.departmentId || !depts.some(d => d.id === u.departmentId)) : [];
 
   const deleteDept = async (d: Dept) => {
     if (!confirm(`确认删除部门 "${d.name}"？其队员将变为未分配`)) return;
@@ -43,14 +47,16 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
 
   return (
     <div className="space-y-8">
-      {/* ── 部门区 ── */}
+      {/* ── 部门区(增删改仅 admin) ── */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">部门</h2>
-          <button onClick={() => setDeptModal({ open: true, edit: null })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
-            <Plus className="h-4 w-4" />添加部门
-          </button>
+          {isAdmin && (
+            <button onClick={() => setDeptModal({ open: true, edit: null })}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+              <Plus className="h-4 w-4" />添加部门
+            </button>
+          )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map(({ dept, members }) => (
@@ -63,10 +69,12 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
                     <div className="text-xs text-muted mt-0.5 line-clamp-2">{dept.description || "暂无描述"}</div>
                   </div>
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4 mt-3 text-xs text-muted">
                 <span className="inline-flex items-center gap-1"><UsersIcon className="h-3.5 w-3.5" />{members.length} 人</span>
@@ -74,7 +82,7 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
               </div>
             </div>
           ))}
-          {depts.length === 0 && (
+          {groups.length === 0 && (
             <div className="sm:col-span-2 lg:col-span-3 text-center py-10 text-faint">
               <Building2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无部门
             </div>
@@ -82,23 +90,25 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
         </div>
       </section>
 
-      {/* ── 队员区(按部门分组) ── */}
+      {/* ── 队员区(添加/删除仅 admin;部长保留本部门账号编辑) ── */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">队员</h2>
-          <button onClick={() => setUserModal({ open: true, edit: null })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
-            <Plus className="h-4 w-4" />添加队员
-          </button>
+          {isAdmin && (
+            <button onClick={() => setUserModal({ open: true, edit: null })}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+              <Plus className="h-4 w-4" />添加队员
+            </button>
+          )}
         </div>
 
         {groups.map(({ dept, members }) => (
-          <MemberGroup key={dept.id} title={dept.name} members={members}
+          <MemberGroup key={dept.id} title={dept.name} members={members} isAdmin={isAdmin}
             passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser}
             onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
         ))}
         {unassigned.length > 0 && (
-          <MemberGroup title="未分配" members={unassigned}
+          <MemberGroup title="未分配" members={unassigned} isAdmin={isAdmin}
             passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser}
             onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
         )}
@@ -108,12 +118,13 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
       </section>
 
       {/* ── 弹窗 ── */}
-      {deptModal.open && (
+      {deptModal.open && isAdmin && (
         <DeptFormModal dept={deptModal.edit} onClose={() => setDeptModal({ open: false, edit: null })}
           onSaved={() => { setDeptModal({ open: false, edit: null }); onChanged(); }} />
       )}
       {userModal.open && (
-        <UserFormModal user={userModal.edit} depts={depts} onClose={() => setUserModal({ open: false, edit: null })}
+        <UserFormModal user={userModal.edit} depts={depts} isAdmin={isAdmin}
+          onClose={() => setUserModal({ open: false, edit: null })}
           onSaved={() => { setUserModal({ open: false, edit: null }); onChanged(); }} />
       )}
     </div>
@@ -121,8 +132,8 @@ export function OrgTab({ users, depts, passedCertsByUser, examPassesByUser, skil
 }
 
 // ── 部门分组内的队员卡片 ──
-function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skillsByUser, onEdit, onDelete }: {
-  title: string; members: OrgUser[];
+function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByUser, skillsByUser, onEdit, onDelete }: {
+  title: string; members: OrgUser[]; isAdmin: boolean;
   passedCertsByUser: Map<number, Certification[]>;
   examPassesByUser: Map<number, ExamPass[]>;
   skillsByUser: Map<number, string | null>;
@@ -140,6 +151,8 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
           const skills = (skillsByUser.get(u.id) || "").split(",").map(s => s.trim()).filter(Boolean);
           const certs = passedCertsByUser.get(u.id) || [];
           const examPasses = examPassesByUser.get(u.id) || [];
+          const canEdit = isAdmin || u.role !== "admin"; // 部长可编辑本部门非 admin(含同部门部长/自己)
+          const canDelete = isAdmin && u.role !== "admin" && u.role !== "部长";
           return (
             <Link key={u.id} href={`/admin/profiles/${u.id}`}
               className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
@@ -156,8 +169,10 @@ function MemberGroup({ title, members, passedCertsByUser, examPassesByUser, skil
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                  {u.role !== "admin" && u.role !== "部长" && (
+                  {canEdit && (
+                    <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
+                  )}
+                  {canDelete && (
                     <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </div>
