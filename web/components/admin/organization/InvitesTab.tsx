@@ -18,7 +18,7 @@ export function InvitesTab({ depts, onChanged }: { depts: Dept[]; onChanged: () 
   useEffect(() => { fetchInvites(); }, []);
 
   const generate = async () => {
-    await api.post("/api/admin/invite-codes", form);
+    await api.post("/api/admin/invite-codes", { ...form, departmentId: form.departmentId || null });
     setShowForm(false); fetchInvites();
   };
 

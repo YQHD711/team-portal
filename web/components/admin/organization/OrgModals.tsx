@@ -37,13 +37,18 @@ export function DeptFormModal({ dept, onClose, onSaved }: { dept: Dept | null; o
 }
 
 // ── 队员弹窗(添加/编辑角色部门) ──
-export function UserFormModal({ user, depts, onClose, onSaved }: { user: OrgUser | null; depts: Dept[]; onClose: () => void; onSaved: () => void }) {
+export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }: {
+  user: OrgUser | null; depts: Dept[]; isAdmin?: boolean; onClose: () => void; onSaved: () => void;
+}) {
   const [form, setForm] = useState({
     username: user?.username || "",
     password: "",
     role: user?.role || "member",
     departmentId: user?.departmentId ?? 0,
   });
+
+  // 非 admin:不可“添加队员”，也不可编辑 admin
+  if (!isAdmin && (user === null || user.role === "admin")) return null;
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,8 +72,10 @@ export function UserFormModal({ user, depts, onClose, onSaved }: { user: OrgUser
           <div><label className="block text-sm font-medium mb-1">密码{user && " (留空不修改)"}</label><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={inputCls} required={!user} /></div>
           <div><label className="block text-sm font-medium mb-1">角色</label>
             <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls}>
-              <option value="member">成员</option><option value="部长">部长</option><option value="admin">管理员</option>
+              <option value="member">成员</option><option value="部长">部长</option>
+              {isAdmin && <option value="admin">管理员</option>}
             </select>
+            {!isAdmin && <p className="text-xs text-faint mt-1">部长仅可在 成员↔部长 间调整，不可授予管理员</p>}
           </div>
           <div><label className="block text-sm font-medium mb-1">部门</label>
             <select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className={inputCls}>

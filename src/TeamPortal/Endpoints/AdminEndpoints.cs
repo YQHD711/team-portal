@@ -53,9 +53,9 @@ public static class AdminEndpoints
 
         admin.MapPut("/users/{id:int}", async (int id, UpdateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
-            var (role, dept, _) = await GetUserCtx(user, db);
+            var (role, dept, actorId) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
-            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept);
+            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId);
             if (ok)
             {
                 var changes = new List<string>();
@@ -84,7 +84,7 @@ public static class AdminEndpoints
                 notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("无法删除", statusCode: 400);
-        });
+        }).RequireAuthorization("AdminOnly");
 
         // ── Departments ──
         admin.MapGet("/departments", async (AdminService svc) => Results.Ok(await svc.ListDepartments()));
@@ -98,7 +98,7 @@ public static class AdminEndpoints
                 data: new { name = req.Name }, ipAddress: LogService.ClientIp(ctx));
             notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/organization", targetRole: "staff");
             return Results.Ok(dept);
-        });
+        }).RequireAuthorization("AdminOnly");
 
         admin.MapPut("/departments/{id:int}", async (int id, UpdateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -112,7 +112,7 @@ public static class AdminEndpoints
                 notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
-        });
+        }).RequireAuthorization("AdminOnly");
 
         admin.MapDelete("/departments/{id:int}", async (int id, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -126,7 +126,7 @@ public static class AdminEndpoints
                 notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
-        });
+        }).RequireAuthorization("AdminOnly");
 
         // ── Knowledge ──
         admin.MapPost("/knowledge/write", async (KnowledgeWriteReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
