@@ -312,8 +312,16 @@ public class MaterialServiceTests
 
         await svc.UpdateStocktakeItem(st.Id, 1, 4, null, 2);
         await svc.UpdateStocktakeItem(st.Id, 2, 5, null, 2);
-        await svc.CompleteStocktake(st.Id);
 
+        var frozen = await svc.FinalizeStocktake(st.Id);
+        Assert.NotNull(frozen);
+        Assert.Equal("pending_merge", frozen!.Status);
+        // 冻结未合并,库存未动
+        Assert.Equal(5, (await db.InventoryItems.FindAsync(1))!.Quantity);
+        Assert.Equal(3, (await db.InventoryItems.FindAsync(2))!.Quantity);
+
+        await svc.MergeStocktake(st.Id);
+        Assert.Equal("completed", (await db.Stocktakes.FindAsync(st.Id))!.Status);
         Assert.Equal(4, (await db.InventoryItems.FindAsync(1))!.Quantity);
         Assert.Equal(5, (await db.InventoryItems.FindAsync(2))!.Quantity);
     }
@@ -343,7 +351,8 @@ public class MaterialServiceTests
         Assert.Equal(12, allItems[0].ActualQty);
         Assert.Equal(7, allItems[1].ActualQty);
 
-        await svc.CompleteStocktake(st.Id);
+        await svc.FinalizeStocktake(st.Id);
+        await svc.MergeStocktake(st.Id);
         Assert.Equal("completed", (await db.Stocktakes.FindAsync(st.Id))!.Status);
         Assert.Equal(12, (await db.InventoryItems.FindAsync(1))!.Quantity);
         Assert.Equal(7, (await db.InventoryItems.FindAsync(2))!.Quantity);

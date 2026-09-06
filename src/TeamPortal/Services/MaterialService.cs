@@ -228,6 +228,9 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
 
     public async Task<StocktakeItem?> UpdateStocktakeItem(int stocktakeId, int itemId, int? actualQty, string? note, int checkedByUserId)
     {
+        // 结果已冻结/已合并/已作废不可再改
+        var st = await _db.Stocktakes.AsNoTracking().Where(x => x.Id == stocktakeId).Select(x => x.Status).FirstOrDefaultAsync();
+        if (st is not ("in_progress" or "paused")) return null;
         var si = await _db.StocktakeItems.FirstOrDefaultAsync(s => s.StocktakeId == stocktakeId && s.InventoryItemId == itemId);
         if (si is null) return null;
         si.ActualQty = actualQty; si.Difference = actualQty.HasValue ? actualQty.Value - si.SystemQty : null;
@@ -236,10 +239,71 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
         return si;
     }
 
-    public async Task<Stocktake?> CompleteStocktake(int id)
+    /// <summary>发起者/admin:暂停(成员停提,发起者可继续编辑)</summary>
+    public async Task<Stocktake?> PauseStocktake(int id)
+    {
+        var st = await _db.Stocktakes.FirstOrDefaultAsync(s => s.Id == id);
+        if (st is null || st.Status != "in_progress") return null;
+        st.Status = "paused";
+        await _db.SaveChangesAsync();
+        _log?.Info("inventory", $"Stocktake #{id} paused");
+        return st;
+    }
+
+    public async Task<Stocktake?> ResumeStocktake(int id)
+    {
+        var st = await _db.Stocktakes.FirstOrDefaultAsync(s => s.Id == id);
+        if (st is null || st.Status != "paused") return null;
+        st.Status = "in_progress";
+        await _db.SaveChangesAsync();
+        _log?.Info("inventory", $"Stocktake #{id} resumed");
+        return st;
+    }
+
+    /// <summary>取消(作废):留痕、不改库存</summary>
+    public async Task<Stocktake?> CancelStocktake(int id)
+    {
+        var st = await _db.Stocktakes.FirstOrDefaultAsync(s => s.Id == id);
+        if (st is null || (st.Status is not ("in_progress" or "paused"))) return null;
+        st.Status = "cancelled";
+        await _db.SaveChangesAsync();
+        _log?.Warn("inventory", $"Stocktake #{id} cancelled");
+        _notify?.Notify("盘点已取消", $"「{st.Type}/{st.Grade}」盘点已作废", "/inventory/stocktake", targetRole: "staff");
+        return st;
+    }
+
+    /// <summary>删除(硬删):仅未合并(含作废)可删,彻底移除该盘点及明细</summary>
+    public async Task<bool> DeleteStocktake(int id)
+    {
+        var st = await _db.Stocktakes.FirstOrDefaultAsync(s => s.Id == id);
+        if (st is null || st.Status == "completed") return false;
+        _db.StocktakeItems.RemoveRange(_db.StocktakeItems.Where(x => x.StocktakeId == id));
+        _db.Stocktakes.Remove(st);
+        await _db.SaveChangesAsync();
+        _log?.Warn("inventory", $"Stocktake #{id} deleted");
+        return true;
+    }
+
+    /// <summary>第一步“完成盘点”:冻结结果(pending_merge),尚未动库存</summary>
+    public async Task<Stocktake?> FinalizeStocktake(int id)
+    {
+        var st = await _db.Stocktakes.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (st is null || st.Status is not ("in_progress" or "paused")) return null;
+        if (st.Items.Any(x => !x.ActualQty.HasValue))
+            throw new InvalidOperationException("还有未盘项，请补全后再完成盘点");
+        st.Status = "pending_merge";
+        await _db.SaveChangesAsync();
+        var diffCount = st.Items.Count(x => x.Difference != 0);
+        _log?.Info("inventory", $"Stocktake #{id} finalized (pending merge), {diffCount} diffs");
+        _notify?.Notify("盘点待入账", $"「{st.Type}/{st.Grade}」盘点结果已冻结，请复核后合并入库", "/inventory/stocktake", targetRole: "staff");
+        return st;
+    }
+
+    /// <summary>第二步“合并入库”:差异一次性写回库存(仅 pending_merge 可调,幂等终态 completed)</summary>
+    public async Task<Stocktake?> MergeStocktake(int id)
     {
         var st = await _db.Stocktakes.Include(s => s.Items).ThenInclude(si => si.InventoryItem).FirstOrDefaultAsync(s => s.Id == id);
-        if (st is null || st.Status == "completed") return null;
+        if (st is null || st.Status != "pending_merge") return null;
         foreach (var si in st.Items.Where(x => x.Difference != 0 && x.ActualQty.HasValue))
         {
             si.InventoryItem!.Quantity = si.ActualQty!.Value; si.InventoryItem.UpdatedAt = DateTime.UtcNow;
@@ -253,9 +317,50 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
         st.Status = "completed"; st.CompletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         var diffCount = st.Items.Count(x => x.Difference != 0);
-        _log?.Info("inventory", $"Stocktake #{id} completed, {diffCount} diffs");
-        _notify?.Notify("盘点完成", $"「{st.Type}/{st.Grade}」盘点已完成，{diffCount} 项差异已入账", "/inventory/stocktake", targetRole: "staff");
+        _log?.Info("inventory", $"Stocktake #{id} merged, {diffCount} diffs");
+        _notify?.Notify("盘点已入账", $"「{st.Type}/{st.Grade}」{diffCount} 项差异已合并入库存", "/inventory/stocktake", targetRole: "staff");
         return st;
+    }
+
+    /// <summary>发起者编辑:改派核查人(该行实盘清空,需重核)。userId=null 表示取消指派</summary>
+    public async Task<StocktakeItem?> ReassignStocktakeItem(int stocktakeId, int itemId, int? userId)
+    {
+        var st = await _db.Stocktakes.AsNoTracking().Where(x => x.Id == stocktakeId).Select(x => x.Status).FirstOrDefaultAsync();
+        if (st is not ("in_progress" or "paused")) return null;
+        var si = await _db.StocktakeItems.FirstOrDefaultAsync(x => x.StocktakeId == stocktakeId && x.InventoryItemId == itemId);
+        if (si is null) return null;
+        si.CheckedByUserId = userId;
+        si.ActualQty = null; si.Difference = null; si.Note = null; // 换人重核
+        await _db.SaveChangesAsync();
+        return si;
+    }
+
+    /// <summary>发起者编辑:补入一项(同 grade、未包含)</summary>
+    public async Task<StocktakeItem?> AddStocktakeItem(int stocktakeId, int inventoryItemId)
+    {
+        var st = await _db.Stocktakes.Include(s => s.Items).FirstOrDefaultAsync(x => x.Id == stocktakeId);
+        if (st is null || st.Status is not ("in_progress" or "paused")) return null;
+        if (st.Items.Any(i => i.InventoryItemId == inventoryItemId)) return null;
+        var item = await _db.InventoryItems.FindAsync(inventoryItemId);
+        if (item is null || item.Grade != st.Grade) return null;
+        var si = new StocktakeItem { StocktakeId = stocktakeId, InventoryItemId = inventoryItemId, SystemQty = item.Quantity };
+        _db.StocktakeItems.Add(si);
+        await _db.SaveChangesAsync();
+        _log?.Info("inventory", $"Stocktake #{stocktakeId}: item #{inventoryItemId} added");
+        return si;
+    }
+
+    /// <summary>发起者编辑:移除一项(仅未合并;该行未入账)</summary>
+    public async Task<bool> RemoveStocktakeItem(int stocktakeId, int inventoryItemId)
+    {
+        var st = await _db.Stocktakes.AsNoTracking().Where(x => x.Id == stocktakeId).Select(x => x.Status).FirstOrDefaultAsync();
+        if (st is not ("in_progress" or "paused")) return false;
+        var si = await _db.StocktakeItems.FirstOrDefaultAsync(x => x.StocktakeId == stocktakeId && x.InventoryItemId == inventoryItemId);
+        if (si is null) return false;
+        _db.StocktakeItems.Remove(si);
+        await _db.SaveChangesAsync();
+        _log?.Info("inventory", $"Stocktake #{stocktakeId}: item #{inventoryItemId} removed");
+        return true;
     }
 
     public async Task AssignStocktakeItems(int stocktakeId, Dictionary<int, int> itemUserMap)
@@ -300,6 +405,11 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
 
     public async Task BatchCheckStocktakeItems(int stocktakeId, int userId, List<StocktakeItemResult> results)
     {
+        // 仅进行中可提交:暂停/待入账/已合并/已作废均拒绝
+        var stStatus = await _db.Stocktakes.AsNoTracking().Where(x => x.Id == stocktakeId).Select(x => x.Status).FirstOrDefaultAsync();
+        if (stStatus != "in_progress")
+            throw new InvalidOperationException("盘点当前不可提交（已暂停或已结束）");
+
         // 性能 #3:预加载 + 内存匹配 → 100 项从 100 次查询降为 1 次
         if (results.Count == 0) { /* fall through to count */ }
         else
