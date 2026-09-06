@@ -53,11 +53,16 @@ const staffNav = [
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
 ];
 
-const adminNav = [
+/** 管理子菜单 — 部长(staff)可见 */
+const adminNavStaff = [
   { href: "/admin/organization", label: "组织架构", icon: Users },
   { href: "/admin/exams", label: "考核管理", icon: ClipboardCheck },
   { href: "/admin/invites", label: "邀请码", icon: Ticket },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
+];
+
+/** 仅管理员可见(系统级,部长不显示也不可访问) */
+const adminNavOnly = [
   { href: "/admin/settings", label: "系统设置", icon: Settings },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
   { href: "/admin/trash", label: "回收站", icon: Trash2 },
@@ -110,6 +115,7 @@ export function Sidebar() {
 
   const role = user?.role ?? null;
   const isStaff = role === "admin" || role === "部长";
+  const isAdmin = role === "admin";
 
   const close = () => setOpen(false);
   const pathname = usePathname();
@@ -208,7 +214,7 @@ export function Sidebar() {
                   {staffNav.map((item) => (
                     <NavLink key={item.href} item={item} onNavigate={close} />
                   ))}
-                  {adminNav.map((item) => {
+                  {[...adminNavStaff, ...(isAdmin ? adminNavOnly : [])].map((item) => {
                     const active = isActive(pathname, item.href);
                     return (
                       <Link key={item.href} href={item.href} onClick={close}
