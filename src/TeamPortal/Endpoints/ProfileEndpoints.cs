@@ -216,6 +216,19 @@ public static class ProfileEndpoints
                 data: new { action = "competition.delete", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);
         });
+
+        // ── 参赛记录 CSV 批量导入(仅管理员) ──
+        app.MapPost("/api/admin/competitions/import", async (IFormFile file, ClaimsPrincipal user, ProfileService svc, LogService log, HttpContext ctx) =>
+        {
+            if (file is null || file.Length == 0) return Results.Problem("请上传 CSV 文件", statusCode: 400);
+            using var reader = new StreamReader(file.OpenReadStream());
+            var csv = await reader.ReadToEndAsync();
+            var (imported, skipped) = await svc.ImportCompetitionsCsv(csv);
+            log.Audit("profile", user.Identity?.Name ?? "unknown", "competition-import", null,
+                data: new { imported, skippedCount = skipped.Count, skipped = skipped.Take(20).Select(s => $"{s.Username}:{s.Reason}").ToList() },
+                ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
+            return Results.Ok(new { imported, skipped, message = $"成功导入 {imported} 条" + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 条" : "") });
+        }).RequireAuthorization("AdminOnly").DisableAntiforgery();
     }
 }
 

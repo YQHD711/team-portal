@@ -99,6 +99,24 @@ public class ProfilePermissionsTests
     }
 
     [Fact]
+    public async Task ImportCompetitionsCsv_ParsesAndSkipsMissing()
+    {
+        var db = CreateContext();
+        var svc = new ProfileService(db, new NullLogService(new TestScopeFactory(db)));
+        var csv = "memberA,CUADC,2026-09-01,竞速,一等奖,http://x,备注\nmissing,X,2026-09-01,竞速,,,,未知";
+
+        var (imported, skipped) = await svc.ImportCompetitionsCsv(csv);
+
+        Assert.Equal(1, imported);
+        var row = Assert.Single(skipped);
+        Assert.Equal("missing", row.Username);
+        Assert.Contains("队员不存在", row.Reason);
+        var record = Assert.Single(db.CompetitionRecords);
+        Assert.Equal("CUADC", record.CompetitionName);
+        Assert.Equal("一等奖", record.Ranking);
+    }
+
+    [Fact]
     public async Task UpdateProfile_StaffFields_ChangeWhenProvided()
     {
         var db = CreateContext();
