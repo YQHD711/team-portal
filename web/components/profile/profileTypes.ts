@@ -11,6 +11,10 @@ export interface CompetitionRecord { id: number; competitionName: string; date: 
 
 export const LEVELS = ["学员", "初级", "中级", "高级", "教练"];
 export const FLIGHT_TYPES = ["固定翼", "多旋翼", "穿越机", "凤凰飞行器", "龙飞行器", "直升机", "其他"];
+/** 飞行类数据（飞手等级/累计飞行小时/首次飞行日期）仅向飞训部成员展示 */
+export const FLIGHT_TRAINING_DEPT = "飞训部";
+export const isFlightDept = (p: { department: string | null } | null | undefined) => p?.department === FLIGHT_TRAINING_DEPT;
+
 export const LEVEL_COLORS: Record<string, string> = {
   "学员": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   "初级": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",

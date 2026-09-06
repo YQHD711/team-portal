@@ -51,7 +51,7 @@ public static class ProfileEndpoints
         // ── 个人档案 ──
         var profileGroup = app.MapGroup("/api/profile").RequireAuthorization();
 
-        profileGroup.MapGet("/", async (ClaimsPrincipal user, ProfileService svc) =>
+        profileGroup.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
             var userId = GetUserId(user);
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
@@ -59,12 +59,17 @@ public static class ProfileEndpoints
             var profile = await svc.GetOrCreateProfile(userId.Value);
             var training = await svc.GetTrainingRecords(userId.Value);
             var competitions = await svc.GetCompetitionRecords(userId.Value);
+            var department = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId.Value)
+                .Select(u => u.Department != null ? u.Department.Name : null)
+                .FirstOrDefaultAsync();
 
             return Results.Ok(new
             {
                 profile.Id, profile.UserId, profile.Level, profile.TotalFlightHours,
                 profile.FirstFlightDate, profile.Bio, profile.EmergencyContact,
                 profile.EmergencyPhone, profile.FlightTypes, profile.Skills, profile.UpdatedAt,
+                Department = department,
                 TrainingRecords = training,
                 CompetitionRecords = competitions
             });

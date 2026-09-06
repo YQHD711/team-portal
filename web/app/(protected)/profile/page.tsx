@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { User, GraduationCap, Trophy, Save, Loader2, BadgeCheck, Tag } from "lucide-react";
 import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
 
 const FLIGHT_TYPES = ["固定翼", "多旋翼", "穿越机", "凤凰飞行器", "龙飞行器", "直升机", "其他"];
+/** 飞行类数据（飞手等级/累计飞行小时/首次飞行日期)仅向飞训部成员展示 */
+const FLIGHT_TRAINING_DEPT = "飞训部";
 const LEVEL_COLORS: Record<string, string> = {
   "学员": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   "初级": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
@@ -14,7 +17,7 @@ const LEVEL_COLORS: Record<string, string> = {
   "教练": "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
-interface Profile { id: number; userId: number; level: string; totalFlightHours: number; firstFlightDate: string | null; bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; skills: string | null; updatedAt: string; trainingRecords: TrainingRecord[]; competitionRecords: CompetitionRecord[]; }
+interface Profile { id: number; userId: number; department: string | null; level: string; totalFlightHours: number; firstFlightDate: string | null; bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; skills: string | null; updatedAt: string; trainingRecords: TrainingRecord[]; competitionRecords: CompetitionRecord[]; }
 interface TrainingRecord { id: number; courseName: string; score: number | null; examDate: string; examiner: string | null; notes: string | null; createdAt: string; }
 interface CompetitionRecord { id: number; competitionName: string; date: string; event: string | null; ranking: string | null; certificate: string | null; notes: string | null; createdAt: string; }
 
@@ -76,6 +79,9 @@ export default function ProfilePage() {
     finally { setSaving(false); }
   };
 
+  // 等级/时长/首飞属组织评定，仅飞训部成员展示（其余部门含管理员画面隐藏）
+  const showFlightData = profile?.department === FLIGHT_TRAINING_DEPT;
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
   return (
@@ -88,10 +94,15 @@ export default function ProfilePage() {
         <div>
           <h1 className="text-2xl font-bold">我的档案</h1>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${LEVEL_COLORS[profile?.level || "学员"]}`}>
-              {profile?.level || "学员"}
-            </span>
-            <span className="text-sm text-muted">{profile?.totalFlightHours || 0} 飞行小时</span>
+            <span className="text-sm text-muted">{profile?.department || "未分配部门"}</span>
+            {showFlightData && (
+              <>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${LEVEL_COLORS[profile?.level || "学员"]}`}>
+                  {profile?.level || "学员"}
+                </span>
+                <span className="text-sm text-muted">{profile?.totalFlightHours || 0} 飞行小时</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -117,10 +128,12 @@ export default function ProfilePage() {
           {editMode ? (
             <>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">首次飞行日期</label>
-                  <input type="date" value={firstFlight} onChange={e => setFirstFlight(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
-                </div>
+                {showFlightData && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">首次飞行日期</label>
+                    <input type="date" value={firstFlight} onChange={e => setFirstFlight(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-1">紧急联系人</label>
                   <input value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="姓名" />
@@ -163,9 +176,13 @@ export default function ProfilePage() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted">飞手等级</span><p className="font-medium mt-0.5">{profile?.level || "-"}</p></div>
-                <div><span className="text-muted">累计飞行小时</span><p className="font-medium mt-0.5">{profile?.totalFlightHours || 0} 小时</p></div>
-                <div><span className="text-muted">首次飞行日期</span><p className="font-medium mt-0.5">{profile?.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
+                {showFlightData && (
+                  <>
+                    <div><span className="text-muted">飞手等级</span><p className="font-medium mt-0.5">{profile?.level || "-"}</p></div>
+                    <div><span className="text-muted">累计飞行小时</span><p className="font-medium mt-0.5">{profile?.totalFlightHours || 0} 小时</p></div>
+                    <div><span className="text-muted">首次飞行日期</span><p className="font-medium mt-0.5">{profile?.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
+                  </>
+                )}
                 <div><span className="text-muted">最后更新</span><p className="font-medium mt-0.5">{profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString("zh-CN") : "-"}</p></div>
                 <div><span className="text-muted">紧急联系人</span><p className="font-medium mt-0.5">{profile?.emergencyContact || "-"}</p></div>
                 <div><span className="text-muted">紧急联系电话</span><p className="font-medium mt-0.5">{profile?.emergencyPhone || "-"}</p></div>
