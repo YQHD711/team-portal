@@ -16,6 +16,7 @@ const baseActionLabels: Record<string, string> = {
   import: "导入", create: "创建", update: "修改", delete: "删除",
   settings: "系统设置", invite: "邀请", upload: "上传",
   purchase: "标记已购买", receive: "收货入库", "dept-approve": "部长审批", "admin-approve": "管理员审批",
+  profile: "档案",
 };
 
 /* 按 (targetType, action) 精化的标签 */

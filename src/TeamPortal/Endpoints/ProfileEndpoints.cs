@@ -71,13 +71,15 @@ public static class ProfileEndpoints
         });
 
         // 自改接口：等级/时长属组织评定，个人不传(服务端不更新)，其余自填字段保留
-        profileGroup.MapPut("/", async (UpdateProfileRequest req, ClaimsPrincipal user, ProfileService svc) =>
+        profileGroup.MapPut("/", async (UpdateProfileRequest req, ClaimsPrincipal user, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             var userId = GetUserId(user);
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
 
             var ok = await svc.UpdateProfile(userId.Value, null, null, req.FirstFlight,
                 req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes, req.Skills);
+            log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.Value.ToString(),
+                data: new { action = "info.update.self", bio = req.Bio != null, skills = req.Skills }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("档案不存在", statusCode: 404);
         });
 
@@ -113,41 +115,49 @@ public static class ProfileEndpoints
             return profile is not null ? Results.Ok(profile) : Results.Problem("档案不存在", statusCode: 404);
         });
 
-        adminGroup.MapPut("/{userId:int}", async (int userId, UpdateProfileRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPut("/{userId:int}", async (int userId, UpdateProfileRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.UpdateProfile(userId, req.Level, req.FlightHours, req.FirstFlight,
                 req.Bio, req.EmergencyContact, req.EmergencyPhone, req.FlightTypes, req.Skills);
+            log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "info.update", level = req.Level, flightHours = req.FlightHours, firstFlight = req.FirstFlight, skills = req.Skills }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("档案不存在", statusCode: 404);
         });
 
         // 培训记录
-        adminGroup.MapPost("/{userId:int}/training", async (int userId, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPost("/{userId:int}/training", async (int userId, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             if (string.IsNullOrWhiteSpace(req.CourseName))
                 return Results.Problem("课程名称不能为空", statusCode: 400);
             var record = await svc.AddTrainingRecord(userId, req.CourseName, req.Score, req.ExamDate, req.Examiner, req.Notes);
+            log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "training.create", id = record.Id, courseName = req.CourseName, score = req.Score }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return Results.Created($"/api/admin/profiles/{userId}/training/{record.Id}", record);
         });
 
-        adminGroup.MapPut("/{userId:int}/training/{id:int}", async (int userId, int id, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPut("/{userId:int}/training/{id:int}", async (int userId, int id, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.UpdateTrainingRecord(id, req.CourseName, req.Score, req.ExamDate, req.Examiner, req.Notes);
+            if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "training.update", id, courseName = req.CourseName }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("记录不存在", statusCode: 404);
         });
 
-        adminGroup.MapDelete("/{userId:int}/training/{id:int}", async (int userId, int id, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapDelete("/{userId:int}/training/{id:int}", async (int userId, int id, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.DeleteTrainingRecord(id);
+            if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "training.delete", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);
         });
 
         // 培训批量录入:独立 group /api/admin/training;部长仅可勾选本部门其他成员
         var trainingAdmin = app.MapGroup("/api/admin/training").RequireAuthorization();
-        trainingAdmin.MapPost("/batch", async (BatchTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        trainingAdmin.MapPost("/batch", async (BatchTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             var (role, deptId, actorId) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可批量录入", statusCode: 403);
@@ -167,6 +177,8 @@ public static class ProfileEndpoints
             try
             {
                 var count = await svc.BatchAddTrainingForUsers(req.UserIds, req.CourseName, req.ExamDate, req.Score, req.Examiner, req.Notes);
+                log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", null,
+                    data: new { action = "training.batch", count, userCount = req.UserIds.Count, courseName = req.CourseName }, ipAddress: LogService.ClientIp(ctx), userId: actorId);
                 return Results.Ok(new { count, message = $"已为 {count} 人录入培训" });
             }
             catch (ArgumentException ex)
@@ -176,26 +188,32 @@ public static class ProfileEndpoints
         });
 
         // 参赛记录
-        adminGroup.MapPost("/{userId:int}/competitions", async (int userId, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPost("/{userId:int}/competitions", async (int userId, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             if (string.IsNullOrWhiteSpace(req.CompetitionName))
                 return Results.Problem("比赛名称不能为空", statusCode: 400);
             var record = await svc.AddCompetitionRecord(userId, req.CompetitionName, req.Date, req.Event, req.Ranking, req.Certificate, req.Notes);
+            log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "competition.create", id = record.Id, competitionName = req.CompetitionName }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return Results.Created($"/api/admin/profiles/{userId}/competitions/{record.Id}", record);
         });
 
-        adminGroup.MapPut("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapPut("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.UpdateCompetitionRecord(id, req.CompetitionName, req.Date, req.Event, req.Ranking, req.Certificate, req.Notes);
+            if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "competition.update", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("记录不存在", statusCode: 404);
         });
 
-        adminGroup.MapDelete("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        adminGroup.MapDelete("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
             var ok = await svc.DeleteCompetitionRecord(id);
+            if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
+                data: new { action = "competition.delete", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);
         });
     }
