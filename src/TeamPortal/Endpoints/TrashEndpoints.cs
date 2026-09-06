@@ -19,7 +19,7 @@ public static class TrashEndpoints
 
     public static void MapTrashEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/admin/trash").RequireAuthorization();
+        var group = app.MapGroup("/api/admin/trash").RequireAuthorization("AdminOnly");
 
         group.MapGet("/", async (int? page, ClaimsPrincipal user, AppDbContext db, TrashService svc) =>
         {
