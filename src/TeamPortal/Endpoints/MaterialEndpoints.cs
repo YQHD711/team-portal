@@ -26,6 +26,12 @@ public static class MaterialEndpoints
     private static bool IsStaff(string? r) => r == "admin" || r == "部长";
     private static bool IsAdmin(string? r) => r == "admin";
 
+    /// <summary>盘点管理权:发起者 或 admin;其它部长/成员只读</summary>
+    private static async Task<bool> IsStocktakeManagerAsync(AppDbContext db, int stocktakeId, string? role, int? userId)
+        => role == "admin"
+        || (role == "部长" && userId.HasValue
+            && await db.Stocktakes.AnyAsync(s => s.Id == stocktakeId && s.CreatedByUserId == userId));
+
     /// <summary>审计 Data 可读化:按 itemId 反查零件名</summary>
     private static async Task<string?> ItemNameAsync(AppDbContext db, int itemId)
         => await db.InventoryItems.AsNoTracking().Where(i => i.Id == itemId).Select(i => i.Name).FirstOrDefaultAsync();
@@ -200,32 +206,37 @@ public static class MaterialEndpoints
             return Results.Created($"/api/material/stocktake/{st.Id}", st);
         });
 
-        group.MapGet("/stocktake", async (MaterialService svc) =>
+        group.MapGet("/stocktake", async (ClaimsPrincipal user, AppDbContext db, MaterialService svc) =>
         {
+            var (role, _, _, _) = await GetCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
             return Results.Ok(await svc.GetStocktakes());
         });
 
-        group.MapGet("/stocktake/{id:int}", async (int id, MaterialService svc) =>
+        group.MapGet("/stocktake/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc) =>
         {
+            var (role, _, _, _) = await GetCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
             var st = await svc.GetStocktake(id);
             return st is not null ? Results.Ok(st) : Results.Problem("Not found", statusCode: 404);
         });
 
+        // 发起者/admin:编辑单行实盘/备注(纠错,含替队员补全)
         group.MapPut("/stocktake/{id:int}/item/{itemId:int}", async (int id, int itemId, [FromBody] StocktakeItemReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
             var si = await svc.UpdateStocktakeItem(id, itemId, body.ActualQty, body.Note, userId!.Value);
             if (si is null) return Results.Problem("Not found", statusCode: 404);
-            log.Info("inventory", $"Stocktake #{id} item#{itemId} checked: qty={body.ActualQty} by {user.Identity?.Name}");
+            log.Info("inventory", $"Stocktake #{id} item#{itemId} edited: qty={body.ActualQty} by {user.Identity?.Name}");
             return Results.Ok(si);
         });
 
-        // 分派
+        // 分派(发起者/admin)
         group.MapPost("/stocktake/{id:int}/assign", async (int id, StocktakeAssignReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
             await svc.AssignStocktakeItems(id, body.Items ?? new());
             var assignedNames = await UserNamesByIdsAsync(db, body.Items?.Values ?? Enumerable.Empty<int>());
             log.Info("inventory", $"Stocktake #{id} assigned {body.Items?.Count ?? 0} items by {user.Identity?.Name}");
@@ -234,11 +245,11 @@ public static class MaterialEndpoints
             return Results.Ok(new { message = "已分派" });
         });
 
-        // 自动均分
+        // 自动均分(发起者/admin)
         group.MapPost("/stocktake/{id:int}/auto-assign", async (int id, StocktakeAutoAssignReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
             if (body.UserIds is null || body.UserIds.Count == 0)
                 return Results.Problem("请指定至少一名队员", statusCode: 400);
             await svc.AutoAssignStocktake(id, body.UserIds);
@@ -274,7 +285,14 @@ public static class MaterialEndpoints
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
             if (body.Results is null || body.Results.Count == 0)
                 return Results.Problem("请提交至少一项结果", statusCode: 400);
-            await svc.BatchCheckStocktakeItems(id, userId.Value, body.Results);
+            try
+            {
+                await svc.BatchCheckStocktakeItems(id, userId.Value, body.Results);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
             var checkedItemIds = body.Results.Select(r => r.ItemId).ToList();
             var checkedNames = await db.InventoryItems.AsNoTracking().Where(i => checkedItemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, i => i.Name);
             var checkedItems = body.Results
@@ -286,19 +304,85 @@ public static class MaterialEndpoints
             return Results.Ok(new { message = $"已提交 {body.Results.Count} 项盘点结果" });
         });
 
-        group.MapPost("/stocktake/{id:int}/complete", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
+        // ── 发起者/admin 全权(编辑/暂停/取消/删除/两步合并) ──
+
+        // 完成盘点(第一步:冻结结果,pending_merge)
+        group.MapPost("/stocktake/{id:int}/finalize", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {
             var (role, _, _, userId) = await GetCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可操作", statusCode: 403);
-            var st = await svc.CompleteStocktake(id);
-            if (st is null) return Results.Problem("盘点不存在或已完成", statusCode: 400);
-            var diffSummary = st.Items.Where(x => x.Difference != 0)
-                .Select(x => $"{x.InventoryItem?.Name ?? $"item#{x.InventoryItemId}"}:{(x.Difference > 0 ? "+" : "")}{x.Difference}")
-                .Take(20).ToList();
-            log.Info("inventory", $"Stocktake #{id} completed by {user.Identity?.Name}");
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            try { var st = await svc.FinalizeStocktake(id); return st is not null ? Results.Ok(st) : Results.Problem("盘点不存在或状态不正确", statusCode: 400); }
+            catch (InvalidOperationException ex) { return Results.Problem(ex.Message, statusCode: 400); }
+        });
+
+        // 合并入库(第二步:差异统一写回,completed)
+        group.MapPost("/stocktake/{id:int}/merge", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var st = await svc.MergeStocktake(id);
+            if (st is null) return Results.Problem("盘点不存在或状态不正确", statusCode: 400);
             log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
-                data: new { action = "complete", itemCount = st.Items.Count, diffCount = st.Items.Count(x => x.Difference != 0), adjusted = diffSummary }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+                data: new { action = "merge", diffCount = st.Items.Count(x => x.Difference != 0) }, ipAddress: LogService.ClientIp(ctx), userId: userId);
             return Results.Ok(st);
+        });
+
+        group.MapPost("/stocktake/{id:int}/pause", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var st = await svc.PauseStocktake(id);
+            return st is not null ? Results.Ok(st) : Results.Problem("盘点不存在或不可暂停", statusCode: 400);
+        });
+        group.MapPost("/stocktake/{id:int}/resume", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var st = await svc.ResumeStocktake(id);
+            return st is not null ? Results.Ok(st) : Results.Problem("盘点不存在或不可恢复", statusCode: 400);
+        });
+        group.MapPost("/stocktake/{id:int}/cancel", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var st = await svc.CancelStocktake(id);
+            if (st is null) return Results.Problem("盘点不存在或不可取消", statusCode: 400);
+            log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
+                data: new { action = "cancel" }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            return Results.Ok(st);
+        });
+        group.MapDelete("/stocktake/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var ok = await svc.DeleteStocktake(id);
+            if (!ok) return Results.Problem("盘点不存在或已合并不可删除", statusCode: 400);
+            log.Audit("stocktake", user.Identity?.Name ?? "unknown", targetType: "material", targetId: id.ToString(),
+                data: new { action = "delete" }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            return Results.Ok(new { message = "已删除" });
+        });
+
+        // 编辑盘面:增/删项、改派(仅未合并)
+        group.MapPost("/stocktake/{id:int}/items", async (int id, StocktakeAddItemReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var si = await svc.AddStocktakeItem(id, body.InventoryItemId);
+            return si is not null ? Results.Ok(si) : Results.Problem("零件不存在/等级不符/已包含/盘点不可再改", statusCode: 400);
+        });
+        group.MapDelete("/stocktake/{id:int}/items/{inventoryItemId:int}", async (int id, int inventoryItemId, ClaimsPrincipal user, AppDbContext db, MaterialService svc, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var ok = await svc.RemoveStocktakeItem(id, inventoryItemId);
+            return ok ? Results.Ok(new { message = "已移除" }) : Results.Problem("盘点不存在/该项不存在/不可移除", statusCode: 400);
+        });
+        group.MapPost("/stocktake/{id:int}/items/{inventoryItemId:int}/assign", async (int id, int inventoryItemId, StocktakeAssignItemReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, HttpContext ctx) =>
+        {
+            var (role, _, _, userId) = await GetCtx(user, db);
+            if (!await IsStocktakeManagerAsync(db, id, role, userId)) return Results.Problem("仅发起者或管理员可操作", statusCode: 403);
+            var si = await svc.ReassignStocktakeItem(id, inventoryItemId, body.UserId);
+            return si is not null ? Results.Ok(si) : Results.Problem("盘点不存在/该项不存在/不可改派", statusCode: 400);
         });
 
         // ── 损坏报备 ──
@@ -338,6 +422,8 @@ public record CheckoutRejectReq(string? Reason);
 public record CheckinReq(string? Condition, bool HasPhoto, string? TestNotes, string? PhotoUrl);
 public record StocktakeStartReq(string? Type, string? Grade);
 public record StocktakeItemReq(int? ActualQty, string? Note);
+public record StocktakeAddItemReq(int InventoryItemId);
+public record StocktakeAssignItemReq(int? UserId);
 public record DamageReq(int ItemId, string? Type, string? Description, bool IsApprovedTest);
 public record ResolveDamageReq(string? Liability, decimal? CompensationAmount, string? Resolution);
 public record StocktakeAssignReq(Dictionary<int, int>? Items);
