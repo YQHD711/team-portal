@@ -29,11 +29,13 @@ public static class ExamEndpoints
             return Results.Created($"/api/admin/exams/{exam.Id}", exam);
         });
 
-        group.MapPut("/{id:int}", async (int id, ExamRequest req, ExamService svc) =>
+        group.MapPut("/{id:int}", async (int id, ExamRequest req, ClaimsPrincipal user, ExamService svc, LogService log, HttpContext ctx) =>
         {
             if (req.Title is not null && InputSanitizer.HasUnsafeFragment(req.Title))
                 return Results.Problem("包含非法字符", statusCode: 400);
             var ok = await svc.UpdateExam(id, req.DepartmentId, req.Title, req.ExamType, req.Status, req.ExamDate);
+            if (ok) log.Audit("exam", user.Identity?.Name ?? "unknown", "exam", id.ToString(),
+                data: new { action = "update", departmentId = req.DepartmentId, title = req.Title }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("考核不存在", statusCode: 404);
         });
 
@@ -74,9 +76,11 @@ public static class ExamEndpoints
             return Results.Ok(results);
         });
 
-        group.MapDelete("/{id:int}/results/{resultId:int}", async (int id, int resultId, ExamService svc) =>
+        group.MapDelete("/{id:int}/results/{resultId:int}", async (int id, int resultId, ClaimsPrincipal user, ExamService svc, LogService log, HttpContext ctx) =>
         {
             var ok = await svc.DeleteResult(resultId);
+            if (ok) log.Audit("exam", user.Identity?.Name ?? "unknown", "exam-result", resultId.ToString(),
+                data: new { action = "delete", examId = id }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("结果不存在", statusCode: 404);
         });
     }

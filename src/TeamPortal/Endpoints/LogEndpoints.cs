@@ -28,11 +28,11 @@ public static class LogEndpoints
 
         // ── 操作日志(业务审计,与请求日志分离)──
 
-        // 分页查询操作日志:可按操作人/操作类型/时间范围筛选
-        log.MapGet("/operations", async (int? page, int? size, string? user, string? action, DateTime? from, DateTime? to, LogService svc) =>
+        // 分页查询操作日志:操作人/动作/目标类型+ID/data 关键词/时间范围筛选
+        log.MapGet("/operations", async (int? page, int? size, string? user, string? action, string? targetType, string? targetId, string? q, DateTime? from, DateTime? to, LogService svc) =>
         {
             var p = Math.Max(1, page ?? 1);
-            var (items, total) = await svc.GetOperations(user, action, from, to, p, size ?? 50);
+            var (items, total) = await svc.GetOperations(user, action, targetType, targetId, q, from, to, p, size ?? 50);
             return Results.Ok(new
             {
                 total,
