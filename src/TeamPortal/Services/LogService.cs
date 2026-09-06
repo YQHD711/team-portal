@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,10 @@ public class LogService : IDisposable
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private long _auditDropped;
+    private long _lastOpPruneTicks;
+    private static readonly string[] SensitiveKeyHints = { "password", "passhash", "token", "secret", "apikey", "accesskey", "refresh_token", "refreshtoken" };
+
     public LogService(IServiceScopeFactory scopeFactory, ILogger<LogService> logger, SettingsService settings)
     {
         _scopeFactory = scopeFactory;
@@ -42,8 +47,12 @@ public class LogService : IDisposable
         _ = ProcessAuditChannel(_cts.Token);
     }
 
-    /// <summary>从请求上下文提取客户端 IP(供 Audit 使用,端点层调用)</summary>
-    public static string? ClientIp(HttpContext ctx) => ctx.Connection.RemoteIpAddress?.ToString();
+    /// <summary>从请求上下文提取客户端 IP(IPv4-mapped IPv6 归一为 IPv4)</summary>
+    public static string? ClientIp(HttpContext ctx)
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString();
+        return ip?.StartsWith("::ffff:", StringComparison.OrdinalIgnoreCase) == true ? ip[7..] : ip;
+    }
 
     /// <summary>Background consumer — writes logs to DB every 3 seconds.</summary>
     private async Task ProcessChannel(CancellationToken ct)
@@ -150,7 +159,7 @@ public class LogService : IDisposable
 
     // ── Audit(业务操作审计,独立于 SystemLog 存储)──
     /// <summary>
-    /// 记录一条业务操作日志。data 会序列化为 JSON 存入 Data 字段(忽略 null 字段)。
+    /// 记录一条业务操作日志。写入前:文本字段设长度上限、data 递归剥敏感键并截断到可配上限。
     /// 失败场景同样调用 Audit,在 data 中携带 {"success":false,"error":"..."}。
     /// </summary>
     public void Audit(string action, string userName, string? targetType = null, string? targetId = null,
@@ -159,15 +168,56 @@ public class LogService : IDisposable
         var entry = new OperationLog
         {
             UserId = userId,
-            UserName = userName,
-            Action = action,
-            TargetType = targetType,
-            TargetId = targetId,
-            Data = data is null ? null : JsonSerializer.Serialize(data, AuditJsonOptions),
+            UserName = Cap(userName, 64),
+            Action = Cap(action, 32),
+            TargetType = Cap(targetType, 32),
+            TargetId = Cap(targetId, 64),
+            Data = data is null ? null : ScrubAndCap(data),
             IpAddress = ipAddress,
             CreatedAt = DateTime.UtcNow
         };
-        _auditChannel.Writer.TryWrite(entry);
+        if (!_auditChannel.Writer.TryWrite(entry)) Interlocked.Increment(ref _auditDropped);
+    }
+
+    private static string Cap(string? s, int max)
+        => string.IsNullOrEmpty(s) ? (s ?? string.Empty) : (s.Length <= max ? s : s[..max]);
+
+    /// <summary>脱敏(递归剥敏感键) + 截断到可配长度上限</summary>
+    private string ScrubAndCap(object data)
+    {
+        var json = JsonSerializer.Serialize(data, AuditJsonOptions);
+        try
+        {
+            var node = JsonNode.Parse(json);
+            ScrubNode(node);
+            json = node?.ToJsonString() ?? "{}";
+        }
+        catch { /* 解析失败保留原文,仅做长度截断 */ }
+        var maxLen = AuditDataMaxLen();
+        return json.Length <= maxLen ? json : json[..maxLen] + "…[truncated]";
+    }
+
+    private static void ScrubNode(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var kv in obj.ToList())
+            {
+                if (SensitiveKeyHints.Any(h => kv.Key.Contains(h, StringComparison.OrdinalIgnoreCase)))
+                    obj.Remove(kv.Key);
+                else ScrubNode(kv.Value);
+            }
+        }
+        else if (node is JsonArray arr)
+        {
+            foreach (var it in arr) ScrubNode(it);
+        }
+    }
+
+    private int AuditDataMaxLen()
+    {
+        try { return _settings.GetInt("System:AuditDataMaxLen", 2000).GetAwaiter().GetResult(); }
+        catch { return 2000; }
     }
 
     // ── Query ──
@@ -187,15 +237,20 @@ public class LogService : IDisposable
     }
 
     // ── Audit Query ──
-    /// <summary>分页查询操作日志(按操作人/操作类型/时间范围筛选),返回条目与总数</summary>
+    /// <summary>分页查询操作日志。可按 操作人/动作/目标类型+ID/data 关键词/时间 过滤;返回前低频惰性删超期行。</summary>
     public async Task<(List<OperationLog> Items, int Total)> GetOperations(string? user = null, string? action = null,
+        string? targetType = null, string? targetId = null, string? keyword = null,
         DateTime? from = null, DateTime? to = null, int page = 1, int pageSize = 50)
     {
+        await LazyPruneOperationLogs();
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var query = db.OperationLogs.AsQueryable();
         if (!string.IsNullOrEmpty(user)) query = query.Where(o => o.UserName == user);
         if (!string.IsNullOrEmpty(action)) query = query.Where(o => o.Action == action);
+        if (!string.IsNullOrEmpty(targetType)) query = query.Where(o => o.TargetType == targetType);
+        if (!string.IsNullOrEmpty(targetId)) query = query.Where(o => o.TargetId != null && o.TargetId.Contains(targetId));
+        if (!string.IsNullOrEmpty(keyword)) query = query.Where(o => o.Data != null && o.Data.Contains(keyword));
         if (from.HasValue) query = query.Where(o => o.CreatedAt >= from.Value);
         if (to.HasValue) query = query.Where(o => o.CreatedAt <= to.Value);
         var total = await query.CountAsync();
@@ -239,7 +294,7 @@ public class LogService : IDisposable
             .OrderByDescending(o => o.Id).Take(10)
             .Select(o => new { o.UserName, o.Action, o.TargetId, o.CreatedAt })
             .ToListAsync();
-        return new { total, byAction, recent };
+        return new { total, byAction, recent, auditPending = _auditChannel.Reader.Count, auditDropped = Interlocked.Read(ref _auditDropped) };
     }
 
     // ── Stats ──
@@ -280,15 +335,35 @@ public class LogService : IDisposable
     }
 
     // ── Cleanup ──
+    /// <summary>按保留期清理两表:请求日志(LogRetentionDays)与操作日志(OperationLogRetentionDays,默认180)</summary>
     public async Task<int> CleanupOldLogs()
     {
-        var days = await _settings.GetInt("System:LogRetentionDays", 90);
+        var sysDays = await _settings.GetInt("System:LogRetentionDays", 90);
+        var opDays = await _settings.GetInt("System:OperationLogRetentionDays", 180);
+        var now = DateTime.UtcNow;
+        var sysCutoff = now.AddDays(-sysDays);
+        var opCutoff = now.AddDays(-opDays);
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var deleted = await db.SystemLogs.Where(l => l.CreatedAt < sysCutoff).ExecuteDeleteAsync();
+        var opDeleted = await db.OperationLogs.Where(o => o.CreatedAt < opCutoff).ExecuteDeleteAsync();
+        if (deleted + opDeleted > 0)
+            _logger.LogInformation("LogService: cleaned {Sys} sys logs >{SD}d & {Op} op logs >{OD}d", deleted, sysDays, opDeleted, opDays);
+        return deleted + opDeleted;
+    }
+
+    /// <summary>低频惰性删操作日志超期行(避免无人点清理时无限膨胀)。约每 10 分钟最多一次。</summary>
+    public async Task<int> LazyPruneOperationLogs()
+    {
+        const long intervalTicks = 10 * 60 * 1000; // 10 分钟
+        if (Environment.TickCount64 - _lastOpPruneTicks < intervalTicks) return 0;
+        _lastOpPruneTicks = Environment.TickCount64;
+        var days = await _settings.GetInt("System:OperationLogRetentionDays", 180);
         var cutoff = DateTime.UtcNow.AddDays(-days);
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var deleted = await db.SystemLogs.Where(l => l.CreatedAt < cutoff).ExecuteDeleteAsync();
-        if (deleted > 0)
-            _logger.LogInformation("LogService: cleaned {Count} logs older than {Days}d", deleted, days);
+        var deleted = await db.OperationLogs.Where(o => o.CreatedAt < cutoff).ExecuteDeleteAsync();
+        if (deleted > 0) _logger.LogInformation("LogService: lazy pruned {Count} operation logs >{D}d", deleted, days);
         return deleted;
     }
 
@@ -296,9 +371,10 @@ public class LogService : IDisposable
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var deleted = await db.SystemLogs.ExecuteDeleteAsync();
-        _logger.LogInformation("LogService: cleared all {Count} logs", deleted);
-        return deleted;
+        var sys = await db.SystemLogs.ExecuteDeleteAsync();
+        var op = await db.OperationLogs.ExecuteDeleteAsync();
+        _logger.LogInformation("LogService: cleared all {Sys} sys logs & {Op} op logs", sys, op);
+        return sys + op;
     }
 
     // ── Health ──
