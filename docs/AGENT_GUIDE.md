@@ -22,6 +22,8 @@ cat Makefile
 make build
 ```
 
+> 权限/角色语义以 `docs/ARCHITECTURE.md` 的「角色系统」为准：admin（系统级）、部长（仅本部门内自主，不可 admin/他部门）、member。
+
 ---
 
 ## 二、统一命令（Makefile）
@@ -76,8 +78,8 @@ Agent 提交代码前**必须**跑 `make test` 通过。
 | 端 | 框架 | 目录 | 运行 |
 |---|---|---|---|
 | C# | xUnit | tests/api/ | `dotnet test` |
-| 前端 | Vitest | tests/web/ | `npx vitest run` |
-| Python | pytest | tests/ai/ | `python -m pytest` |
+| 前端 | Vitest | web/tests/ | `cd web && npx vitest run` |
+| Python | pytest | tests/ai/ | `cd ai-service && .venv/Scripts/python.exe -m pytest tests/ai` |
 
 ### 测试覆盖率最低要求
 - C# Services: 必须测试（单元测试）
@@ -119,35 +121,16 @@ chore: update docker-compose version
 
 ## 六、CI/CD Pipeline
 
-```yaml
-# .github/workflows/ci.yml
-on: [push, pull_request]
-jobs:
-  test-csharp:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '10.0' }
-      - run: cd tests/api && dotnet test
+> 权威定义见 `.github/workflows/ci.yml`。概要（2026-09 现状）：
 
-  test-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '24' }
-      - run: cd web && npm ci && cd ../tests/web && npx vitest run
+- `test-csharp` — 工作目录 `tests/api`，`dotnet test`（.NET 10）
+- `test-web` — `cd web && npm ci && npx vitest run`（Node 24）
+- `test-python` — `cd ai-service && pip install -r requirements-dev.txt && cd tests/ai && python -m pytest`（Python 3.11）
+- `e2e-smoke` — `web` 下 `npx playwright test`（chromium）
+- `build-push` — 仅 `push main` 触发：推 ghcr `backend/frontend/ai-service`（tag=latest + sha）
+- `notify` — 仅失败时推飞书群（secret `FEISHU_WEBHOOK_URL`，未配置则跳过）
 
-  test-python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: cd ai-service && pip install -r requirements.txt
-      - run: cd tests/ai && python -m pytest
-```
+> 部署：服务器零构建，由 systemd timer 每 5 分钟 `deploy/auto-deploy.sh` 拉 ghcr 镜像 `docker compose up -d --no-build` 上线（详见记忆/部署闭环）。
 
 ---
 

@@ -12,7 +12,7 @@
 
 ```powershell
 # 已提交但未推送的改动（本地领先 remote）
-git log main..origin/main --oneline
+git log origin/main..main --oneline
 git diff origin/main..main --stat
 
 # 工作区未提交改动（本次重点）
