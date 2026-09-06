@@ -1,5 +1,5 @@
 import { Save, Loader2, Tag } from "lucide-react";
-import { FLIGHT_TYPES, LEVELS, type FullProfile } from "./profileTypes";
+import { FLIGHT_TYPES, LEVELS, isFlightDept, type FullProfile } from "./profileTypes";
 
 interface Props {
   profile: FullProfile;
@@ -74,9 +74,13 @@ export default function ProfileInfoTab({ profile, editInfo, onStartEdit, onCance
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div><span className="text-muted">角色</span><p className="font-medium mt-0.5">{profile.role}</p></div>
             <div><span className="text-muted">部门</span><p className="font-medium mt-0.5">{profile.department || "-"}</p></div>
-            <div><span className="text-muted">飞手等级</span><p className="font-medium mt-0.5">{profile.level}</p></div>
-            <div><span className="text-muted">飞行小时</span><p className="font-medium mt-0.5">{profile.totalFlightHours}h</p></div>
-            <div><span className="text-muted">首飞日期</span><p className="font-medium mt-0.5">{profile.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
+            {isFlightDept(profile) && (
+              <>
+                <div><span className="text-muted">飞手等级</span><p className="font-medium mt-0.5">{profile.level}</p></div>
+                <div><span className="text-muted">飞行小时</span><p className="font-medium mt-0.5">{profile.totalFlightHours}h</p></div>
+                <div><span className="text-muted">首飞日期</span><p className="font-medium mt-0.5">{profile.firstFlightDate ? new Date(profile.firstFlightDate).toLocaleDateString("zh-CN") : "-"}</p></div>
+              </>
+            )}
             <div><span className="text-muted">紧急联系人</span><p className="font-medium mt-0.5">{profile.emergencyContact || "-"}</p></div>
             <div><span className="text-muted">紧急电话</span><p className="font-medium mt-0.5">{profile.emergencyPhone || "-"}</p></div>
           </div>

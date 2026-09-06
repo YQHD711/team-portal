@@ -1,4 +1,4 @@
-import { LEVEL_COLORS, type FullProfile } from "./profileTypes";
+import { LEVEL_COLORS, isFlightDept, type FullProfile } from "./profileTypes";
 
 interface Props {
   profile: FullProfile;
@@ -15,8 +15,12 @@ export default function ProfileHeader({ profile }: Props) {
         <h1 className="text-2xl font-bold">{profile.username}</h1>
         <div className="flex items-center gap-2 mt-1 text-sm text-muted">
           <span>{profile.department || "未分配部门"}</span>
-          <span>·</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${LEVEL_COLORS[profile.level]}`}>{profile.level}</span>
+          {isFlightDept(profile) && (
+            <>
+              <span>·</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${LEVEL_COLORS[profile.level]}`}>{profile.level}</span>
+            </>
+          )}
         </div>
       </div>
     </div>
