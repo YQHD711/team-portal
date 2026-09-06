@@ -24,9 +24,16 @@ function decodeRole(): string | null {
   const token = getToken();
   if (!token) return null;
   try {
-    // atob 返回的是 Latin-1 字节串,直接 JSON.parse 会把中文(如角色"部长")解码成乱码,
-    // 导致 isStaff()/isAdmin() 误判 → 部长度访问 /admin 被 AuthGuard 弹回仪表盘。
-    const bytes = Uint8Array.from(atob(token.split(".")[1]), c => c.charCodeAt(0));
+    // JWT payload 是 base64url(含 - / _)且常无填充,而 atob 只认标准 base64;
+    // 不归一化直接 atob 会抛 InvalidCharacterError → role 解析为 null → 部长度访问 /admin 被弹回仪表盘。
+    const b64 = token
+      .split(".")[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, "=");
+    // atob 返回 Latin-1 字节串,直接 JSON.parse 会把中文(如角色"部长")解码成乱码;
+    // 需按 UTF-8 还原。两处一起处理角色才能正确比较。
+    const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
     const payload = JSON.parse(new TextDecoder().decode(bytes));
     return payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ?? null;
   } catch {

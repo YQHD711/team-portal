@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { isStaff, isAdmin } from "@/lib/auth";
 
-/** 生成 role 为指定值的假 JWT(仅 payload 用于解码 role) */
+/** 生成 role 为指定值的假 JWT。filler 用 U+00FF(UTF-8 0xC3 0xBF)保证 base64url 输出含 url-safe 字符(`_`),
+ * 使未做 base64url 归一化的旧解码(atob 直接解析)必然抛错 → 回归可被检测。 */
 function setRole(role: string) {
-  const payload = Buffer.from(JSON.stringify({
+  const obj = {
     "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": role,
-  })).toString("base64url");
+    filler: "ÿ".repeat(12),
+  };
+  const payload = Buffer.from(JSON.stringify(obj)).toString("base64url"); // 无填充、url-safe
+  if (!/[-_]/.test(payload)) throw new Error("expected url-safe char in payload: " + payload);
   localStorage.setItem("token", `header.${payload}.signature`);
 }
 
