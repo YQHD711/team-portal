@@ -190,6 +190,18 @@ public class AuthService
 
     public async Task<string?> Login(string username, string password)
     {
+        var user = await LoginAndGetUser(username, password);
+        return user is null ? null : await GenerateToken(user);
+    }
+
+    /// <summary>微信登录/绑定复用时签发正式 JWT。</summary>
+    public Task<string> IssueTokenFor(User user) => GenerateToken(user);
+
+    /// <summary>
+    /// 校验用户名/密码（含限流），成功返回 User（供绑定等需要用户实体的场景），失败返回 null。
+    /// </summary>
+    public async Task<User?> LoginAndGetUser(string username, string password)
+    {
         var maxAttempts = await _settings.GetInt("Auth:MaxLoginAttempts", 5);
         var lockoutMin = await _settings.GetInt("Auth:LockoutMinutes", 15);
 
@@ -224,7 +236,7 @@ public class AuthService
         // Clear failed attempts on success
         _loginAttempts.TryRemove(key, out _);
         _log.Info("auth", $"User logged in: {username}", $"{{\"role\":\"{user.Role}\"}}", username);
-        return await GenerateToken(user);
+        return user;
     }
 
     private async Task<string> GenerateToken(User user)

@@ -43,6 +43,9 @@ public class SettingsService
     public async Task<double> GetDouble(string key, double defaultValue = 0)
         => double.TryParse(await Get(key, defaultValue.ToString()), out var v) ? v : defaultValue;
 
+    public async Task<bool> GetBool(string key, bool defaultValue = false)
+        => bool.TryParse(await Get(key, defaultValue.ToString()), out var v) ? v : defaultValue;
+
     /// <summary>Set a setting value (persists to DB and cache).</summary>
     public async Task Set(string key, string value, string category = "", string description = "")
     {
@@ -129,6 +132,9 @@ public class SettingsService
             new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "品牌色调：indigo(靛蓝)/sky(天青)/warm(暖橙)" },
             new() { Key = "Inventory:LowStockGrade", Value = "C", Category = "库存", Description = "库存低物料提醒的等级（A/B/C），仅该等级物料入库会触发仪表盘提醒" },
             new() { Key = "Inventory:LowStockThreshold", Value = "5", Category = "库存", Description = "库存低物料提醒阈值（quantity < 此值时提醒）" },
+            new() { Key = "WeChat:Enabled", Value = "false", Category = "认证安全", Description = "启用微信公众号登录（true/false）" },
+            new() { Key = "WeChat:RedirectUri", Value = "https://placeholder.local/api/auth/wechat/callback", Category = "认证安全", Description = "微信网页授权回调地址（需为已备案域名）" },
+            new() { Key = "WeChat:FrontBaseUrl", Value = "http://localhost:3000", Category = "认证安全", Description = "前端首页地址（微信回调 302 跳转目标）" },
         };
 
         var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();
