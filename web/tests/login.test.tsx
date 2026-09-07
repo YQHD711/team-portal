@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import LoginPage from "@/app/auth/login/page";
-import { api } from "@/lib/api";
+import { api, wechat } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
 vi.mock("@/lib/api", () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  wechat: { config: vi.fn(), bind: vi.fn(), unbind: vi.fn() },
 }));
 vi.mock("@/lib/auth", () => ({
   setToken: vi.fn(),
@@ -31,9 +32,12 @@ vi.mock("next/navigation", () => ({
 
 const mockedPost = vi.mocked(api.post as (endpoint: string, body: unknown) => Promise<unknown>);
 const mockedSetToken = vi.mocked(setToken);
+const mockedWechatConfig = vi.mocked(wechat.config);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 微信按钮自探测默认返回"关闭"，保证既有用例不受新入口影响
+  mockedWechatConfig.mockResolvedValue({ enabled: false, authUrl: null });
 });
 
 describe("登录页", () => {

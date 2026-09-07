@@ -74,6 +74,16 @@ export default function Home() {
 
   useEffect(() => { setIsStaff(checkIsStaff()); }, []);
 
+  // 微信回调落地（兜底）：token 已由 AuthGuard 写入 localStorage，这里清掉 URL 中残留的 token query
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("token")) return;
+    params.delete("token");
+    const qs = params.toString();
+    window.history.replaceState({}, "", qs ? `/?${qs}` : "/");
+  }, []);
+
   useEffect(() => {
     api.get<DashData>("/api/dashboard").then(setData).catch(() => null).finally(() => setLoaded(true));
   }, []);

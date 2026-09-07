@@ -141,6 +141,20 @@ POST /api/auth/register  { username, password, role }  → { token }
 POST /api/auth/login     { username, password }        → { token }
 ```
 
+### 微信公众号登录（OAuth2.0 网页授权 snsapi_userinfo，默认关闭）
+
+```
+GET  /api/public/wechat-config                          → { enabled, authUrl|null }   // 公开探测，不暴露 AppSecret
+GET  /api/auth/wechat/callback?code=&state=             // 微信授权回调：302 到前端
+     // 已绑定 → /?token=<JWT>；未绑定 → /auth/wechat/bind?binding=<票据>；失败 → /auth/login?error=wechat_*
+POST /api/auth/wechat/bind   { bindingToken, username, password } → { token }   // 首次绑定现有账号（限流）
+POST /api/auth/wechat/unbind { password }               → { success }   // 需登录 + 当前密码
+```
+
+- 绑定模型：`Users.WeChatOpenId`（唯一索引）/ `WeChatUnionId` / `WeChatBoundAt`；openid 永不暴露给前端，仅后端内部使用。
+- 中间态：未绑定签发 5 分钟、audience=`wechat-bind`、`purpose=wechat_bind` 的短效 JWT（绑定票据），与正式 token（audience=`TeamPortal`）天然隔离。
+- 配置来源：`WeChat:Enabled` / `WeChat:RedirectUri` / `WeChat:FrontBaseUrl` 为系统设置（DB，管理员可改）；`WeChat:AppId` / `WeChat:AppSecret` 为环境变量（AppSecret 禁存 DB / git）。
+
 ### 知识库
 
 ```

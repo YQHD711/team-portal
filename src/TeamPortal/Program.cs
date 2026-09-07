@@ -143,6 +143,8 @@ builder.Services.AddRateLimiter(options =>
 
 // ── Services ──
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<WeChatStateStore>();
+builder.Services.AddHttpClient<WeChatAuthService>();
 builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddHttpClient<InventoryService>();
 builder.Services.AddScoped<AdminService>();
@@ -317,6 +319,7 @@ app.UseWebToolsStatic();
 app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API" }));
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
+app.MapWeChatAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapInventoryEndpoints();
 app.MapAiEndpoints();

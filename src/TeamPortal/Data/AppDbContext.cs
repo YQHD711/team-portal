@@ -349,5 +349,14 @@ public class AppDbContext : DbContext
                 .HasForeignKey(u => u.InvitedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        // ── 微信登录绑定（2026-09）──
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasIndex(u => u.WeChatOpenId).IsUnique();
+            entity.Property(u => u.WeChatOpenId).HasMaxLength(64);
+            entity.HasIndex(u => u.WeChatUnionId);
+            entity.Property(u => u.WeChatUnionId).HasMaxLength(64);
+        });
     }
 }

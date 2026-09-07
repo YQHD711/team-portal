@@ -49,6 +49,7 @@ Agent 提交代码前**必须**跑 `make test` 通过。
 - 一个 Endpoint 一个文件，放在 Endpoints/ 下
 - Services 只写纯逻辑，不依赖 HTTP 上下文
 - 使用 `appsettings.json` + 环境变量覆盖（不硬编码密钥）
+- **微信登录配置**：开关 / RedirectUri / FrontBaseUrl 走系统设置（DB，管理员可改）；AppId 走环境变量 `WECHAT__APPID`（appsettings 占位）；**AppSecret 仅环境变量 `WECHAT__APPSECRET`，禁止存 DB、禁止提交 Git**
 - 错误处理: try-catch → Problem() 返回标准错误 JSON
 
 ### TypeScript/React (web/)

@@ -57,4 +57,34 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
             try { File.Delete(dbPath); } catch { }
         }
     }
+
+    [Fact]
+    public async Task WeChatEndpoints_RoutesExist()
+    {
+        // 微信端点必须真实可达：callback 应 302 跳转（而非 404）、config 公开 200、
+        // bind/unbind(POST 语义)GET 应 405 而非 404。
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-routesmoke-{Guid.NewGuid():N}.db");
+        var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+        });
+        var rawClient = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var client = factory.CreateClient();
+        try
+        {
+            var callback = await rawClient.GetAsync("/api/auth/wechat/callback?code=x&state=y");
+            var config = await client.GetAsync("/api/public/wechat-config");
+            var bind = await client.GetAsync("/api/auth/wechat/bind");
+            var unbind = await client.GetAsync("/api/auth/wechat/unbind");
+
+            Assert.True((int)callback.StatusCode != 404, $"callback 不应404，实际 {(int)callback.StatusCode}");
+            Assert.True((int)config.StatusCode != 404, $"config 不应404，实际 {(int)config.StatusCode}");
+            Assert.True((int)bind.StatusCode != 404, $"bind 不应404，实际 {(int)bind.StatusCode}");
+            Assert.True((int)unbind.StatusCode != 404, $"unbind 不应404，实际 {(int)unbind.StatusCode}");
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { }
+        }
+    }
 }

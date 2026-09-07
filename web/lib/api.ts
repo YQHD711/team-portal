@@ -112,3 +112,15 @@ export const api = {
     }
   },
 };
+
+/** 微信登录 API 封装 */
+export const wechat = {
+  /** 微信登录是否可用 + 授权链接（公开端点，不暴露 AppSecret） */
+  config: () => api.get<{ enabled: boolean; authUrl: string | null }>("/api/public/wechat-config"),
+  /** 首次微信登录绑定现有账号 */
+  bind: (bindingToken: string, username: string, password: string) =>
+    api.post<{ token: string }>("/api/auth/wechat/bind", { bindingToken, username, password }),
+  /** 解绑微信（需登录 + 当前密码） */
+  unbind: (password: string) =>
+    api.post<{ success: boolean }>("/api/auth/wechat/unbind", { password }),
+};

@@ -7,6 +7,7 @@ import { LogIn, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
+import { WeChatLoginButton } from "@/components/auth/WeChatLoginButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -81,6 +82,9 @@ export default function LoginPage() {
               className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
               <LogIn className="h-4 w-4" />{loading ? "登录中..." : "登录"}
             </button>
+
+            {/* 微信登录入口：后端开关关闭时不渲染；微信内由公众号菜单进入，这里供网页端扫码/跳转 */}
+            <WeChatLoginButton />
           </form>
         </div>
 
