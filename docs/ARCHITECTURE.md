@@ -33,18 +33,17 @@
 浏览器
   │
   ▼
-Next.js 前端 (web/)           Python 辅助服务 (ai-service/)
-  │ 独立项目                      │ FastAPI :9001
-  │ Tailwind CSS 4 + Radix UI    ├── /api/ai/chat
-  │ recharts + mermaid            ├── /api/ai/search
-  │ MDX 渲染                      └── /api/logs/{file}
-  │                              │
-  ▼                              │ pymavlink / openpyxl / httpx
+Next.js 前端 (web/)           DeepSeek API（C# 直连）
+  │ 独立项目                      │
+  │ Tailwind CSS 4 + Radix UI    │
+  │ recharts + mermaid           │
+  │ MDX 渲染                     │
+  ▼                              │
 ASP.NET Core 后端 (src/TeamPortal/)
   │ Minimal API :8080
   │ EF Core + SQLite
   │ JWT 认证
-  │
+  │ 内置：AI 代理 / 知识库 RAG / 文档提取(PdfPig+OpenXML) / Excel 导入(MiniExcel)
   ▼
 服务器文件系统 (data/)
   ├── knowledge/*.md
@@ -52,13 +51,12 @@ ASP.NET Core 后端 (src/TeamPortal/)
   └── flightlogs/*.tlog
 ```
 
-### 三容器 Docker Compose
+### 二容器 Docker Compose
 
 | 容器 | 镜像 | 端口 | 职责 |
 |---|---|---|---|
 | frontend | node:24-alpine | 3000 | Next.js SSR |
-| backend | mcr.microsoft.com/dotnet/aspnet:10.0 | 8080 | ASP.NET Core API |
-| ai-service | python:3.11-slim | 9001 | FastAPI 辅助 |
+| backend | mcr.microsoft.com/dotnet/aspnet:10.0 | 8080 | ASP.NET Core API（含 AI 代理 / 解析器，2026-09 收编 Python ai-service） |
 
 ---
 
@@ -90,23 +88,15 @@ team-portal/
 │   │   ├── KnowledgeEndpoints.cs   # GET /api/knowledge/*
 │   │   └── FlightLogEndpoints.cs   # GET /api/flightlogs
 │   ├── Services/
-│   │   ├── InventoryService.cs     # openpyxl 读 Excel
+│   │   ├── InventoryService.cs     # MiniExcel 读 Excel
 │   │   ├── KnowledgeService.cs     # 读本地 .md 文件
-│   │   ├── FlightLogService.cs     # 调 Python 解析 .tlog
-│   │   └── AiProxyService.cs       # 转调 ai-service
+│   │   ├── FlightLogService.cs     # 飞行日志列表/下载/删除
+│   │   ├── DocumentService.cs      # PDF/DOCX 提取 (PdfPig + OpenXML SDK)
+│   │   └── AiProxyService.cs       # 直连 DeepSeek (聊天/搜索)
 │   ├── Data/
 │   │   ├── AppDbContext.cs         # EF Core SQLite
 │   │   └── Models/                 # User, InventoryItem
 │   └── TeamPortal.csproj
-│
-├── ai-service/                 # Python FastAPI 辅助
-│   ├── main.py                 # 入口
-│   ├── routes/
-│   │   ├── chat.py             # /api/ai/chat
-│   │   ├── search.py           # /api/ai/search
-│   │   └── logs.py             # /api/logs/{file}
-│   ├── requirements.txt
-│   └── Dockerfile
 │
 ├── data/                       # 数据 (Git 忽略)
 │   ├── knowledge/              # Markdown 知识库文件
@@ -115,8 +105,7 @@ team-portal/
 │
 ├── tests/
 │   ├── api/                    # xUnit (C#)
-│   ├── web/                    # Vitest (前端)
-│   └── ai/                     # pytest (Python)
+│   └── web/                    # Vitest (前端)
 │
 ├── docs/
 │   ├── ARCHITECTURE.md         # 本文档
@@ -190,15 +179,18 @@ GET    /api/material/stocktake/my-tasks                                # 我的�
 ### 飞行日志
 
 ```
-GET  /api/flightlogs                                   → [{ filename, date, vehicle, duration, ... }]
-GET  /api/flightlogs/{filename}                        → pymavlink 解析结果 JSON
+GET    /api/flightlogs                    → [{ filename, size, modified }]      // 列表
+GET    /api/flightlogs/{filename}         → 二进制文件下载（Content-Disposition: attachment）
+POST   /api/flightlogs/upload             → 上传 .tlog/.bin（本地 + 百度网盘同步）
+DELETE /api/flightlogs/{filename}         → 删除（AdminOnly，硬删 + 审计）
+GET/PUT /api/flightlogs/{filename}/meta   → 侧车元数据 JSON
 ```
 
 ### AI
 
 ```
-POST /api/ai/chat     { question }                     → { answer } (SSE 流式)
-POST /api/ai/search   { query }                       → [{ source, snippet, ... }]
+POST /api/ai/chat     { question }                     → { answer } (SSE 流式，DeepSeek 直连)
+POST /api/ai/search   { query }                       → [{ source, snippet, ... }]  (DeepSeek 直连)
 ```
 
 ### 管理 (Admin)
@@ -237,9 +229,10 @@ GET    /api/admin/me                                   → 当前用户角色+�
 | ORM | Entity Framework Core | ^10 |
 | 数据库 | SQLite | - |
 | 认证 | JWT (Microsoft.AspNetCore.Authentication.JwtBearer) | - |
-| Excel | openpyxl (Python) | ^3.1 |
-| 日志解析 | pymavlink (Python) | ^2.4 |
-| AI SDK | httpx → DeepSeek API (Python) | - |
+| Excel | MiniExcel (C#) | 1.46 |
+| PDF 文本 | PdfPig (C#) | 0.1.16 |
+| DOCX 文本 | DocumentFormat.OpenXml (C#) | 3.5 |
+| AI SDK | DeepSeek API (C# 直连，SSE) | - |
 | 部署 | Docker Compose | v3 |
 | CI/CD | GitHub Actions | - |
 

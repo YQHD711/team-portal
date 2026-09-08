@@ -127,5 +127,5 @@
 |---|---|
 | 前端 | Next.js 16 + Tailwind CSS 4 + Radix UI |
 | 后端 | ASP.NET Core 10 Minimal API + EF Core SQLite |
-| AI | Python FastAPI + DeepSeek |
+| AI | DeepSeek（C# 直连）+ MiniExcel / PdfPig / OpenXML SDK |
 | 部署 | Docker Compose |

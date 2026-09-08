@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { isAdmin } from "@/lib/auth";
 import { FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
 
 interface LogFile { filename: string; size: number; modified: number; }
@@ -10,6 +11,7 @@ export default function FlightLogPage() {
   const [logs, setLogs] = useState<LogFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const admin = isAdmin();
 
   const fetchLogs = () => {
     setLoading(true);
@@ -26,6 +28,14 @@ export default function FlightLogPage() {
     setUploading(true);
     try { await api.post("/api/flightlogs/upload", formData); fetchLogs(); } catch { /* ignore */ }
     finally { setUploading(false); }
+  };
+
+  const handleDelete = async (filename: string) => {
+    if (!window.confirm(`确定删除飞行日志「${filename}」吗？此操作不可恢复。`)) return;
+    try {
+      await api.delete(`/api/flightlogs/${encodeURIComponent(filename)}`);
+      fetchLogs();
+    } catch { /* ignore */ }
   };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
@@ -63,6 +73,11 @@ export default function FlightLogPage() {
               <a href={`/api/flightlogs/${l.filename}`} download className="p-2 hover:bg-surface-hover rounded-lg text-faint">
                 <Download className="h-4 w-4" />
               </a>
+              {admin && (
+                <button onClick={() => handleDelete(l.filename)} className="p-2 hover:bg-red-50 hover:text-danger rounded-lg text-faint" title="删除日志">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         ))}

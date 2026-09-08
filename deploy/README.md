@@ -12,14 +12,13 @@
    │
    ▼
 GitHub Actions (ci.yml)
-   ├─ test-csharp   74 用例  dotnet test        (tests/api)
-   ├─ test-web      19 用例  vitest            (web/tests)
-   ├─ test-python   18 用例  pytest            (tests/ai)
-   └─ e2e-smoke      5 用例  Playwright        (web/e2e)  ← 生产构建+route mock
-   │  （四者并行，PR 和 main 都跑）
+   ├─ test-csharp   x 用例  dotnet test        (tests/api)
+   ├─ test-web       x 用例  vitest            (web/tests)
+   └─ e2e-smoke      x 用例  Playwright        (web/e2e)  ← 生产构建+route mock
+   │  （三者并行，PR 和 main 都跑）
    ▼
 build-push（仅 main push，需以上全绿）
-   └─ 3 镜像推 ghcr.io/yqhd711/teamportal-{backend,frontend,ai-service}
+   └─ 2 镜像推 ghcr.io/yqhd711/teamportal-{backend,frontend}
       tag = latest + sha-<完整40位commit>
    ▼
 服务器 systemd timer（teamportal-autodeploy.timer，每 5 分钟）
@@ -30,7 +29,7 @@ deploy.sh（纯拉取，服务器永不构建）→ docker compose up -d --no-bu
 ```
 
 **服务器**：阿里云 8.137.161.160（admin 用户，1.8G 内存，内存红线意识必须刻进脑子）
-**栈**：.NET 10 后端(8080) + Next.js 16 前端(3000) + FastAPI AI 服务(9001) + wiki-nginx(80)，全 Docker
+**栈**：.NET 10 后端(8080) + Next.js 16 前端(3000) + wiki-nginx(80)，全 Docker
 
 ---
 

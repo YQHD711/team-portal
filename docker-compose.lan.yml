@@ -16,11 +16,6 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Cors__Origins: http://192.168.1.10:3000
       CORS__ORIGINS: http://192.168.1.10:3000
-      AiService__BaseUrl: http://ai-service:9001
       WebTools__Root: /webtools-content
     volumes:
       - ../ardupilot_log_analysis/WebTools:/webtools-content:ro
-
-  ai-service:
-    ports: !reset []
-    # AI 只允许 Compose 内部 backend 访问，不映射到宿主机

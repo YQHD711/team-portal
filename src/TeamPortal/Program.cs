@@ -110,10 +110,10 @@ builder.Services.Configure<HostOptions>(options =>
     options.ShutdownTimeout = TimeSpan.FromSeconds(15);
 });
 
-// ── Health checks (DB + AI Service) ──
+// ── Health checks (DB) ──
+// ai-service 已移除：DeepSeek / 解析器全部收编 C#，不再有 Python 心跳
 builder.Services.AddHealthChecks()
-    .AddCheck<DbHealthCheck>("database", failureStatus: HealthStatus.Unhealthy)
-    .AddCheck<AiServiceHealthCheck>("ai-service", failureStatus: HealthStatus.Degraded);
+    .AddCheck<DbHealthCheck>("database", failureStatus: HealthStatus.Unhealthy);
 
 // ── Rate limiting ──
 builder.Services.AddRateLimiter(options =>
@@ -144,11 +144,11 @@ builder.Services.AddRateLimiter(options =>
 // ── Services ──
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<KnowledgeService>();
-builder.Services.AddHttpClient<InventoryService>();
+builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddHttpClient<AiProxyService>();
-builder.Services.AddHttpClient<FlightLogService>();
-builder.Services.AddHttpClient<DocumentService>();
+builder.Services.AddScoped<FlightLogService>();
+builder.Services.AddScoped<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddHttpClient<WikiGeneratorService>();
 builder.Services.AddHttpClient<SystemAgentService>();

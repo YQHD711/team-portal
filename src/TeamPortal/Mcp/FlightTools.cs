@@ -28,6 +28,11 @@ public class FlightTools
     public async Task<bool> DeleteIncident(int id) => await _flight.DeleteIncident(id);
     [McpServerTool(Name = "flight_list_logs")]
     public async Task<object?> ListLogs() => await _flightLog.ListLogs();
-    [McpServerTool(Name = "flight_parse_log")]
-    public async Task<object?> ParseLog(string filename) => await _flightLog.ParseLog(filename);
+    [McpServerTool(Name = "flight_download_log")]
+    public async Task<object?> DownloadLog(string filename)
+    {
+        var file = _flightLog.GetFile(filename);
+        if (file is null || file.Value.Bytes is null) return null;
+        return new { filename, size = file.Value.Bytes.Length };
+    }
 }

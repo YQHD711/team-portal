@@ -57,4 +57,31 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
             try { File.Delete(dbPath); } catch { }
         }
     }
+
+    [Fact]
+    public async Task FlightLogEndpoints_RoutesExist()
+    {
+        // 飞行日志端点必须真实可达：GET /{filename} 应可构建(404 或 200)、
+        // DELETE 未带 admin role 应 401/403 而非 404。
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-routesmoke-{Guid.NewGuid():N}.db");
+        var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+        });
+        var rawClient = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        try
+        {
+            var detail = await rawClient.GetAsync("/api/flightlogs/whatever.tlog");
+            var del = await rawClient.DeleteAsync("/api/flightlogs/whatever.tlog");
+
+            Assert.True((int)detail.StatusCode != 404 && (int)detail.StatusCode != 503,
+                $"GET 飞行日志详情 不应 404/503，实际 {(int)detail.StatusCode}");
+            Assert.True((int)del.StatusCode is 401 or 403,
+                $"DELETE 无 admin 应 401/403，实际 {(int)del.StatusCode}");
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { }
+        }
+    }
 }

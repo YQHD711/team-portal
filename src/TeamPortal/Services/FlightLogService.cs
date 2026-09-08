@@ -1,19 +1,13 @@
-using System.Text;
-using System.Text.Json;
-
 namespace TeamPortal.Services;
 
 public class FlightLogService
 {
-    private readonly HttpClient _http;
-    private readonly IConfiguration _config;
     private readonly string _logDir;
 
-    public FlightLogService(HttpClient http, IConfiguration config)
+    public FlightLogService(IConfiguration config)
     {
-        _http = http;
-        _config = config;
-        _logDir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "flightlogs");
+        // 目录可用配置覆盖(测试隔离用),生产默认相对数据目录
+        _logDir = config["FlightLogs:Dir"] ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "flightlogs");
     }
 
     public async Task<object?> ListLogs()
@@ -28,37 +22,38 @@ public class FlightLogService
         return new { logs };
     }
 
-    public async Task<object?> ParseLog(string filename)
+    /// <summary>解析并校验 filename 必须落在 _logDir 内（防目录穿越）。非法返回 null。</summary>
+    private string? ResolveSafePath(string filename)
     {
-        var filepath = Path.Combine(_logDir, filename);
-        if (!File.Exists(filepath)) return null;
+        if (string.IsNullOrWhiteSpace(filename)) return null;
+        if (filename.Contains('/') || filename.Contains('\\') || filename.StartsWith('.') || filename.Contains(".."))
+            return null;
+        var full = Path.GetFullPath(Path.Combine(_logDir, filename));
+        var root = Path.GetFullPath(_logDir);
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
+        return full;
+    }
 
-        // Try calling Python for detailed parsing
-        var baseUrl = _config["AiService:BaseUrl"] ?? "http://localhost:9001";
-        try
+    /// <summary>读取飞行日志原始字节（真下载）。文件名非法或不存在返回 null。</summary>
+    public (byte[]? Bytes, string? ContentType)? GetFile(string filename)
+    {
+        var full = ResolveSafePath(filename);
+        if (full is null || !File.Exists(full)) return null;
+        var contentType = Path.GetExtension(full).ToLowerInvariant() switch
         {
-            var json = JsonSerializer.Serialize(new { filename });
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _http.PostAsync($"{baseUrl}/api/logs/parse", content);
-            if (response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<object>(body);
-            }
-        }
-        catch { /* Python not available — return basic info */ }
-
-        var info = new FileInfo(filepath);
-        return new
-        {
-            filename = info.Name,
-            size = info.Length,
-            messageCount = 0,
-            maxAltitude = (double?)null,
-            minAltitude = (double?)null,
-            duration = (double?)null,
-            altitudeSeries = Array.Empty<object>(),
-            note = "pymavlink 未安装 — 仅显示文件基本信息。安装: pip install pymavlink"
+            ".tlog" => "application/octet-stream",
+            ".bin" => "application/octet-stream",
+            _ => "application/octet-stream"
         };
+        return (File.ReadAllBytes(full), contentType);
+    }
+
+    /// <summary>删除飞行日志文件。成功返回 true；不存在或非法返回 false。</summary>
+    public bool DeleteFile(string filename)
+    {
+        var full = ResolveSafePath(filename);
+        if (full is null || !File.Exists(full)) return false;
+        File.Delete(full);
+        return true;
     }
 }

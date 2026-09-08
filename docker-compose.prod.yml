@@ -28,9 +28,6 @@ services:
       # 信任 docker 内网代理(nginx)的 X-Forwarded-* 头;直接模式(无代理)勿配置此项
       - ForwardedHeaders__KnownNetworks=172.16.0.0/12
 
-  ai-service:
-    ports: []
-
   # ── Nginx 反向代理 ──
   nginx:
     image: nginx:alpine

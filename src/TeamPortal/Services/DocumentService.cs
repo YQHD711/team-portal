@@ -1,19 +1,17 @@
 using System.Text;
-using System.Text.Json;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using UglyToad.PdfPig;
 
 namespace TeamPortal.Services;
 
 public class DocumentService
 {
-    private readonly HttpClient _http;
     private readonly KnowledgeService _knowledge;
-    private readonly string _baseUrl;
 
-    public DocumentService(HttpClient http, KnowledgeService knowledge, IConfiguration config)
+    public DocumentService(KnowledgeService knowledge)
     {
-        _http = http;
         _knowledge = knowledge;
-        _baseUrl = config.GetValue<string>("AiService:BaseUrl") ?? "http://localhost:9001";
     }
 
     public async Task<string> UploadAndProcess(IFormFile file, string targetFolder, string? role, string? dept)
@@ -51,16 +49,13 @@ public class DocumentService
             }
             else
             {
-                // Call Python service for PDF/DOCX
-                var response = await _http.PostAsync(
-                    $"{_baseUrl}/api/documents/extract?filepath={Uri.EscapeDataString(tempPath)}", null);
-
-                if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException("Document extraction failed");
-
-                var json = await response.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
-                content = doc.RootElement.GetProperty("text").GetString() ?? "";
+                // 本地 C# 解析 PDF/DOCX（原 ai-service PyPDF2/python-docx 已收编）
+                content = ext switch
+                {
+                    ".pdf" => ExtractPdf(tempPath),
+                    ".docx" => ExtractDocx(tempPath),
+                    _ => throw new InvalidOperationException($"Unsupported format: {ext}")
+                };
             }
 
             // TXT is plain text — save verbatim with its original extension
@@ -90,6 +85,41 @@ public class DocumentService
         {
             if (File.Exists(tempPath)) File.Delete(tempPath);
         }
+    }
+
+    /// <summary>本地 PDF 文本提取（PdfPig，行为对齐原 PyPDF2：取前 50 页、逐页拼接、保留空行）。</summary>
+    private static string ExtractPdf(string filePath)
+    {
+        var sb = new StringBuilder();
+        using (var pdf = PdfDocument.Open(filePath))
+        {
+            foreach (var page in pdf.GetPages().Take(50))
+            {
+                var text = page.Text;
+                if (!string.IsNullOrWhiteSpace(text))
+                    sb.Append(text).AppendLine();
+            }
+        }
+        return sb.ToString().Trim();
+    }
+
+    /// <summary>本地 DOCX 段落文本提取（OpenXML SDK，行为对齐原 python-docx：仅段落、忽略表格/页眉页脚）。</summary>
+    private static string ExtractDocx(string filePath)
+    {
+        var sb = new StringBuilder();
+        using var doc = WordprocessingDocument.Open(filePath, isEditable: false);
+        var body = doc.MainDocumentPart?.Document is { } document ? document.Body : null;
+        if (body is not null)
+        {
+            foreach (var para in body.Elements<Paragraph>())
+            {
+                // 优先 Descendants<Text>() 而非 InnerText：SDT(内容控件) 不会卡死
+                var text = string.Concat(para.Descendants<Text>().Select(t => t.Text));
+                if (!string.IsNullOrWhiteSpace(text))
+                    sb.AppendLine(text);
+            }
+        }
+        return sb.ToString().Trim();
     }
 }
 

@@ -18,14 +18,12 @@ public class InventoryService
     };
 
     private readonly AppDbContext _db;
-    private readonly IConfiguration _config;
     private readonly LogService _log;
     private readonly NotificationService _notification;
-    private readonly HttpClient _http;
 
-    public InventoryService(AppDbContext db, IConfiguration config, LogService log, NotificationService notification, HttpClient http)
+    public InventoryService(AppDbContext db, LogService log, NotificationService notification)
     {
-        _db = db; _config = config; _log = log; _notification = notification; _http = http;
+        _db = db; _log = log; _notification = notification;
     }
 
     public async Task<List<InventoryItem>> GetAll(string? search, string? category)
@@ -114,41 +112,51 @@ public class InventoryService
         return true;
     }
 
+    /// <summary>本地解析库存 Excel(.xlsx/.xlsm)并入库。原 ai-service openpyxl 转发已收编。
+    /// 数据约定: 首行表头(名称/分类/数量/库位/状态), 自第 2 行起逐行导入。</summary>
     public async Task<int> ImportFromExcel(string filePath)
     {
-        var pythonUrl = _config["AiService:BaseUrl"] ?? "http://localhost:9001";
-        var response = await _http.PostAsync(
-            $"{pythonUrl}/api/parse/excel?filepath={Uri.EscapeDataString(filePath)}", null);
-
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(json);
-        var items = doc.RootElement.GetProperty("items").EnumerateArray();
-
         var count = 0;
-        foreach (var item in items)
+        using var stream = File.OpenRead(filePath);
+        foreach (var row in MiniExcelLibs.MiniExcel.Query(stream, useHeaderRow: true))
         {
-            var name = item.GetProperty("name").GetString() ?? "";
-            var category = item.GetProperty("category").GetString() ?? "";
-            var quantity = item.GetProperty("quantity").GetInt32();
-            var locationCode = item.TryGetProperty("locationCode", out var lc) ? lc.GetString() : null;
-            var status = item.GetProperty("status").GetString() ?? "available";
+            // MiniExcel 非泛型 Query 返回 ExpandoObject(实现 IDictionary<string,object>)
+            if (row is not IDictionary<string, object> d || d.Count == 0) continue;
+
+            string Get(string key) => d.TryGetValue(key, out var v) ? v?.ToString() ?? "" : "";
+            // 兼容中英/中列名
+            var name = Get("名称");     if (string.IsNullOrEmpty(name)) name = Get("Name");
+            if (string.IsNullOrEmpty(name)) name = Get("name");
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var category = FirstNonEmpty(Get("分类"), Get("Category"), Get("category"), "未分类");
+            var quantityStr = Get("数量"); if (string.IsNullOrEmpty(quantityStr)) quantityStr = Get("Qty");
+            if (string.IsNullOrEmpty(quantityStr)) quantityStr = Get("qty");
+            int.TryParse(quantityStr, out var quantity);
+            var locationCode = FirstNonEmpty(Get("库位"), Get("Location"), Get("location"), Get("LocationCode"), Get("位置"), "");
+            var status = FirstNonEmpty(Get("状态"), Get("Status"), Get("status"), "available");
+            var explicitGrade = FirstNonEmpty(Get("Grade"), Get("等级"), Get("grade"), "");
+            var unitPriceStr = Get("单价"); if (string.IsNullOrEmpty(unitPriceStr)) unitPriceStr = Get("UnitPrice");
+            decimal.TryParse(unitPriceStr, out var unitPrice);
+            // Grade: 显式列优先;否则按单价自动判定(≥1000→A, 100~999→B, ＜100→C;无单价→C)
+            var grade = string.IsNullOrEmpty(explicitGrade)
+                ? (unitPrice > 0 ? CalcGrade(unitPrice) : "C")
+                : explicitGrade;
 
             _db.InventoryItems.Add(new InventoryItem
             {
                 Name = name,
                 Category = category,
                 Quantity = quantity,
-                LocationCode = locationCode,
+                LocationCode = string.IsNullOrEmpty(locationCode) ? null : locationCode,
                 Status = status,
+                Grade = grade,
+                UnitPrice = unitPrice,
                 UpdatedAt = DateTime.UtcNow,
             });
 
             // 低量告警
             if (quantity <= LowStockThreshold)
-            {
                 _notification.Notify("库存预警", $"导入零件「{name}」库存仅剩 {quantity} 件，请及时补货。");
-            }
 
             count++;
         }
@@ -158,5 +166,12 @@ public class InventoryService
         _log.Info("inventory", $"Excel import completed", $"{{\"imported\":{count}}}");
 
         return count;
+    }
+
+    private static string FirstNonEmpty(params string[] values)
+    {
+        foreach (var v in values)
+            if (!string.IsNullOrWhiteSpace(v)) return v;
+        return "";
     }
 }

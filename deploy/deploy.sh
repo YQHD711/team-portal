@@ -5,7 +5,7 @@
 #   bash deploy/deploy.sh sha-<完整40位commit>  # 部署/回滚到指定 commit
 #   (完整 sha 用 git rev-parse HEAD 查看;CI 推的镜像 tag 是 sha-<完整sha>)
 # 首次使用若拉取被拒(401/403): 包还是私有的，二选一:
-#   a) GitHub 网页 → 你的 Packages → teamportal-frontend/backend/ai-service → Package settings → Change visibility → Public
+#   a) GitHub 网页 → 你的 Packages → teamportal-frontend/backend → Package settings → Change visibility → Public
 #   b) 或创建只读 packages PAT 后执行: echo <PAT> | docker login ghcr.io -u YQHD711 --password-stdin
 set -euo pipefail
 

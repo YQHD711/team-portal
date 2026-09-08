@@ -50,7 +50,7 @@ fi
 # ── 3. 提示关键配置 ──
 warn "请确认 .env 中的关键配置（当前可先跳过，稍后再改）:"
 warn "  - ADMIN__PASSWORD: 管理员初始密码（默认 change-me，首次登录后请修改）"
-warn "  - AISERVICE__DEEPSEEKKEY: DeepSeek AI 密钥（可选，不填则 AI 问答不可用）"
+warn "  - AISERVICE__DEEPSEEKKEY: DeepSeek AI 密钥（可选，后端兜底配置）"
 echo
 
 # ── 4. 构建并启动 ──

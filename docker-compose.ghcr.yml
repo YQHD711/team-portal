@@ -12,7 +12,3 @@ services:
   backend:
     image: ghcr.io/yqhd711/teamportal-backend:${TEAMPORTAL_IMAGE_TAG:-latest}
     pull_policy: missing
-
-  ai-service:
-    image: ghcr.io/yqhd711/teamportal-ai-service:${TEAMPORTAL_IMAGE_TAG:-latest}
-    pull_policy: missing

@@ -31,8 +31,8 @@ make build
 Agent **不需要记住具体命令**，全部通过 Makefile：
 
 ```makefile
-make build    # 编译三端 (C# + Next.js + Python 语法检查)
-make test     # 全量测试 (xUnit + Vitest + pytest)
+make build    # 编译三端 (C# + Next.js)
+make test     # 全量测试 (xUnit + Vitest)
 make dev      # 本地开发: docker compose up
 make lint     # 代码风格检查
 make clean    # 清理构建产物
@@ -58,16 +58,11 @@ Agent 提交代码前**必须**跑 `make test` 通过。
 - 不直接 fetch，用 api.ts 里的类型安全方法
 - 禁止 `any` 类型
 
-### Python (ai-service/)
-- FastAPI + Pydantic 模型
-- 三个路由文件: chat.py, search.py, logs.py
-- `requirements.txt` 固定版本号（用 `==`，不用 `>=`）
-- 内部 HTTP 调用用 httpx.AsyncClient
-
 ### 通用
 - 不写超过 200 行的单文件（拆）
 - 不写没有测试的代码
 - 不硬编码路径，用环境变量或配置文件
+- AI/解析能力全部内置 C#（DeepSeek 直连 / MiniExcel / PdfPig / OpenXML SDK）；已无 Python 服务
 
 ---
 
@@ -79,13 +74,11 @@ Agent 提交代码前**必须**跑 `make test` 通过。
 |---|---|---|---|
 | C# | xUnit | tests/api/ | `dotnet test` |
 | 前端 | Vitest | web/tests/ | `cd web && npx vitest run` |
-| Python | pytest | tests/ai/ | `cd ai-service && .venv/Scripts/python.exe -m pytest tests/ai` |
 
 ### 测试覆盖率最低要求
 - C# Services: 必须测试（单元测试）
 - C# Endpoints: 建议测试（集成测试）
 - 前端组件: 关键交互必须测试
-- Python 路由: 必须测试（httpx AsyncClient 调自己）
 
 ---
 
@@ -125,9 +118,8 @@ chore: update docker-compose version
 
 - `test-csharp` — 工作目录 `tests/api`，`dotnet test`（.NET 10）
 - `test-web` — `cd web && npm ci && npx vitest run`（Node 24）
-- `test-python` — `cd ai-service && pip install -r requirements-dev.txt && cd tests/ai && python -m pytest`（Python 3.11）
 - `e2e-smoke` — `web` 下 `npx playwright test`（chromium）
-- `build-push` — 仅 `push main` 触发：推 ghcr `backend/frontend/ai-service`（tag=latest + sha）
+- `build-push` — 仅 `push main` 触发：推 ghcr `backend/frontend`（tag=latest + sha）
 - `notify` — 仅失败时推飞书群（secret `FEISHU_WEBHOOK_URL`，未配置则跳过）
 
 > 部署：服务器零构建，由 systemd timer 每 5 分钟 `deploy/auto-deploy.sh` 拉 ghcr 镜像 `docker compose up -d --no-build` 上线（详见记忆/部署闭环）。
