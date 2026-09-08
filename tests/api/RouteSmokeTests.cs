@@ -74,10 +74,9 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
             var detail = await rawClient.GetAsync("/api/flightlogs/whatever.tlog");
             var del = await rawClient.DeleteAsync("/api/flightlogs/whatever.tlog");
 
-            Assert.True((int)detail.StatusCode != 404 && (int)detail.StatusCode != 503,
-                $"GET 飞行日志详情 不应 404/503，实际 {(int)detail.StatusCode}");
-            Assert.True((int)del.StatusCode is 401 or 403,
-                $"DELETE 无 admin 应 401/403，实际 {(int)del.StatusCode}");
+            // 未登录访问被鉴权拦 → 401（证明端点可达而非 404）
+            Assert.Equal(HttpStatusCode.Unauthorized, detail.StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, del.StatusCode);
         }
         finally
         {
