@@ -47,7 +47,6 @@ git diff --numstat | ForEach-Object {
 - 语言层语法错误可通过编译/构建发现，审查到可疑处先跑相关检查：
   - C#：`dotnet build src/TeamPortal/TeamPortal.csproj` 或定向单测
   - 前端：`cd web && npx vitest run <相关文件>`
-  - Python：`python -m pytest tests/ai/`
 - 跑测试以**确认现有功能不被破坏**，新功能行为用代码走查
 - 修改过环境配置（如 ConnectionStrings）注意核对相对路径在真实运行目录下是否解析正确
 

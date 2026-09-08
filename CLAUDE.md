@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-高校航模队管理与运营系统，覆盖知识库、零件库存、飞行日志分析、AI 助手四个模块。三容器 Docker Compose 部署，与 OpenDeepWiki 共享技术栈经验但独立维护。
+高校航模队管理与运营系统，覆盖知识库、零件库存、飞行日志分析、AI 助手四个模块。两容器 Docker Compose 部署（2026-09 收编 Python ai-service），与 OpenDeepWiki 共享技术栈经验但独立维护。
 
 ## 当前状态
 
@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - ✅ 后端：ASP.NET Core 10 Minimal API（`src/TeamPortal/`）
 - ✅ 前端：Next.js 16 App Router（`web/`）
-- ✅ AI 服务：Python FastAPI（`ai-service/`）
+- ✅ AI：DeepSeek 直连 + 解析器内置 C#（MiniExcel / PdfPig / OpenXML SDK）
 - ✅ 数据库：SQLite（EF Core，`EnsureCreated` 模式）
 - ✅ `Makefile` / `docker-compose.yml` / `.github/workflows/ci.yml`
 
@@ -20,7 +20,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 dotnet run --project src/TeamPortal/    # 后端 :8080
 cd web && npm run dev                   # 前端 :3000
-cd ai-service && .venv/Scripts/python.exe -m uvicorn main:app --port 9001  # AI :9001
 ```
 
 **管理员**：admin / admin123（可通过系统设置页面修改）
@@ -33,8 +32,8 @@ cd ai-service && .venv/Scripts/python.exe -m uvicorn main:app --port 9001  # AI 
 ## 常用命令（Phase 0 实现后生效）
 
 ```bash
-make build    # 编译三端 (C# + Next.js + Python 语法检查)
-make test     # 全量测试 (xUnit + Vitest + pytest)
+make build    # 编译 (C# + Next.js)
+make test     # 全量测试 (xUnit + Vitest)
 make dev      # 本地开发启动 (docker compose up)
 make lint     # 代码风格检查
 make clean    # 清理构建产物
@@ -44,30 +43,27 @@ make clean    # 清理构建产物
 ```bash
 dotnet test tests/api/          # C# xUnit
 cd web && npx vitest run        # 前端 Vitest
-python -m pytest tests/ai/      # Python pytest
 ```
 
 ## 架构
 
 ```
-浏览器 → Next.js (:3000) → ASP.NET Core (:8080) → SQLite + Python 辅助服务 (:9001)
+浏览器 → Next.js (:3000) → ASP.NET Core (:8080) → SQLite
                                    │
                                    ├── 直读 data/knowledge/*.md
-                                   ├── 转发 ai-service (DeepSeek API, pymavlink, openpyxl)
+                                   ├── DeepSeek API（直连，聊天/搜索/系统Agent/Wiki生成）
                                    └── JWT 认证
 ```
 
 - **前端** (`web/`): Next.js 16 App Router + Tailwind CSS 4 + Radix UI + recharts + mermaid + react-markdown
-- **后端** (`src/TeamPortal/`): ASP.NET Core 10 Minimal API + EF Core SQLite + JWT
-- **AI 服务** (`ai-service/`): Python FastAPI，三个路由文件 chat.py / search.py / logs.py
+- **后端** (`src/TeamPortal/`): ASP.NET Core 10 Minimal API + EF Core SQLite + JWT；内置 AI 代理（DeepSeek）、知识库 RAG、文档提取（PdfPig/OpenXML）、Excel 导入（MiniExcel）
 - **数据** (`data/`): 知识库 .md 文件、`inventory.xlsx`、飞行日志 `.tlog`，整个目录 Git 忽略，运行时挂载。Agent 测试时手动往 `data/knowledge/` 放 `.md` 文件即可验证知识库功能
 
 ## 代码规范要点
 
-- **代码风格统一遵循 `.editorconfig`**：C# 4 空格缩进，TS/JSON/YAML/MD 2 空格缩进，Python 4 空格缩进，Makefile Tab 缩进
+- **代码风格统一遵循 `.editorconfig`**：C# 4 空格缩进，TS/JSON/YAML/MD 2 空格缩进，Makefile Tab 缩进
 - C#: Minimal API（不用传统 Controller），一个 Endpoint 一个文件，Services 纯逻辑不依赖 HTTP 上下文；错误处理统一 `try-catch → Problem()` 返回标准错误 JSON
 - TypeScript: 禁用 `any`，API 调用统一走 `lib/api.ts` 封装，不直接 fetch
-- Python: FastAPI + Pydantic，依赖用 `==` 固定版本，HTTP 调用用 httpx.AsyncClient
 - 单文件不超过 200 行
 - 不硬编码路径/密钥，用配置文件或环境变量注入
 
@@ -77,7 +73,6 @@ python -m pytest tests/ai/      # Python pytest
 |---|---|---|---|
 | C# | xUnit | tests/api/ | Services **必须**测（单元），Endpoints **建议**测（集成） |
 | 前端 | Vitest | web/tests/ | 关键交互**必须**测 |
-| Python | pytest | tests/ai/ | 路由**必须**测 |
 
 ## Git 工作流
 

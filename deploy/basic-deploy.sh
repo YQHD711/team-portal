@@ -49,7 +49,6 @@ sleep 30
 # 健康检查
 curl -sf http://localhost:8080/health >/dev/null && ok "Backend :8080 健康"  || warn "Backend :8080 未就绪 (查看 docker compose logs backend)"
 curl -sf http://localhost:3000       >/dev/null && ok "Frontend :3000 健康" || warn "Frontend :3000 未就绪"
-curl -sf http://localhost:9001/health >/dev/null && ok "AI service :9001 健康" || warn "AI service :9001 未就绪"
 
 echo
 echo "=============================================="

@@ -9,7 +9,7 @@
 | 🏠 仪表盘 | 系统统计 + AI 对话面板 |
 | 📚 知识库 | 公共/部门知识库，MDX 渲染，Mermaid 流程图，代码高亮 |
 | 📦 零件库存 | 库存列表、搜索筛选、recharts 饼图、低库存告警 |
-| 📊 飞行日志 | .tlog 解析、高度时间序列图、统计摘要 |
+| 📊 飞行日志 | 上传/下载/删除、列表管理、百度网盘同步 |
 | 🤖 AI 助手 | DeepSeek API SSE 流式对话、RAG 知识库检索 |
 | ⚙️ 管理后台 | 用户/部门/资料 CRUD、三级角色权限、文档上传 |
 
@@ -19,7 +19,7 @@
 |---|---|
 | 前端 | Next.js 16 + Tailwind CSS 4 + Radix UI + recharts |
 | 后端 | ASP.NET Core 10 Minimal API + EF Core SQLite + JWT |
-| AI 服务 | Python FastAPI + DeepSeek + PyPDF2 + python-docx |
+| AI/解析 | DeepSeek 直连 + MiniExcel + PdfPig + OpenXML SDK（全部 C# 内置） |
 | 部署 | Docker Compose + Nginx + GitHub Actions CI |
 
 ## 角色权限
@@ -55,9 +55,8 @@ make build
 team-portal/
 ├── web/           # Next.js 前端
 ├── src/TeamPortal/# ASP.NET Core 后端
-├── ai-service/    # Python FastAPI 辅助
 ├── data/          # 数据文件 (Git 忽略)
-├── tests/         # 测试 (xUnit + Vitest + pytest)
+├── tests/         # 测试 (xUnit + Vitest)
 └── docs/          # 文档
 ```
 

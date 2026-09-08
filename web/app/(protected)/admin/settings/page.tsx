@@ -235,7 +235,7 @@ export default function SettingsPage() {
         <div className="text-xs text-muted space-y-0.5">
           <div>后端：ASP.NET Core 10 + SQLite</div>
           <div>前端：Next.js 16 + Tailwind CSS 4</div>
-          <div>AI 服务：Python FastAPI + DeepSeek</div>
+          <div>AI 服务：DeepSeek（C# 内置）</div>
           <div className="mt-1 text-faint">敏感配置（密钥/密码）可通过环境变量覆盖，优先级高于此页面设置。</div>
         </div>
       </div>

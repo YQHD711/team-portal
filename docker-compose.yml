@@ -40,8 +40,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - AI_SERVICE_URL=http://ai-service:9001
-      - AiService__BaseUrl=http://ai-service:9001
       # ArduPilot WebTools 静态文件根目录(/webtools-content 与 volumes 挂载点一致)
       - WebTools__Root=/webtools-content
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
@@ -51,31 +49,9 @@ services:
       - ./data:/data
       # 把宿主机 ArduPilot WebTools 静态文件挂进 backend 容器(详见 deploy/README-WEBTOOLS.md)
       - ./webtools-content:/webtools-content:ro
-    depends_on:
-      - ai-service
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  ai-service:
-    build:
-      context: ./ai-service
-      dockerfile: Dockerfile
-    ports:
-      - "9001:9001"
-    environment:
-      - DEEPSEEK_API_KEY=${AISERVICE__DEEPSEEKKEY:-}
-      - DEEPSEEK_BASE_URL=${AISERVICE__DEEPSEEKBASEURL:-https://api.deepseek.com}
-      - TEAMPORTAL_DB_PATH=/data/teamportal.db
-    volumes:
-      - ./data:/data
-      - ./ai-service:/app
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9001/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

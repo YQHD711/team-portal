@@ -19,11 +19,25 @@ public static class FlightLogEndpoints
             return result is not null ? Results.Ok(result) : Results.Problem("Service unavailable", statusCode: 503);
         });
 
-        group.MapGet("/{filename}", async (string filename, FlightLogService svc) =>
+        group.MapGet("/{filename}", (string filename, FlightLogService svc) =>
         {
-            var result = await svc.ParseLog(filename);
-            return result is not null ? Results.Ok(result) : Results.Problem("Parse failed", statusCode: 503);
+            var file = svc.GetFile(filename);
+            if (file is null || file.Value.Bytes is null)
+                return Results.Problem("File not found", statusCode: 404);
+            return Results.File(file.Value.Bytes, file.Value.ContentType ?? "application/octet-stream", filename);
         });
+
+        // Delete a flight log file (admin only; hard delete + audit)
+        group.MapDelete("/{filename}", async (string filename, FlightLogService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+        {
+            var ok = svc.DeleteFile(filename);
+            if (!ok) return Results.Problem("File not found", statusCode: 404);
+            var actor = user.Identity?.Name ?? "unknown";
+            log.Warn("flightlog", $"Flight log deleted: {filename} by {actor}");
+            log.Audit("delete", actor, targetType: "flightlog", targetId: filename,
+                data: new { filename }, ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new { success = true });
+        }).RequireAuthorization("AdminOnly");
 
         // Upload .tlog/.bin file — save locally + sync to Baidu cloud
         group.MapPost("/upload", async (IFormFile file, BaiduNetdiskService baidu, ClaimsPrincipal user, LogService log, NotificationService notify) =>
