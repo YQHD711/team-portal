@@ -47,6 +47,12 @@ public partial class WikiGeneratorService
         {
             try
             {
+                // 目录清单可来自请求方的 customCatalogJson,含 ../ 的项直接跳过(否则可覆盖他部门文档)
+                if (!IsSafeCatalogPath(item.Path))
+                {
+                    _logger.LogWarning("Skipped unsafe catalog path during review: {Path}", item.Path);
+                    continue;
+                }
                 var kbPath = $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
                 var content = _knowledge.GetContent(kbPath);
                 if (string.IsNullOrWhiteSpace(content)) continue;

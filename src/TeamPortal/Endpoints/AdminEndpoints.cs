@@ -155,6 +155,8 @@ public static class AdminEndpoints
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            // 目标路径同样要过 ACL:否则可以把公共文档"改名"进他部门目录(等于越权写入)
+            if (!svc.CanAccess(req.NewPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.Rename(req.Path, req.NewPath); log.Info("knowledge", $"Renamed: {req.Path} → {req.NewPath} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { newPath = req.NewPath }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库重命名", $"{actor} 将 {req.Path} 重命名为 {req.NewPath}", targetRole: "staff"); return Results.Ok(new { success = true }); }
             catch (Exception e) { log.Error("knowledge", $"Rename failed: {req.Path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
         });

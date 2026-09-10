@@ -46,6 +46,18 @@ public static class ProfileEndpoints
         return null;
     }
 
+    /// <summary>读操作门禁:管理员不受限;部长只能读自己或本部门成员的档案。</summary>
+    internal static async Task<IResult?> RequireCanViewAsync(ClaimsPrincipal user, AppDbContext db, int targetUserId)
+    {
+        var (role, deptId, actorId) = await GetUserCtx(user, db);
+        if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+        if (role == "admin" || actorId == targetUserId) return null;
+        if (!deptId.HasValue) return Results.Problem("仅管理员和本部门部长可查看该成员", statusCode: 403);
+        var targetDeptId = await db.Users.AsNoTracking()
+            .Where(u => u.Id == targetUserId).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+        return targetDeptId == deptId ? null : Results.Problem("仅管理员和本部门部长可查看该成员", statusCode: 403);
+    }
+
     public static void MapProfileEndpoints(this WebApplication app)
     {
         // ── 个人档案 ──
@@ -107,15 +119,15 @@ public static class ProfileEndpoints
 
         adminGroup.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
-            var (role, _, _) = await GetUserCtx(user, db);
+            var (role, deptId, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
-            return Results.Ok(await svc.ListAllProfiles());
+            // 部长只拿本部门档案:此前返回全队,前端只是按部门隐藏,响应体里仍能读到全部
+            return Results.Ok(await svc.ListAllProfiles(role == "admin" ? null : deptId));
         });
 
         adminGroup.MapGet("/{userId:int}", async (int userId, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
-            var (role, _, _) = await GetUserCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+            if (await RequireCanViewAsync(user, db, userId) is { } denied) return denied;
             var profile = await svc.GetFullProfile(userId);
             return profile is not null ? Results.Ok(profile) : Results.Problem("档案不存在", statusCode: 404);
         });

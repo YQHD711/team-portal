@@ -21,10 +21,12 @@ public class CertificationService
             .ToListAsync();
     }
 
-    public async Task<List<object>> ListAllCertifications()
+    /// <summary>列出认证。departmentId 非空时只返回该部门成员(部长视角)。</summary>
+    public async Task<List<object>> ListAllCertifications(int? departmentId = null)
     {
-        return await _db.SkillCertifications
-            .Include(c => c.User)
+        var query = _db.SkillCertifications.Include(c => c.User).AsQueryable();
+        if (departmentId.HasValue) query = query.Where(c => c.User!.DepartmentId == departmentId.Value);
+        return await query
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new
             {

@@ -241,11 +241,12 @@ public class ProfileService
 
     // ── Admin: list all profiles ──
 
-    public async Task<List<object>> ListAllProfiles()
+    /// <summary>列出档案。departmentId 非空时只返回该部门成员(部长视角)。</summary>
+    public async Task<List<object>> ListAllProfiles(int? departmentId = null)
     {
-        return await _db.PilotProfiles
-            .Include(p => p.User)
-            .ThenInclude(u => u!.Department)
+        var query = _db.PilotProfiles.Include(p => p.User).ThenInclude(u => u!.Department).AsQueryable();
+        if (departmentId.HasValue) query = query.Where(p => p.User!.DepartmentId == departmentId.Value);
+        return await query
             .OrderBy(p => p.User!.Username)
             .Select(p => new
             {

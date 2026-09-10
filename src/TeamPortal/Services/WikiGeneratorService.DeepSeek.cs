@@ -194,8 +194,27 @@ public partial class WikiGeneratorService
 
     private string ToolWriteCatalog(string json) { _catalogJson = json; return "{\"success\": true, \"message\": \"Catalog saved\"}"; }
 
+    /// <summary>
+    /// 目录清单里的 path 来自模型输出或请求方提供的 customCatalogJson。
+    /// 直接拼进知识库路径会被 "../../他部门/x" 穿越(KnowledgeService 只保证不越出知识库根,
+    /// 挡不住跨部门覆盖),因此这里只接受安全的相对片段。
+    /// </summary>
+    internal static bool IsSafeCatalogPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var normalized = path.Replace('\\', '/');
+        if (normalized.StartsWith('/') || normalized.Contains(':')) return false; // 绝对路径 / 盘符 / ADS
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length > 0 && segments.All(s => s is not ("." or ".."));
+    }
+
     private string ToolWriteDoc(string path, string content)
     {
+        if (!IsSafeCatalogPath(path))
+        {
+            _logger.LogWarning("Rejected unsafe doc path from catalog: {Path}", path);
+            return "{\"success\": false, \"error\": \"invalid path\"}";
+        }
         var relativePath = $"{_targetFolder}/{_projectName}/{path}.md".Replace("//", "/");
         _knowledge.WriteFile(relativePath, content);
         _logger.LogInformation("Doc written: {Path}", relativePath);
