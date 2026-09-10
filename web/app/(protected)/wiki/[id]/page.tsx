@@ -173,8 +173,15 @@ export default function WikiViewerPage() {
                   value={task.visibility}
                   onChange={async (e) => {
                     const v = e.target.value;
-                    try { await fetch(`/api/wiki/tasks/${taskId}/visibility`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` }, body: JSON.stringify({ visibility: v }) }); setTask({ ...task, visibility: v }); }
-                    catch { }
+                    // 乐观更新必须校验响应:失败时若不回滚,界面会显示"已收权"而文档实际仍然公开
+                    try {
+                      const res = await fetch(`/api/wiki/tasks/${taskId}/visibility`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` }, body: JSON.stringify({ visibility: v }) });
+                      if (!res.ok) { e.target.value = task.visibility; alert("可见性修改失败，请重试"); return; }
+                      setTask({ ...task, visibility: v });
+                    } catch {
+                      e.target.value = task.visibility;
+                      alert("可见性修改失败，请检查网络后重试");
+                    }
                   }}
                   className="ml-1 px-2 py-1 text-xs rounded-lg border border-border dark:border-zinc-700 bg-surface shrink-0"
                 >

@@ -89,10 +89,13 @@ export default function FilesPage() {
             <button onClick={async () => {
               const token = localStorage.getItem("token");
               const res = await fetch(`/api/files/${f.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+              // 未校验 res.ok 时,401/404 的 JSON 错误体会被当成文件存下来
+              if (!res.ok) { alert("下载失败，请刷新后重试"); return; }
               const blob = await res.blob();
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a"); a.href = url; a.download = f.originalName; a.click();
-              URL.revokeObjectURL(url);
+              // 同步 revoke 会让部分浏览器来不及开始下载(得到 0 字节文件)
+              setTimeout(() => URL.revokeObjectURL(url), 10_000);
             }} className="p-2 rounded-lg hover:bg-sky-50 text-sky-600" title="下载"><Download className="h-5 w-5" /></button>
             {isStaff && <button onClick={() => handleDelete(f.id)} className="p-2 rounded-lg hover:bg-red-50 text-danger" title="删除"><Trash2 className="h-5 w-5" /></button>}
           </div>

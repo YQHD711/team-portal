@@ -21,7 +21,9 @@ export default function BlobViewerPage() {
     const token = getToken();
     if (!token) { setError("请先登录"); setLoading(false); return; }
 
-    fetch(`/api/wiki/tasks/${taskId}/blob/${filePath}`, {
+    // 路径参数必须逐段编码:文件名含 #/? 时请求会被截断成错误的 URL
+    const encodedPath = (params.path as string[]).map(encodeURIComponent).join("/");
+    fetch(`/api/wiki/tasks/${encodeURIComponent(taskId)}/blob/${encodedPath}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
