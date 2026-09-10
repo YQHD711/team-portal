@@ -19,7 +19,7 @@ if [ "$TAG" != "latest" ]; then
   export TEAMPORTAL_IMAGE_TAG="$TAG"
 fi
 
-echo "==> 1/4 拉取最新代码"
+echo "==> 1/6 拉取最新代码"
 # root(cron 自动部署)场景下以 admin 身份拉代码，避免 .git 属主被 root 污染
 if [ "$(id -u)" -eq 0 ]; then
   sudo -u admin -H git pull --ff-only origin main || echo "⚠ git pull 失败,继续用镜像部署(仓库代码可能滞后)"
@@ -27,21 +27,43 @@ else
   git pull --ff-only origin main
 fi
 
-echo "==> 2/4 拉取镜像 (tag: ${TAG})"
+echo "==> 2/6 拉取镜像 (tag: ${TAG})"
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull || {
   echo "✗ 镜像拉取失败——大概率是 ghcr 包还是私有的，见脚本头部注释处理"
   exit 1
 }
 
-echo "==> 3/4 滚动重启服务"
+echo "==> 3/6 滚动重启服务"
 # --no-build 双保险: 拉取式部署绝不允许在服务器上触发构建
 # 注意: 不能加 --remove-orphans，wiki-nginx 由独立的 docker-compose.wiki.yml 管理，会被误删
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
 
-echo "==> 4/4 恢复 wiki 站点(独立 compose 文件)"
+echo "==> 4/6 恢复 wiki 站点(独立 compose 文件)"
 docker compose -f docker-compose.wiki.yml up -d 2>/dev/null || true
 
-echo "==> 5/5 清理悬空镜像"
+# 健康门禁:容器起来 ≠ 服务可用(docker compose up -d 对 crash-loop 容器同样返回 0)。
+# 不通过就 exit 1 → auto-deploy.sh 不更新 .deployed_sha,下一轮自动重试,并可手动回滚。
+echo "==> 5/6 健康门禁(最多 90s)"
+healthy=0
+for _ in $(seq 1 45); do
+  if curl -fsS --max-time 3 http://127.0.0.1:8080/health >/dev/null 2>&1; then healthy=1; break; fi
+  sleep 2
+done
+if [ "$healthy" -ne 1 ]; then
+  echo "✗ 后端 /health 90s 内未就绪 —— 本次部署判定失败(不更新已部署版本)"
+  docker compose -f docker-compose.yml -f docker-compose.ghcr.yml logs --tail=60 backend || true
+  exit 1
+fi
+echo "✅ 后端健康"
+
+frontend_ok=0
+for _ in $(seq 1 20); do
+  if curl -fsS --max-time 3 http://127.0.0.1:3000 >/dev/null 2>&1; then frontend_ok=1; break; fi
+  sleep 2
+done
+[ "$frontend_ok" -eq 1 ] && echo "✅ 前端健康" || echo "⚠ 前端 :3000 未就绪(后端已健康,可稍后复查 docker compose logs frontend)"
+
+echo "==> 6/6 清理悬空镜像"
 docker image prune -f >/dev/null
 
 echo "✅ 部署完成: $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"

@@ -50,15 +50,30 @@ public class TrashService
                     break;
                 case "InventoryItem":
                     var inv = JsonSerializer.Deserialize<InventoryItem>(item.DataJson);
-                    if (inv is not null) { inv.Id = 0; _db.InventoryItems.Add(inv); }
+                    if (inv is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "DataJson 反序列化为 null，已保留回收站记录不删除");
+                        return false;   // 反序列化失败时绝不能删掉回收站行，否则数据不可恢复
+                    }
+                    inv.Id = 0; _db.InventoryItems.Add(inv);
                     break;
                 case "BatteryRecord":
                     var bat = JsonSerializer.Deserialize<BatteryRecord>(item.DataJson);
-                    if (bat is not null) { bat.Id = 0; _db.BatteryRecords.Add(bat); }
+                    if (bat is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "DataJson 反序列化为 null，已保留回收站记录不删除");
+                        return false;
+                    }
+                    bat.Id = 0; _db.BatteryRecords.Add(bat);
                     break;
                 case "IncidentRecord":
                     var inc = JsonSerializer.Deserialize<IncidentRecord>(item.DataJson);
-                    if (inc is not null) { inc.Id = 0; _db.IncidentRecords.Add(inc); }
+                    if (inc is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "DataJson 反序列化为 null，已保留回收站记录不删除");
+                        return false;
+                    }
+                    inc.Id = 0; _db.IncidentRecords.Add(inc);
                     break;
                 default:
                     return false;
@@ -68,7 +83,11 @@ public class TrashService
             _log.Info("trash", $"Restored: {item.Title}");
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            _log.Error("trash", $"Restore failed: {item.Title}", ex.Message);
+            return false;
+        }
     }
 
     public async Task<bool> DeleteForever(long id)

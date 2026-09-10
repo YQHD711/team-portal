@@ -8,6 +8,7 @@ namespace TeamPortal.Middleware;
 /// <summary>
 /// Global exception handler — logs all unhandled exceptions and returns
 /// sanitized ProblemDetails JSON with a TraceId for debugging.
+/// 响应体整形规则见 <see cref="ErrorPayload"/>（意外异常不回显类型/堆栈/消息）。
 /// </summary>
 public static class ExceptionHandlingMiddleware
 {
@@ -21,20 +22,12 @@ public static class ExceptionHandlingMiddleware
                 var exception = feature?.Error;
 
                 var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
-                var statusCode = exception switch
-                {
-                    // BadHttpRequestException:JSON 请求体反序列化失败(类型不匹配、格式错误)等,属客户端错误
-                    BadHttpRequestException => StatusCodes.Status400BadRequest,
-                    InvalidOperationException => StatusCodes.Status400BadRequest,
-                    UnauthorizedAccessException => StatusCodes.Status403Forbidden,
-                    KeyNotFoundException => StatusCodes.Status404NotFound,
-                    _ => StatusCodes.Status500InternalServerError,
-                };
+                var statusCode = ErrorPayload.StatusFor(exception);
 
                 context.Response.StatusCode = statusCode;
                 context.Response.ContentType = "application/problem+json";
 
-                // Log to service
+                // Log to service（完整异常只进日志，不进响应体）
                 if (exception is not null)
                 {
                     var log = context.RequestServices.GetRequiredService<LogService>();
@@ -42,13 +35,12 @@ public static class ExceptionHandlingMiddleware
                         $"{exception.GetType().Name}: {exception}\nTraceId: {traceId}\nPath: {context.Request.Path}");
                 }
 
+                var (title, detail) = ErrorPayload.For(exception, app.Environment.IsDevelopment(), traceId);
                 var problem = new ProblemDetails
                 {
                     Status = statusCode,
-                    Title = exception?.Message ?? "服务器内部错误",
-                    Detail = app.Environment.IsDevelopment()
-                        ? $"{exception?.GetType().Name}: {exception}\nTraceId: {traceId}"
-                        : "系统内部错误，请联系管理员。",
+                    Title = title,
+                    Detail = detail,
                     Instance = context.Request.Path,
                     Extensions = { ["traceId"] = traceId }
                 };
