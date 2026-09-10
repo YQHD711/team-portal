@@ -18,6 +18,7 @@ public partial class LogService : IDisposable
     private readonly CancellationTokenSource _cts = new();
 
     private long _auditDropped;
+    private long _sysDropped;
     private long _lastOpPruneTicks;
 
     public LogService(IServiceScopeFactory scopeFactory, ILogger<LogService> logger, SettingsService settings)
@@ -27,11 +28,14 @@ public partial class LogService : IDisposable
         _settings = settings;
         _channel = Channel.CreateBounded<SystemLog>(new BoundedChannelOptions(5000)
         {
-            FullMode = BoundedChannelFullMode.DropOldest
+            // Wait + 检查 TryWrite 返回值:DropOldest/DropNewest/DropWrite 下 TryWrite 恒为 true,
+            // 丢弃量无法计数(实测 .NET 10),审计与排障会因此失去可观测性。
+            // Wait 模式 TryWrite 不会阻塞,队列满时立即返回 false。
+            FullMode = BoundedChannelFullMode.Wait
         });
         _auditChannel = Channel.CreateBounded<OperationLog>(new BoundedChannelOptions(5000)
         {
-            FullMode = BoundedChannelFullMode.DropOldest
+            FullMode = BoundedChannelFullMode.Wait
         });
         _ = ProcessChannel(_cts.Token);
         _ = ProcessAuditChannel(_cts.Token);
@@ -56,12 +60,17 @@ public partial class LogService : IDisposable
             Level = level, Category = category, Message = message,
             Detail = detail, UserName = userName, CreatedAt = DateTime.UtcNow
         };
-        _channel.Writer.TryWrite(entry);
+        if (!_channel.Writer.TryWrite(entry)) Interlocked.Increment(ref _sysDropped);
     }
 
     public void Info(string cat, string msg, string? detail = null, string? user = null) => Log("info", cat, msg, detail, user);
     public void Warn(string cat, string msg, string? detail = null, string? user = null) => Log("warn", cat, msg, detail, user);
     public void Error(string cat, string msg, string? detail = null, string? user = null) => Log("error", cat, msg, detail, user);
+
+    /// <summary>channel 积压 / 丢弃计数,供健康检查与运维观测(无需访问 DB)。</summary>
+    public (int SysPending, long SysDropped, int AuditPending, long AuditDropped) GetChannelStats()
+        => (_channel.Reader.Count, Interlocked.Read(ref _sysDropped),
+            _auditChannel.Reader.Count, Interlocked.Read(ref _auditDropped));
 
     public void Dispose()
     {

@@ -59,7 +59,13 @@ public partial class LogService
             .OrderByDescending(o => o.Id).Take(10)
             .Select(o => new { o.UserName, o.Action, o.TargetId, o.CreatedAt })
             .ToListAsync();
-        return new { total, byAction, recent, auditPending = _auditChannel.Reader.Count, auditDropped = Interlocked.Read(ref _auditDropped) };
+        var (sysPending, sysDropped, auditPending, auditDropped) = GetChannelStats();
+        return new
+        {
+            total, byAction, recent,
+            auditPending, auditDropped,
+            sysPending, sysDropped
+        };
     }
 
     public async Task<object> GetStats()
@@ -77,7 +83,7 @@ public partial class LogService
             .Select(l => new { l.Category, l.Message, l.CreatedAt })
             .ToListAsync();
 
-        return new { total, errors24h, warns24h, recentErrors };
+        return new { total, errors24h, warns24h, recentErrors, pendingWrites = _channel.Reader.Count, dropped = Interlocked.Read(ref _sysDropped) };
     }
 
     public async Task<object> GetHealth()
