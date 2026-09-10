@@ -7,7 +7,7 @@ import { createElement, defaultLayout, layoutSummary, layoutToJson, parseLayout,
 import { cellLabelAt, cellLabelFromLoc, elementCells, hitItemElement, itemHitCells, cellKey } from "@/components/inventory/elementGeometry";
 import { cellCounts, elementMaterials, elementStats, findElementByLoc, locationKey, materialsByCell } from "@/components/inventory/locationCodes";
 import { clampScale, fitView, zoomAt, pinchView, distance, midpoint } from "@/components/inventory/layoutGestures";
-import { buildLocCode, locationRoom, parseLocParts } from "@/components/inventory/locCode";
+import { locationRoom } from "@/components/inventory/locCode";
 import { LOW_STOCK_THRESHOLD, cellClasses, cellFill, EMPTY_FILL, LOW_FILL, FULL_FILL } from "@/components/inventory/cellColors";
 import { SIZE_PRESETS } from "@/components/inventory/layoutPresets";
 
@@ -228,12 +228,11 @@ describe("视图变换（缩放/平移）", () => {
   });
 });
 
-describe("库位编码构造与格位配色", () => {
-  it("构造/解析四段编码（架位补零）", () => {
-    expect(buildLocCode("201", "1", "A", "3")).toBe("201-01-A-03");
-    expect(parseLocParts("201-01-A-03")).toEqual({ room: "201", cabinet: "01", shelf: "A", pos: "03" });
-    expect(parseLocParts("")).toEqual({ room: "", cabinet: "", shelf: "", pos: "" });
-    expect(locationRoom("201-01-A-03")).toBe("201");
+describe("库位编码读取与格位配色", () => {
+  it("取编码所属房间", () => {
+    expect(locationRoom("201-A-3-05")).toBe("201");
+    expect(locationRoom("201-C")).toBe("201");
+    expect(locationRoom("")).toBe("");
     expect(locationRoom(undefined)).toBe("");
   });
 

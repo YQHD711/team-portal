@@ -1,24 +1,24 @@
 import { X } from "lucide-react";
 import { categoryOpts, type Department, type InventoryItem, type InventoryFormState } from "./inventoryTypes";
+import { LocationPicker } from "./LocationPicker";
+import type { RoomLayoutOption } from "./locationOptions";
 
 interface Props {
   editItem: InventoryItem | null;
   form: InventoryFormState;
   setForm: React.Dispatch<React.SetStateAction<InventoryFormState>>;
-  locRoom: string; setLocRoom: (v: string) => void;
-  locCabinet: string; setLocCabinet: (v: string) => void;
-  locShelf: string; setLocShelf: (v: string) => void;
-  locPos: string; setLocPos: (v: string) => void;
-  roomOpts: string[];
+  /** 房间及其平面图（/api/storage/layouts），用于「室 → 元素 → 层 → 位」联动选择 */
+  rooms: RoomLayoutOption[];
+  fallbackRooms: string[];
+  onLocationCode: (code: string) => void;
   departments: Department[];
-  buildLocCode: (room: string, cab: string, shelf: string, pos: string) => string;
   calcGrade: (price: number) => string;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
 }
 
-/** 添加/编辑零件弹窗（表单 + 库位编码四段录入） */
-export default function InventoryFormModal({ editItem, form, setForm, locRoom, setLocRoom, locCabinet, setLocCabinet, locShelf, setLocShelf, locPos, setLocPos, roomOpts, departments, buildLocCode, calcGrade, onClose, onSubmit }: Props) {
+/** 添加/编辑零件弹窗（表单 + 库位编码联动选择） */
+export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
@@ -68,21 +68,11 @@ export default function InventoryFormModal({ editItem, form, setForm, locRoom, s
             <div><label className="block text-sm font-medium mb-1">项目标签</label><input value={form.projectTag} onChange={e => setForm({ ...form, projectTag: e.target.value })} placeholder="如: CADC2026" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">库位编码 <span className="text-faint text-xs">室-架-层-位</span></label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              <select value={locRoom} onChange={e => setLocRoom(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                <option value="">室</option>
-                {roomOpts.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <input type="number" min={1} max={99} value={locCabinet} onChange={e => setLocCabinet(e.target.value)}
-                placeholder="架" className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
-              <input type="number" min={1} max={9} value={locShelf} onChange={e => setLocShelf(e.target.value)}
-                placeholder="层" className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
-              <input type="number" min={1} max={99} value={locPos} onChange={e => setLocPos(e.target.value)}
-                placeholder="位" className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
-            </div>
-            {(locRoom || locCabinet) && <p className="text-xs text-faint mt-1">编码: {buildLocCode(locRoom, locCabinet, locShelf, locPos) || "—"}</p>}
+            <label className="mb-1 block text-sm font-medium">
+              库位编码 <span className="text-xs text-faint">（选房间与货架/柜子/工作台后自动生成，与平面图一致）</span>
+            </label>
+            <LocationPicker rooms={rooms} fallbackRooms={fallbackRooms}
+              value={form.locationCode} onChange={onLocationCode} />
           </div>
           <button type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover">{editItem ? "保存修改" : "添加零件"}</button>
         </form>
