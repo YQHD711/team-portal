@@ -84,7 +84,7 @@ describe("登录页", () => {
     fireEvent.change(screen.getByPlaceholderText("请输入密码"), { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: /登录/ }));
 
-    expect(await screen.findByText("登录中...")).toBeInTheDocument();
+    expect(await screen.findByText("登录中…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /登录/ })).toBeDisabled();
 
     resolveLogin({ token: "t" });
