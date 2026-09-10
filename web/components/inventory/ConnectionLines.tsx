@@ -1,8 +1,9 @@
 "use client";
 
-/** 物料 ↔ 货架格子连线视图：SVG overlay 画在面板与画布之间，悬停物料或格子时高亮对应线（仅供查看） */
-import { useEffect, useRef, useState } from "react";
+/** 物料 ↔ 元素格位连线视图：SVG overlay 画在面板与画布之间，悬停物料或格位时高亮对应线（仅供查看） */
+import { useEffect, useState } from "react";
 import type { ItemElement, MaterialItem } from "./layoutTypes";
+import { findElementByLoc, locationKey } from "./locationCodes";
 
 export interface LineEnd {
   x: number;
@@ -19,7 +20,7 @@ export interface ConnectionLine {
 
 const PALETTE = ["#f43f5e", "#f59e0b", "#10b981", "#3b82f6", "#a855f7", "#06b6d4", "#84cc16", "#f97316"];
 
-/** 汇总连线数据：物料 locCode → 命中画布元素（货架四段→格子，非货架→元素整体）；两端锚点都存在才连线 */
+/** 汇总连线数据：物料编码 → 命中元素的格位/整体；两端锚点都存在才连线 */
 export function buildConnectionLines(
   items: MaterialItem[],
   elements: ItemElement[],
@@ -28,18 +29,9 @@ export function buildConnectionLines(
 ): ConnectionLine[] {
   const out: ConnectionLine[] = [];
   for (const it of items) {
-    const loc = it.locationCode || "";
-    const parts = loc.split("-");
-    // 货架：四段编码 → 格子；非货架：完整 locCode（或以 locCode- 开头的兼容格式）→ 元素整体
-    let code = "";
-    if (parts.length >= 4) {
-      const shelf = elements.find(e => e.type === "shelf" && e.locCode && loc.startsWith(e.locCode + "-"));
-      if (shelf) code = `${shelf.locCode}-${parts[2]}-${parts[3]}`;
-    }
-    if (!code) {
-      const el = elements.find(e => e.type !== "shelf" && e.locCode && (loc === e.locCode || loc.startsWith(e.locCode + "-")));
-      if (el) code = el.locCode!;
-    }
+    const el = findElementByLoc(elements, it.locationCode || "");
+    if (!el) continue;
+    const code = locationKey(el, it.locationCode || "");
     if (!code) continue;
     const from = itemAnchors.get(it.id);
     const to = cellCenters.get(code);
@@ -51,7 +43,7 @@ export function buildConnectionLines(
 interface ConnectionLinesProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   lines: ConnectionLine[];
-  /** 高亮键：物料 id 字符串 或 格子编码 */
+  /** 高亮键：物料 id 字符串 或 格位编码 */
   hoverKey: string | null;
 }
 

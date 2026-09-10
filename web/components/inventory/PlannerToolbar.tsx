@@ -42,13 +42,14 @@ export function PlannerToolbar(props: PlannerToolbarProps) {
         placeholder="房间名称" title="房间名称（房间号不可改）"
         className={`w-36 ${inputCls}`} />
       <span className="text-xs text-faint">画布</span>
-      <input type="number" min={200} value={width}
-        onChange={e => onSize("width", Number(e.target.value) || 900)} title="画布宽度"
+      <input type="number" min={200} max={5000} step={10} value={width}
+        onChange={e => onSize("width", Number(e.target.value) || 900)} title="画布宽度（cm）"
         className={`w-16 ${inputCls}`} />
       <span className="text-xs text-faint">×</span>
-      <input type="number" min={200} value={height}
-        onChange={e => onSize("height", Number(e.target.value) || 600)} title="画布高度"
+      <input type="number" min={200} max={5000} step={10} value={height}
+        onChange={e => onSize("height", Number(e.target.value) || 600)} title="画布高度（cm）"
         className={`w-16 ${inputCls}`} />
+      <span className="text-xs text-faint">cm</span>
       <button onClick={onToggleLines} title="显示/隐藏物料连线"
         className={`rounded-lg p-1.5 ${showLines ? "bg-sky-100 dark:bg-sky-950 text-sky-600" : "text-muted hover:bg-surface-hover"}`}>
         <Network className="h-4 w-4" />

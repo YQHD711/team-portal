@@ -1,33 +1,24 @@
 "use client";
 
-/** 房间平面图编辑器：组合工具栏/元素面板/画布/物料面板，管理历史与保存；物料可拖拽挂载、连线视图 */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+/** 房间平面图编辑器：工具栏/元素面板/画布/物料面板，管理历史与保存；物料支持拖拽与点选挂载、格位详情 */
+import { useCallback, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { ElementKind, ItemElement, PosElement, RoomLayout } from "./layoutTypes";
-import { createElement, defaultLayout, layoutToJson, parseLayout } from "./layoutTypes";
+import type { ElementKind, ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
+import { colsOf, rowsOf } from "./layoutTypes";
+import { createElement, defaultLayout, layoutToJson, parseLayout, withElement } from "./layoutCodec";
+import { ElementDetail } from "./ElementDetail";
 import { ElementPanel } from "./ElementPanel";
 import { PlannerCanvas } from "./PlannerCanvas";
 import { PlannerToolbar } from "./PlannerToolbar";
 import { MaterialsPanel } from "./MaterialsPanel";
+import { MobileDrawer } from "./MobileDrawer";
+import { MountStatusBar } from "./MountStatusBar";
 import { ConnectionLines } from "./ConnectionLines";
 import { useMountingState } from "./useMountingState";
 import { PropertyDialog } from "./PropertyPanel";
 import { usePlannerShortcuts } from "./usePlannerShortcuts";
-import { historyReducer, removeElem, type HistState } from "./usePlannerHistory";
-
-/** 与后端 StorageLayout 一致的记录类型 */
-export interface RoomLayoutRow {
-  id: number;
-  roomCode: string;
-  roomName: string;
-  floor: number;
-  cabinetCount: number;
-  shelfCount: number;
-  positionCount: number;
-  description?: string;
-  updatedAt: string;
-  layoutJson?: string | null;
-}
+import { historyReducer, removeElem } from "./usePlannerHistory";
+import type { RoomLayoutRow } from "./layoutRow";
 
 interface RoomPlannerProps {
   layout: RoomLayoutRow;
@@ -45,11 +36,14 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const [selected, setSelected] = useState<string | null>(null);
   const [roomName, setRoomName] = useState(row.roomName);
   const [editId, setEditId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ el: ItemElement; cell: string | null } | null>(null);
+  const [pending, setPending] = useState<{ id: number; name: string } | null>(null);
+  const [drawer, setDrawer] = useState(false);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [showLines, setShowLines] = useState(false);
   const workRef = useRef<HTMLDivElement>(null);
-  const { items, applyLocation, setItemAnchors, setCellCenters, hoverKey, setHoverKey, lines } =
+  const { items, loadError, applyLocation, setItemAnchors, setCellCenters, hoverKey, setHoverKey, lines } =
     useMountingState(row.roomCode, layout.items);
 
   const commit = useCallback((next: RoomLayout) => dispatch({ type: "commit", next }), []);
@@ -57,14 +51,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
 
   // ── 元素增删改 ──
-  const patchElem = (el: PosElement | ItemElement): RoomLayout => {
-    const cur = hist.layout;
-    const repl = <T extends PosElement>(arr: T[]): T[] => arr.map(e => (e.id === el.id ? (el as T) : e));
-    if (cur.walls.some(e => e.id === el.id)) return { ...cur, walls: repl(cur.walls) };
-    if (cur.doors.some(e => e.id === el.id)) return { ...cur, doors: repl(cur.doors) };
-    if (cur.windows.some(e => e.id === el.id)) return { ...cur, windows: repl(cur.windows) };
-    return { ...cur, items: repl(cur.items) };
-  };
   const addElement = (kind: ElementKind) => {
     const cur = hist.layout;
     const el = createElement(kind, cur, cur.items.length + cur.walls.length + cur.doors.length + cur.windows.length);
@@ -88,9 +74,9 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     commit({ ...hist.layout, walls: [], doors: [], windows: [], items: [] });
     setSelected(null);
   };
-  const onDragEnd = (el: PosElement | ItemElement) => commit(patchElem(el));
-  const onTransformEnd = (el: PosElement | ItemElement) => commit(patchElem(el));
-  const onPropertySave = (el: PosElement | ItemElement) => { commit(patchElem(el)); setEditId(null); };
+  const onDragEnd = (el: PosElement | ItemElement) => commit(withElement(hist.layout, el));
+  const onTransformEnd = (el: PosElement | ItemElement) => commit(withElement(hist.layout, el));
+  const onPropertySave = (el: PosElement | ItemElement) => { commit(withElement(hist.layout, el)); setEditId(null); };
   const findElem = (id: string): PosElement | ItemElement | null => {
     const cur = hist.layout;
     return [...cur.walls, ...cur.doors, ...cur.windows, ...cur.items].find(e => e.id === id) ?? null;
@@ -100,12 +86,18 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
 
   // ── 物料挂载/卸下：PUT locationCode 后按响应刷新列表与画布热点 ──
   const mountMaterial = async (id: number, code: string) => {
-    if (!(await applyLocation(id, code))) setMsg(`挂载失败：${code}`);
+    if (await applyLocation(id, code)) setPending(null);
+    else setMsg(`挂载失败：${code}`);
   };
   const unmountMaterial = (id: number) => {
     applyLocation(id, "").then(ok => { if (!ok) setMsg("卸下失败，请重试"); });
   };
-  // 物品元素无 locCode 时分配房间内字母编码（A、B、C…），并写入布局
+  const pickMaterial = (it: MaterialItem) => {
+    setPending({ id: it.id, name: it.name });
+    setMsg("");
+    setDrawer(false);
+  };
+  // 元素无 locCode 时分配房间内字母编码（A、B、C…），并写入布局
   const autoLoc = useCallback((el: ItemElement): string => {
     const used = new Set(hist.layout.items.filter(i => i.locCode).map(i => i.locCode!.toUpperCase()));
     let letter = "A";
@@ -114,23 +106,24 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
       letter = String.fromCharCode(letter.charCodeAt(0) + 1);
       code = `${row.roomCode}-${letter}`;
     }
-    commit(patchElem({ ...el, locCode: code }));
+    commit(withElement(hist.layout, { ...el, locCode: code }));
     return code;
   }, [hist.layout, row.roomCode, commit]);
 
-  // ── 保存：LayoutJson 全量序列化；计数同步为货架元素的值（无货架则 0 = 平面图模式）──
+  // ── 保存：LayoutJson 全量序列化；汇总计数取全部元素的格位上限（兼容后端旧字段）──
   const handleSave = async () => {
     setSaving(true);
     setMsg("");
     try {
-      const shelves = layout.items.filter(i => i.type === "shelf");
+      const maxRows = layout.items.reduce((m, i) => Math.max(m, rowsOf(i)), 0);
+      const maxCols = layout.items.reduce((m, i) => Math.max(m, colsOf(i)), 0);
       await api.put(`/api/storage/layouts/${row.id}`, {
         roomCode: row.roomCode,
-        roomName,
+        roomName: roomName.trim() || row.roomName,
         floor: row.floor,
-        cabinetCount: shelves.length,
-        shelfCount: shelves[0]?.shelfCount ?? 0,
-        positionCount: shelves[0]?.positionCount ?? 0,
+        cabinetCount: Math.min(99, layout.items.length),
+        shelfCount: Math.min(9, maxRows),
+        positionCount: Math.min(99, maxCols),
         description: row.description ?? "",
         layoutJson: layoutToJson(layout),
       });
@@ -144,6 +137,13 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
 
   const dblEdit = (id: string) => { setSelected(id); setEditId(id); };
   const editEl = editId ? findElem(editId) : null;
+  const panelProps = {
+    roomCode: row.roomCode, items, elements: layout.items, selectedId: selected,
+    onSelect: setSelected, onItemRects: setItemAnchors,
+    onHoverItem: (id: number | null) => setHoverKey(id === null ? null : String(id)),
+    onUnmount: unmountMaterial, onPick: pickMaterial, pendingId: pending?.id ?? null,
+    onDetail: (el: ItemElement) => setDetail({ el, cell: null }),
+  };
 
   return (
     <div className="space-y-3">
@@ -156,16 +156,21 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
         canDelete={selected !== null} onDelete={deleteSelected} onClear={clearAll}
         msg={msg} saving={saving} onSave={handleSave} onBack={onBack}
       />
-      <div ref={workRef} className="relative flex gap-3 h-[calc(100vh-230px)] min-h-[460px]">
+      <ElementPanel onAdd={addElement} variant="strip" />
+      <MountStatusBar pending={pending} loadError={loadError} onCancel={() => setPending(null)} />
+
+      <div ref={workRef} className="relative flex flex-col gap-3 lg:h-[calc(100vh-260px)] lg:min-h-[460px] lg:flex-row">
         <ElementPanel onAdd={addElement} />
         <PlannerCanvas layout={layout} items={items} selected={selected}
+          className="h-[52vh] min-h-[320px] lg:h-full"
           onSelect={setSelected} onDblEdit={dblEdit}
           onDragEnd={onDragEnd} onTransformEnd={onTransformEnd}
           onMountMaterial={mountMaterial} onAutoLoc={autoLoc} onCellCenters={setCellCenters}
-          onCellHover={code => setHoverKey(code)} />
-        <MaterialsPanel roomCode={row.roomCode} items={items} elements={layout.items} selectedId={selected}
-          onSelect={setSelected} onItemRects={setItemAnchors}
-          onHoverItem={id => setHoverKey(id === null ? null : String(id))} onUnmount={unmountMaterial} />
+          onCellHover={code => setHoverKey(code)} pendingMount={pending} />
+        <MaterialsPanel {...panelProps} className="h-full w-64 shrink-0 max-lg:hidden" />
+        <MobileDrawer open={drawer} onToggle={() => setDrawer(v => !v)} title={`物料挂载（${items.length}）`}>
+          <MaterialsPanel {...panelProps} className="max-h-[45vh]" />
+        </MobileDrawer>
         {showLines && <ConnectionLines containerRef={workRef} lines={lines} hoverKey={hoverKey} />}
       </div>
 
@@ -173,7 +178,12 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
         <PropertyDialog key={editEl.id} element={editEl} roomCode={row.roomCode}
           onSave={onPropertySave}
           onDelete={(id) => { commit(removeElem(hist.layout, id)); setEditId(null); setSelected(null); }}
+          onDetail={(el) => { setEditId(null); setDetail({ el, cell: null }); }}
           onClose={() => setEditId(null)} />
+      )}
+
+      {detail && (
+        <ElementDetail element={detail.el} items={items} initialCell={detail.cell} onClose={() => setDetail(null)} />
       )}
     </div>
   );

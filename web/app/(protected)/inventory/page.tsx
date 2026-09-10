@@ -17,6 +17,7 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
 import { LOW_THRESHOLD, type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
+import { buildLocCode, parseLocParts } from "@/components/inventory/locCode";
 
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
 const FALLBACK_ROOMS = ["1012", "1013", "1014", "1015", "201", "202", "203"];
@@ -34,16 +35,12 @@ export default function InventoryPage() {
   const [locShelf, setLocShelf] = useState("");
   const [locPos, setLocPos] = useState("");
 
-  const buildLocCode = (room: string, cab: string, shelf: string, pos: string) => {
-    const parts = [room, cab.padStart(2, "0"), shelf, pos.padStart(2, "0")].filter(Boolean);
-    return parts.join("-");
-  };
   const parseLocCode = (code: string) => {
-    const parts = (code || "").split("-");
-    setLocRoom(parts[0] || "");
-    setLocCabinet(parts[1] || "");
-    setLocShelf(parts[2] || "");
-    setLocPos(parts[3] || "");
+    const parts = parseLocParts(code);
+    setLocRoom(parts.room);
+    setLocCabinet(parts.cabinet);
+    setLocShelf(parts.shelf);
+    setLocPos(parts.pos);
   };
   const [importMsg, setImportMsg] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);

@@ -42,10 +42,31 @@ const items = [
   { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "1012-C-01-03", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-const state = { approveCalls: 0 };
+const state = { approveCalls: 0, layoutPut: null as null | Record<string, unknown> };
+
+/** 物料布局用数据：一个房间 + 立体货架/柜子（坐标单位 cm） */
+const layoutItems = [
+  { id: 11, name: "桨叶", category: "动力系统", quantity: 5, locationCode: "201-A-1-01", status: "available", grade: "B", unitPrice: 45, updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 12, name: "M3螺丝", category: "耗材", quantity: 2, locationCode: "201-A-3-05", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
+];
+
+const layoutRoom = {
+  id: 1, roomCode: "201", roomName: "库房", floor: 1,
+  cabinetCount: 2, shelfCount: 4, positionCount: 8, description: "航模器材库房",
+  updatedAt: "2026-09-01T10:00:00Z",
+  layoutJson: JSON.stringify({
+    width: 900, height: 600, unit: "cm", walls: [], doors: [], windows: [],
+    items: [
+      { id: "it1", type: "shelf", name: "A货架", x: 100, y: 100, w: 300, h: 120, rotation: 0, locCode: "201-A", rows: 4, cols: 8 },
+      { id: "it2", type: "cabinet", name: "B柜", x: 500, y: 100, w: 120, h: 80, rotation: 0, locCode: "201-B", rows: 2, cols: 2 },
+    ],
+  }),
+};
 
 /** 统一 mock 所有 /api/* 请求（按路径+方法分发） */
-async function mockApi(page: Page, role: string) {
+async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; items?: unknown[] } = {}) {
+  const inventory = opts.items ?? items;
+  const layouts = opts.layouts ?? [];
   await page.route("**/api/**", async (route: Route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
@@ -65,9 +86,13 @@ async function mockApi(page: Page, role: string) {
       return json({});
     }
     if (/\/api\/finance\/requests\/\d+\/reject$/.test(path) && method === "POST") return json({});
-    if (path.startsWith("/api/inventory")) return json(items);
+    if (path.startsWith("/api/inventory")) return json(inventory);
     if (path === "/api/admin/departments") return json([]);
-    if (path === "/api/storage/layouts") return json([]);
+    if (path === "/api/storage/layouts") return json(layouts);
+    if (/\/api\/storage\/layouts\/\d+$/.test(path) && method === "PUT") {
+      state.layoutPut = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
+      return json({});
+    }
     return json({});
   });
   return state;
@@ -133,6 +158,62 @@ test.describe("冒烟流程", () => {
     await expect(page.getByRole("button", { name: "添加零件" })).toHaveCount(0);
     await expect(page.getByText(/导入 Excel/)).toHaveCount(0);
   });
+
+  test("物料布局：房间卡片 → 平面图 → 正视细节视图", async ({ page }) => {
+    await mockApi(page, "member", { layouts: [layoutRoom], items: layoutItems });
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/inventory/layout");
+    await expect(page.getByRole("heading", { name: "物料布局" })).toBeVisible();
+    // 房间卡片：cm 尺寸与元素构成（单位统一 cm）
+    await expect(page.getByText(/900 × 600 cm/)).toBeVisible();
+    await expect(page.getByText(/立体货架×1 柜子×1/)).toBeVisible();
+
+    // 进入房间：Konva 画布与按元素分组的物料面板
+    await page.getByRole("button", { name: /库房/ }).click();
+    await expect(page.getByTestId("layout-stage").locator("canvas").first()).toBeVisible();
+    await expect(page.getByText(/物料挂载（2）/)).toBeVisible();
+    await expect(page.getByText("1层01位")).toBeVisible();
+
+    // 打开正视细节视图：层 × 位 网格 + 点格位看该格物料
+    await page.getByTitle("正视细节视图").first().click();
+    const dialog = page.locator("div.fixed.z-50").last();
+    await expect(dialog.getByText("正视（层 × 位）")).toBeVisible();
+    await expect(dialog.getByText("4 层 × 8 位")).toBeVisible();
+    await dialog.getByTitle(/3层05位/).click();
+    await expect(dialog.getByText(/格位明细 · 3层05位/)).toBeVisible();
+    await expect(dialog.getByRole("listitem").filter({ hasText: "M3螺丝" })).toBeVisible();
+  });
+
+  test("物料布局编辑器：添加元素并保存为 cm 布局", async ({ page }) => {
+    const state = await mockApi(page, "admin", { layouts: [layoutRoom], items: layoutItems });
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/inventory/layout");
+    await page.getByRole("button", { name: /库房/ }).click();
+    await page.getByRole("button", { name: "编辑平面图" }).click();
+
+    // 编辑器元素面板（桌面侧栏）与工具栏
+    await expect(page.getByRole("button", { name: "保存" })).toBeVisible();
+    await expect(page.getByTitle("房间名称（房间号不可改）")).toHaveValue("库房");
+    await expect(page.getByTitle("画布宽度（cm）")).toHaveValue("900");
+
+    // 新增一个立体货架 → 可撤销
+    const undo = page.getByTitle("撤销 (Ctrl+Z)");
+    await expect(undo).toBeDisabled();
+    await page.getByRole("button", { name: "立体货架" }).locator("visible=true").click();
+    await expect(undo).toBeEnabled();
+
+    // 保存：请求体为 cm 布局（unit=cm，元素含新增的货架）
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect.poll(() => state.layoutPut, { timeout: 10_000 }).not.toBeNull();
+    const body = state.layoutPut as { layoutJson: string; cabinetCount: number };
+    expect(body.layoutJson).toContain('"unit":"cm"');
+    expect(JSON.parse(body.layoutJson).items).toHaveLength(3);
+    expect(body.cabinetCount).toBe(3);
+    // 保存后回到查看模式
+    await expect(page.getByRole("button", { name: "编辑平面图" })).toBeVisible();
+  });
 });
 
 test.describe("路由完整性守卫", () => {
@@ -140,7 +221,7 @@ test.describe("路由完整性守卫", () => {
   test("关键路由不存在404", async ({ request }) => {
     for (const route of [
       "/admin/logs", "/admin/users", "/admin/settings", "/admin/backup",
-      "/finance", "/inventory", "/profile", "/flightlog",
+      "/finance", "/inventory", "/inventory/layout", "/profile", "/flightlog",
     ]) {
       const res = await request.get(route);
       expect(res.status(), `${route} 不应是404(路由疑似被构建遗漏)`).not.toBe(404);
