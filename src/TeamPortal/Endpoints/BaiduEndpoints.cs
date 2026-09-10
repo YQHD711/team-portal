@@ -140,7 +140,7 @@ public static class BaiduEndpoints
             return Results.Ok(files);
         });
 
-        adminBaidu.MapPost("/upload", async (IFormFile file, string? remoteDir, HttpContext ctx, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/upload", async (IFormFile file, string? remoteDir, ClaimsPrincipal user, LogService log, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
@@ -154,6 +154,9 @@ public static class BaiduEndpoints
                 var dir = remoteDir ?? BaiduNetdiskService.DefaultUploadDir;
                 var remotePath = $"{dir}/{file.FileName}";
                 await svc.UploadFile(tempPath, remotePath, null, ctx.RequestAborted);
+                // 管理端云端写入必须留痕(此前这些操作全无审计记录)
+                log.Audit("upload", user.Identity?.Name ?? "unknown", targetType: "cloud-file", targetId: remotePath,
+                    data: new { size = file.Length, dir }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Ok(new { success = true, path = remotePath });
             }
             finally
@@ -189,20 +192,25 @@ public static class BaiduEndpoints
             }
         });
 
-        adminBaidu.MapDelete("/files", async (string path, HttpContext ctx, BaiduNetdiskService svc) =>
+        adminBaidu.MapDelete("/files", async (string path, ClaimsPrincipal user, LogService log, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            await svc.DeleteFile(path, ctx.RequestAborted);
-            return Results.Ok(new { success = true });
+            var ok = await svc.DeleteFile(path, ctx.RequestAborted);
+            log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "cloud-file", targetId: path,
+                data: new { success = ok, path }, ipAddress: LogService.ClientIp(ctx));
+            // 删除失败不再静默返回 200(此前调用方无法区分)
+            return ok ? Results.Ok(new { success = true }) : Results.Problem("删除失败", statusCode: 400);
         });
 
         // One-click system backup (DB + settings → zip → cloud)
-        adminBaidu.MapPost("/backup", async (HttpContext ctx, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/backup", async (ClaimsPrincipal user, LogService log, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             try
             {
                 var path = await svc.BackupSystem(ctx.RequestAborted);
+                log.Audit("backup", user.Identity?.Name ?? "unknown", targetType: "backup", targetId: path,
+                    data: new { path, trigger = "manual" }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Ok(new { success = true, path, message = $"备份已保存到 {path}" });
             }
             catch (Exception ex)
