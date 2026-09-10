@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { ItemElement, MaterialItem } from "./layoutTypes";
-import { buildConnectionLines, type ConnectionLine, type LineEnd } from "./ConnectionLines";
+import { buildConnectionLines, type LineEnd } from "./ConnectionLines";
 
 /** 连线视图共享状态（编辑器与查看器复用）：锚点由面板/画布上报，汇总成线数据 */
 export function useMountingView(items: MaterialItem[], elements: ItemElement[]) {
@@ -19,12 +19,13 @@ export function useMountingView(items: MaterialItem[], elements: ItemElement[]) 
 /** 编辑器物料状态：加载房间物料 + 挂载/卸下 */
 export function useMountingState(roomCode: string, elements: ItemElement[]) {
   const [items, setItems] = useState<MaterialItem[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     api
       .get<{ locationCode: string; items: MaterialItem[] }[]>(`/api/storage/layouts/${roomCode}/items`)
-      .then(groups => setItems(groups.flatMap(g => g.items)))
-      .catch(() => setItems([]));
+      .then(groups => { setItems(groups.flatMap(g => g.items)); setLoadError(false); })
+      .catch(() => { setItems([]); setLoadError(true); });
   }, [roomCode]);
 
   /** 挂载/卸下：PUT locationCode（其余字段不传，后端不覆盖）；按响应局部更新；返回是否成功 */
@@ -39,5 +40,5 @@ export function useMountingState(roomCode: string, elements: ItemElement[]) {
   }, []);
 
   const view = useMountingView(items, elements);
-  return { items, applyLocation, ...view };
+  return { items, loadError, applyLocation, ...view };
 }

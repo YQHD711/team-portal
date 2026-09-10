@@ -1,8 +1,10 @@
-/** 上报画布上「有物料挂载的元素中心」的视口坐标（货架为格子、非货架为整体，连线视图用） */
+/** 上报画布上「有物料挂载的元素」中心点视口坐标（格位元素按格位、整体挂载按元素中心，连线视图用） */
 import { useEffect, useRef } from "react";
 import type Konva from "konva";
-import type { ItemElement, MaterialItem, RoomLayout } from "./layoutTypes";
-import { cellCounts, itemHitCells, WHOLE_CELL_KEY } from "./shelfGeometry";
+import type { MaterialItem, RoomLayout } from "./layoutTypes";
+import { usesCells } from "./layoutTypes";
+import { WHOLE_CELL_KEY, cellKey, itemHitCells } from "./elementGeometry";
+import { cellCounts } from "./locationCodes";
 
 export interface CellCenter {
   x: number;
@@ -17,7 +19,7 @@ export function useCellCenters(
   onCenters: (centers: Map<string, CellCenter>) => void
 ) {
   const onCentersRef = useRef(onCenters);
-  onCentersRef.current = onCenters;
+  useEffect(() => { onCentersRef.current = onCenters; }, [onCenters]);
 
   const { scale, x, y } = view;
   useEffect(() => {
@@ -31,7 +33,7 @@ export function useCellCenters(
         if (!el.locCode) continue;
         const counts = cellCounts(el, items);
         for (const cell of itemHitCells(el)) {
-          const key = el.type === "shelf" ? `${cell.row}-${cell.col}` : WHOLE_CELL_KEY;
+          const key = usesCells(el) ? cellKey(cell.row, cell.col) : WHOLE_CELL_KEY;
           if (!counts.has(key)) continue;
           m.set(cell.code, {
             x: rect.left + cell.cx * scale + x,
