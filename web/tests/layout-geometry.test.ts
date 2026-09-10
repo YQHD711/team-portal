@@ -8,7 +8,8 @@ import { cellLabelAt, cellLabelFromLoc, elementCells, hitItemElement, itemHitCel
 import { cellCounts, elementMaterials, elementStats, findElementByLoc, locationKey, materialsByCell } from "@/components/inventory/locationCodes";
 import { clampScale, fitView, zoomAt, pinchView, distance, midpoint } from "@/components/inventory/layoutGestures";
 import { locationRoom } from "@/components/inventory/locCode";
-import { LOW_STOCK_THRESHOLD, cellClasses, cellFill, EMPTY_FILL, LOW_FILL, FULL_FILL } from "@/components/inventory/cellColors";
+import { cellClasses, cellFill, EMPTY_FILL, LOW_FILL, FULL_FILL } from "@/components/inventory/cellColors";
+import { DEFAULT_LOW_STOCK_THRESHOLD } from "@/components/inventory/LowStockProvider";
 import { SIZE_PRESETS } from "@/components/inventory/layoutPresets";
 
 // ── 测试数据 ──
@@ -236,15 +237,19 @@ describe("库位编码读取与格位配色", () => {
     expect(locationRoom(undefined)).toBe("");
   });
 
-  it("有货按类型着色，低于阈值用琥珀色，空位半透明", () => {
-    expect(LOW_STOCK_THRESHOLD).toBe(3);
+  it("有货按类型着色，低于阈值用琥珀色，空位半透明（阈值可注入）", () => {
+    expect(DEFAULT_LOW_STOCK_THRESHOLD).toBe(5);
     expect(cellFill("shelf", 0)).toBe(EMPTY_FILL);
-    expect(cellFill("shelf", 2)).toBe(LOW_FILL);
-    expect(cellFill("shelf", 3)).toBe(FULL_FILL.shelf);
+    expect(cellFill("shelf", 4)).toBe(LOW_FILL);          // 4 < 默认阈值 5
+    expect(cellFill("shelf", 5)).toBe(FULL_FILL.shelf);   // 等于阈值不算低
     expect(cellFill("cabinet", 10)).toBe(FULL_FILL.cabinet);
+    // 阈值来自后端设置：同一数量在不同阈值下结论不同
+    expect(cellFill("shelf", 6, 10)).toBe(LOW_FILL);
+    expect(cellFill("shelf", 6, 3)).toBe(FULL_FILL.shelf);
     expect(cellClasses(0)).toContain("border-dashed");
     expect(cellClasses(1)).toContain("amber");
     expect(cellClasses(9)).toContain("sky");
+    expect(cellClasses(9, 12)).toContain("amber");
   });
 
   it("尺寸预设覆盖全部物品类型且单位为 cm", () => {

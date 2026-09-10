@@ -6,7 +6,8 @@ export interface Transaction { id: number; type: string; quantity: number; userN
 /** 零件表单状态（新建/编辑共用） */
 export interface InventoryFormState { name: string; category: string; quantity: number; grade: string; unitPrice: number; departmentId: number; projectTag: string; locationCode: string; }
 
-export const LOW_THRESHOLD = 3;
+/** 低库存阈值兜底值：真实取值由后端设置下发（GET /api/inventory/meta），见 LowStockProvider */
+export const DEFAULT_LOW_STOCK_THRESHOLD = 5;
 export const statusOpts = [
   { value: "available", label: "可用" },
   { value: "in_use", label: "使用中" },

@@ -22,7 +22,7 @@ public static class DashboardEndpoints
 
     public static void MapDashboardEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/dashboard", async (AppDbContext db, ClaimsPrincipal user, SettingsService settings) =>
+        app.MapGet("/api/dashboard", async (AppDbContext db, ClaimsPrincipal user, SettingsService settings, InventoryService invSvc) =>
         {
             var role = user.FindFirstValue(ClaimTypes.Role);
             var isStaff = role == "admin" || role == "部长";
@@ -45,9 +45,10 @@ public static class DashboardEndpoints
             var departmentsTask = db.Departments.CountAsync();
             var monthNewItemsTask = db.InventoryItems.CountAsync(i => i.CreatedAt >= monthStart);
 
-            // 库存低物料阈值可配(默认 5),仅提醒 C 级(普通耗材);关键件 A/B 走主动采购
+            // 库存低物料阈值可配(默认 5),仅提醒 C 级(普通耗材);关键件 A/B 走主动采购。
+            // 阈值统一走 InventoryService（同一设置项也驱动库存页与库存预警通知）。
             var lowGrade = await settings.Get("Inventory:LowStockGrade", "C");
-            var lowThreshold = await settings.GetInt("Inventory:LowStockThreshold", 5);
+            var lowThreshold = await invSvc.GetLowStockThresholdAsync();
             var lowStockTask = db.InventoryItems
                 .Where(i => i.Quantity < lowThreshold && i.Quantity > 0 && i.Grade == lowGrade)
                 .OrderBy(i => i.Quantity).Take(5)

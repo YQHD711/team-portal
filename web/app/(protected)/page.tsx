@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { isStaff as checkIsStaff } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
 import { useNotifications } from "@/lib/hooks";
+import { useLowStock } from "@/components/inventory/LowStockProvider";
 import { Users, Package, DollarSign, Receipt, Sparkles, ShieldAlert, AlertTriangle } from "lucide-react";
 
 // 性能 #10:recharts ~400KB 懒加载(登录后首屏)→ 仅在仪表盘渲染时才下载
@@ -36,10 +37,11 @@ interface DashData {
 /** 分类环形图调色板（跟随主题 CSS 变量） */
 const DONUT_COLORS = ["var(--accent)", "var(--success)", "var(--info)", "var(--warning)", "var(--danger)"]; // 保留兼容:低库存横条渐变备用
 
-/** 库存分级：1→危险, 2~3→警告, 4+→提示 */
-function lowStockTier(qty: number) {
-  if (qty <= 1) return { color: "var(--danger)", label: "danger" };
-  if (qty <= 3) return { color: "var(--warning)", label: "warning" };
+/** 库存分级（阈值来自设置，不再硬编码）：≤阈值/3 → 危险，其余低于阈值 → 警告 */
+function lowStockTier(qty: number, threshold: number) {
+  const dangerLine = Math.max(1, Math.floor(threshold / 3));
+  if (qty <= dangerLine) return { color: "var(--danger)", label: "danger" };
+  if (qty < threshold) return { color: "var(--warning)", label: "warning" };
   return { color: "var(--info)", label: "info" };
 }
 
@@ -66,6 +68,8 @@ const Skeleton = ({ w = "w-16", h = "h-6" }: { w?: string; h?: string }) =>
 
 export default function Home() {
   const { teamName, teamSubtitle } = useBrand();
+  // 低库存阈值/等级由后端设置下发（与库存页、库存预警通知同源）
+  const { threshold: lowThreshold } = useLowStock();
   const [data, setData] = useState<DashData | null>(null);
   const [donut, setDonut] = useState<{ name: string; value: number }[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -185,7 +189,7 @@ export default function Home() {
           {data?.lowStock && data.lowStock.length > 0 ? (
             <div>
               {data.lowStock.map((item) => {
-                const tier = lowStockTier(item.quantity);
+                const tier = lowStockTier(item.quantity, lowThreshold);
                 return (
                   <div key={item.id} className="py-2.5 border-b border-border-subtle last:border-none">
                     <div className="flex justify-between text-xs mb-1.5">

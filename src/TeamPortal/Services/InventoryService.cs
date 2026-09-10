@@ -7,7 +7,12 @@ namespace TeamPortal.Services;
 
 public class InventoryService
 {
-    public const int LowStockThreshold = 3;
+    /// <summary>
+    /// 低库存阈值兜底值：与 SettingsService 种子 `Inventory:LowStockThreshold` 保持一致。
+    /// 真实取值一律走 <see cref="GetLowStockThresholdAsync"/>（设置页可改），
+    /// 前端通过 GET /api/inventory/meta 拿同一个值 —— 阈值只有这一个来源。
+    /// </summary>
+    public const int DefaultLowStockThreshold = 5;
 
     /// <summary>根据单价自动判定物料等级：≥1000→A, 100~999→B, ＜100→C</summary>
     public static string CalcGrade(decimal unitPrice) => unitPrice switch
@@ -20,11 +25,19 @@ public class InventoryService
     private readonly AppDbContext _db;
     private readonly LogService _log;
     private readonly NotificationService _notification;
+    private readonly SettingsService _settings;
 
-    public InventoryService(AppDbContext db, LogService log, NotificationService notification)
+    public InventoryService(AppDbContext db, LogService log, NotificationService notification, SettingsService settings)
     {
-        _db = db; _log = log; _notification = notification;
+        _db = db; _log = log; _notification = notification; _settings = settings;
     }
+
+    /// <summary>低库存阈值（设置页 Inventory:LowStockThreshold，兜底 5）：仪表盘、库存页、通知共用</summary>
+    public Task<int> GetLowStockThresholdAsync()
+        => _settings.GetInt("Inventory:LowStockThreshold", DefaultLowStockThreshold);
+
+    /// <summary>低库存判定：数量 &lt; 阈值（与前端显示口径一致）</summary>
+    public static bool IsLowStock(int quantity, int threshold) => quantity < threshold;
 
     public async Task<List<InventoryItem>> GetAll(string? search, string? category)
     {
@@ -61,10 +74,11 @@ public class InventoryService
         // 审计日志
         _log.Info("inventory", $"Part added: {name}", $"{{\"qty\":{quantity},\"cat\":\"{category}\"}}");
 
-        // 低量告警
-        if (quantity <= LowStockThreshold)
+        // 低量告警（阈值取自设置页，与仪表盘/库存页同一口径）
+        var addThreshold = await GetLowStockThresholdAsync();
+        if (IsLowStock(quantity, addThreshold))
         {
-            _notification.Notify("库存预警", $"零件「{name}」库存仅剩 {quantity} 件，请及时补货。");
+            _notification.Notify("库存预警", $"零件「{name}」库存仅剩 {quantity} 件（低于 {addThreshold} 件），请及时补货。");
         }
 
         return item;
@@ -117,6 +131,7 @@ public class InventoryService
     public async Task<int> ImportFromExcel(string filePath)
     {
         var count = 0;
+        var importThreshold = await GetLowStockThresholdAsync();
         using var stream = File.OpenRead(filePath);
         foreach (var row in MiniExcelLibs.MiniExcel.Query(stream, useHeaderRow: true))
         {
@@ -154,9 +169,9 @@ public class InventoryService
                 UpdatedAt = DateTime.UtcNow,
             });
 
-            // 低量告警
-            if (quantity <= LowStockThreshold)
-                _notification.Notify("库存预警", $"导入零件「{name}」库存仅剩 {quantity} 件，请及时补货。");
+            // 低量告警（整个导入批次用同一阈值，避免循环内反复读设置）
+            if (IsLowStock(quantity, importThreshold))
+                _notification.Notify("库存预警", $"导入零件「{name}」库存仅剩 {quantity} 件（低于 {importThreshold} 件），请及时补货。");
 
             count++;
         }

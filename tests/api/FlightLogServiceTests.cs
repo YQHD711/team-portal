@@ -123,7 +123,8 @@ public class FlightLogServiceTests : IDisposable
             };
             MiniExcelLibs.MiniExcel.SaveAs(xlsx, rows);
 
-            var svc = new InventoryService(_db, new NullLogService(new TestScopeFactory(_db)), CreateNotification(_db));
+            var svc = new InventoryService(_db, new NullLogService(new TestScopeFactory(_db)), CreateNotification(_db),
+                new SettingsService(new TestScopeFactory(_db)));
             var count = await svc.ImportFromExcel(xlsx);
 
             Assert.Equal(2, count);

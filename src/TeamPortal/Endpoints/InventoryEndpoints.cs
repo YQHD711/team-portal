@@ -71,6 +71,14 @@ public static class InventoryEndpoints
     {
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
 
+        // 前端需要的库存规则（低库存阈值/提醒等级）：与仪表盘、通知共用同一个设置项，
+        // 前端不再硬编码阈值 —— 管理员在设置页改一次，三处同时生效。
+        group.MapGet("/meta", async (InventoryService svc, SettingsService settings) => Results.Ok(new
+        {
+            lowStockThreshold = await svc.GetLowStockThresholdAsync(),
+            lowStockGrade = await settings.Get("Inventory:LowStockGrade", "C"),
+        }));
+
         group.MapGet("/", async (string? search, string? category, InventoryService svc) =>
         {
             var items = await svc.GetAll(search, category);
@@ -255,7 +263,7 @@ public static class InventoryEndpoints
             log.Info("inventory", $"Checkout: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
             log.Audit("checkout", userName, targetType: "item", targetId: id.ToString(),
                 data: new { name = item.Name, quantity = req.Quantity, remaining = newQty }, ipAddress: LogService.ClientIp(ctx));
-            if (newQty >= 0 && newQty <= InventoryService.LowStockThreshold)
+            if (InventoryService.IsLowStock(newQty, await svc.GetLowStockThresholdAsync()))
                 notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {newQty} 件（{userName} 借出 {req.Quantity} 个）", "/inventory", targetRole: "staff", level: "warning");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已借出 {req.Quantity} 个 {item.Name}" });
         });
@@ -297,7 +305,7 @@ public static class InventoryEndpoints
         });
 
         // Quick consume — for C-level consumables (no approval, no return)
-        group.MapPost("/{id:int}/consume", async (int id, TransactionRequest req, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
+        group.MapPost("/{id:int}/consume", async (int id, TransactionRequest req, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, InventoryService svc) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可消耗零件", statusCode: 403); // D-3 fix
@@ -325,7 +333,7 @@ public static class InventoryEndpoints
 
             var newQty = item.Quantity - req.Quantity;
             log.Info("inventory", $"Consumed: {item.Name} -{req.Quantity} by {userName} (now {newQty})");
-            if (newQty <= InventoryService.LowStockThreshold)
+            if (InventoryService.IsLowStock(newQty, await svc.GetLowStockThresholdAsync()))
                 notify.Notify("库存预警", $"耗材「{item.Name}」仅剩 {newQty} 件", "/inventory", targetRole: "staff", level: "warning");
             return Results.Ok(new { success = true, quantity = newQty, message = $"已消耗 {req.Quantity} 个 {item.Name}" });
         });

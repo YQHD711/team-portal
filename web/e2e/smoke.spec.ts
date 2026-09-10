@@ -86,6 +86,7 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
       return json({});
     }
     if (/\/api\/finance\/requests\/\d+\/reject$/.test(path) && method === "POST") return json({});
+    if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
     if (path === "/api/inventory" && method === "POST") {
       state.itemPost = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
       return json({ id: 99, ...state.itemPost });
@@ -146,8 +147,9 @@ test.describe("冒烟流程", () => {
     // 移动端卡片(hidden)与桌面表格重复渲染 → 只匹配可见元素
     await expect(page.getByText("桨叶").locator("visible=true").first()).toBeVisible();
     await expect(page.getByText("M3螺丝").locator("visible=true").first()).toBeVisible();
-    // 低库存预警（桨叶 2 < 3）
+    // 低库存预警：阈值由后端 /api/inventory/meta 下发（mock 为 8），前端不得写死
     await expect(page.getByText(/种零件库存不足/)).toBeVisible();
+    await expect(page.getByText(/低于 8 件/)).toBeVisible();
     // staff 专属入口
     await expect(page.getByRole("button", { name: "添加零件" })).toBeVisible();
     await expect(page.getByText(/导入 Excel/)).toBeVisible();

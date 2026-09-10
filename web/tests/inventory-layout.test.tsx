@@ -203,7 +203,8 @@ describe("房间卡片（RoomCard）", () => {
     expect(screen.getByText(/900 × 600 cm/)).toBeInTheDocument();
     expect(screen.getByText(/立体货架×1 柜子×1/)).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument(); // 物料种类（201-A×2 + 201-B + 201-C）
-    expect(screen.getByText("1 预警")).toBeInTheDocument(); // 螺丝 2 < 3
+    // 阈值来自后端设置，无 Provider 时用兜底值 5：螺丝 2 与胶带 4 低于 5，桨叶 5 / 充电线 6 不算
+    expect(screen.getByText("2 预警")).toBeInTheDocument();
   });
 
   it("未配置平面图时给出提示", () => {

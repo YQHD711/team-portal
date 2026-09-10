@@ -11,6 +11,7 @@ import { ELEMENT_DEFS, cellAxes, cellSummary, colsOf, rowsOf, usesCells } from "
 import { cellKey, cellLabelAt, cellSizeCm } from "./elementGeometry";
 import { elementStats, materialsByCell } from "./locationCodes";
 import { cellClasses } from "./cellColors";
+import { useLowStock } from "./LowStockProvider";
 import { formatArea, formatCellDims, formatDims } from "./layoutUnits";
 
 interface ElementDetailProps {
@@ -32,6 +33,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export function ElementDetail({ element, items, initialCell, onClose }: ElementDetailProps) {
   const def = ELEMENT_DEFS[element.type];
+  const { threshold } = useLowStock();
   const split = usesCells(element);
   const { rowLabel, colLabel } = cellAxes(element);
   const rows = split ? rowsOf(element) : 1;
@@ -108,7 +110,7 @@ export function ElementDetail({ element, items, initialCell, onClose }: ElementD
                         <button key={c} type="button"
                           onClick={() => setSelected(split ? code : null)}
                           title={`${cellLabelAt(element, r, c)}${list.length ? `\n${list.map(i => `${i.name} ×${i.quantity}`).join("\n")}` : "\n空位"}`}
-                          className={`flex min-h-[46px] flex-col items-center justify-center rounded-lg border px-1 py-1 text-center transition-shadow ${cellClasses(qty)} ${isSel ? "ring-2 ring-primary" : ""}`}>
+                          className={`flex min-h-[46px] flex-col items-center justify-center rounded-lg border px-1 py-1 text-center transition-shadow ${cellClasses(qty, threshold)} ${isSel ? "ring-2 ring-primary" : ""}`}>
                           <span className="text-sm font-bold leading-none tabular-nums">{qty > 0 ? qty : "—"}</span>
                           {split && <span className="mt-0.5 w-full truncate text-[9px] leading-tight opacity-80">{c + 1}{colLabel}</span>}
                           {list.length > 0 && (
