@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using TeamPortal.Data;
 
 namespace TeamPortal.Services;
 
@@ -12,6 +14,7 @@ public class KnowledgeSearchService : IDisposable
 {
     private readonly string _basePath;
     private readonly ILogger<KnowledgeSearchService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly FileSystemWatcher? _watcher;
     private readonly object _lock = new();
 
@@ -26,9 +29,10 @@ public class KnowledgeSearchService : IDisposable
 
     private record DocEntry(string Path, int TermFreq);
 
-    public KnowledgeSearchService(IConfiguration config, ILogger<KnowledgeSearchService> logger)
+    public KnowledgeSearchService(IConfiguration config, ILogger<KnowledgeSearchService> logger, IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
+        _scopeFactory = scopeFactory;
         _basePath = config.GetValue<string>("Knowledge:BasePath")
                     ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
 
@@ -113,13 +117,20 @@ public class KnowledgeSearchService : IDisposable
 
     /// <summary>
     /// Search with TF-IDF scoring. Returns top K results with snippets.
+    /// 索引覆盖全部部门目录,因此**必须在计分前按调用者角色/部门过滤**
+    /// (放到 Take(topK) 之后再过滤会让有权文档被无权文档挤掉,同时也没堵住泄露)。
     /// </summary>
-    public List<KbResult> Search(string query, int topK = 5)
+    public List<KbResult> Search(string query, int topK, string? role, string? department, int userId = 0)
     {
         if (_docCount == 0) return new List<KbResult>();
 
         var queryTokens = TokenizeQuery(query);
         if (queryTokens.Length == 0) return new List<KbResult>();
+
+        var invisibleProjects = InvisibleProjectNames(role, department, userId);
+        bool Allowed(string path) =>
+            KnowledgeAcl.CanAccess(path, role, department) &&
+            !KnowledgeAcl.IsInvisibleWikiProject(path, invisibleProjects);
 
         // TF-IDF scoring per document
         var scores = new Dictionary<string, double>();
@@ -130,6 +141,7 @@ public class KnowledgeSearchService : IDisposable
 
             foreach (var entry in postings)
             {
+                if (!Allowed(entry.Path)) continue;
                 var docLen = _docLengths.GetValueOrDefault(entry.Path, 1);
                 var tf = (double)entry.TermFreq / docLen; // normalized TF
                 scores.TryGetValue(entry.Path, out var existing);
@@ -155,6 +167,34 @@ public class KnowledgeSearchService : IDisposable
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// 按 wiki 任务的 Visibility 计算对调用者不可见的项目名(与知识库树的规则一致):
+    /// 他部门的 department 可见项目 + 他人的 personal 项目。
+    /// </summary>
+    private HashSet<string> InvisibleProjectNames(string? role, string? department, int userId)
+    {
+        if (role == "admin") return new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var deptProjects = db.WikiTasks
+                .Where(t => t.Visibility == "department" && t.TargetFolder != department)
+                .Select(t => t.ProjectName);
+            var personalProjects = db.WikiTasks
+                .Where(t => t.Visibility == "personal" && t.UserId != userId)
+                .Select(t => t.ProjectName);
+            return deptProjects.AsEnumerable().Union(personalProjects.AsEnumerable()).ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            // 查不到可见性时:路径级 ACL 仍生效(跨部门仍被挡住),这里只记告警不做额外过滤,
+            // 避免整库搜索因一次 DB 抖动而不可用。
+            _logger.LogWarning(ex, "计算 wiki 项目可见性失败,本次搜索仅应用路径级 ACL");
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
     }
 
     // Chinese-friendly tokenization for indexing

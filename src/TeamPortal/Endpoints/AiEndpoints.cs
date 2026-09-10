@@ -6,6 +6,13 @@ namespace TeamPortal.Endpoints;
 
 public static class AiEndpoints
 {
+    /// <summary>把调用者身份传给 AI 检索层:知识库检索必须限定在其有权查看的范围内。</summary>
+    private static AiProxyService.SearchScope GetScope(ClaimsPrincipal user)
+        => new(
+            user.FindFirstValue(ClaimTypes.Role),
+            user.FindFirstValue("Department"),
+            int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0);
+
     public static void MapAiEndpoints(this WebApplication app)
     {
         // 限流:AI 调用直接产生 DeepSeek 费用,必须挡住单账号刷量
@@ -30,7 +37,7 @@ public static class AiEndpoints
             await conv.AddMessage(sessionId, userName, "user", req.Question);
 
             // Stream AI response
-            var stream = await proxy.ChatStream(req.Question, historyTuples);
+            var stream = await proxy.ChatStream(req.Question, GetScope(user), historyTuples);
             if (stream is null)
             {
                 log.Warn("ai", $"Chat failed: AI service unavailable, user={userName}");
@@ -54,7 +61,7 @@ public static class AiEndpoints
         group.MapPost("/search", async (SearchRequest req, ClaimsPrincipal user, AiProxyService proxy, LogService log) =>
         {
             var userName = user.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
-            var result = await proxy.Search(req.Query);
+            var result = await proxy.Search(req.Query, GetScope(user));
             if (result is null)
             {
                 log.Warn("ai", $"Search failed: AI service unavailable, user={userName}");

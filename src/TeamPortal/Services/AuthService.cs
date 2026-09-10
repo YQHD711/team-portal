@@ -211,7 +211,7 @@ public class AuthService
             }
         }
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Username == username);
         if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
             _loginAttempts.AddOrUpdate(key,
@@ -233,12 +233,17 @@ public class AuthService
             Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Role, user.Role),
         };
+
+        // MCP 工具(知识库/账号管理)依赖部门声明做范围校验,而 HTTP 端点是自己查库取部门的。
+        // 不签发这个声明会让 MCP 侧的 dept 恒为 null(部长的本部门文档会被误判为无权)。
+        if (!string.IsNullOrEmpty(user.Department?.Name))
+            claims.Add(new Claim("Department", user.Department!.Name));
 
         var expireDays = await _settings.GetInt("Auth:JwtExpireDays", 7);
 
