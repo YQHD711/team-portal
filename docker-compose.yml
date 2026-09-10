@@ -20,6 +20,9 @@ services:
       - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
     # prod 模式不需要 bind mount 源码(standalone 自包含);也不需要 npm install
     volumes: []
+    # 禁止容器内进程通过 setuid/文件能力提权(容器本身已用非 root 用户运行)
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - backend
     restart: unless-stopped
@@ -51,6 +54,9 @@ services:
       - ./data:/data
       # 把宿主机 ArduPilot WebTools 静态文件挂进 backend 容器(详见 deploy/README-WEBTOOLS.md)
       - ./webtools-content:/webtools-content:ro
+    # 禁止容器内进程通过 setuid/文件能力提权
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

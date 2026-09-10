@@ -7,10 +7,11 @@ ENV ALLOWED_DEV_ORIGINS=$ALLOWED_DEV_ORIGINS
 FROM base AS deps
 ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
-# npm ci 要求 package-lock.json;仓库只提交了 package.json,用 npm install --omit=dev 替代
+# npm ci 要求 package-lock.json;仓库已提交该文件,因此用 npm ci 保证依赖可复现
+# (带 fallback:registry 抖动时退回 npm install,避免构建直接失败)
 COPY package*.json ./
 RUN npm config set registry ${NPM_REGISTRY} \
- && npm install --omit=dev --no-audit --prefer-offline || npm install --no-audit --prefer-offline
+ && npm ci --omit=dev --no-audit --prefer-offline || npm install --omit=dev --no-audit --prefer-offline
 
 FROM base AS dev
 WORKDIR /app
@@ -35,7 +36,7 @@ ENV API_PROXY_URL=$API_PROXY_URL
 # prod 运行时由 standalone output 自包含,不再需要 devDependencies。
 COPY package*.json ./
 RUN npm config set registry ${NPM_REGISTRY} \
- && npm install --no-audit --prefer-offline
+ && npm ci --no-audit --prefer-offline || npm install --no-audit --prefer-offline
 COPY . .
 RUN NODE_OPTIONS=--max-old-space-size=1024 npm run build
 

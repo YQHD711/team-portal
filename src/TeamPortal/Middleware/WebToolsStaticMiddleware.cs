@@ -16,6 +16,9 @@ public static class WebToolsStaticMiddleware
 {
     private const string DefaultWebToolsRoot = @"G:\ardupilot_log_analysis\WebTools";
 
+    /// <summary>需要改写的 HTML 大小上限(超过则拒绝,避免整文件读入内存)。</summary>
+    private const long MaxHtmlBytes = 8 * 1024 * 1024;
+
     private static readonly Regex AttrRegex = new(
         @"\b(src|href)=(""([^""]*)""|'([^']*)')",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -57,7 +60,7 @@ public static class WebToolsStaticMiddleware
                 return;
             }
 
-            var bytes = await File.ReadAllBytesAsync(full, context.RequestAborted);
+            var info = new FileInfo(full);
             var ext = Path.GetExtension(full).ToLowerInvariant();
 
             // WebTools 由已受保护的 Next.js /webtools 页面以同源 iframe 加载。
@@ -86,6 +89,14 @@ public static class WebToolsStaticMiddleware
 
             if (context.Response.ContentType.StartsWith("text/html"))
             {
+                // HTML 需要逐属性改写,必须整文件读入内存 —— 因此设上限,避免超大文件撑爆内存
+                if (info.Length > MaxHtmlBytes)
+                {
+                    context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+                    await context.Response.WriteAsync("HTML file too large to rewrite");
+                    return;
+                }
+                var bytes = await File.ReadAllBytesAsync(full, context.RequestAborted);
                 var body = System.Text.Encoding.UTF8.GetString(bytes);
                 // 页面基准目录：取请求路径的目录部分（/webtools/LogFinder/ 或 /webtools/）
                 // 注意：/webtools/index.html 的目录是 /webtools/，不是文件本身
@@ -99,19 +110,16 @@ public static class WebToolsStaticMiddleware
                 var baseDir = dir.EndsWith("/") ? dir : dir + "/";
                 body = AttrRegex.Replace(body, m => RewriteAttr(m, baseDir));
                 bytes = System.Text.Encoding.UTF8.GetBytes(body);
+                context.Response.ContentLength = bytes.Length;
+                await context.Response.Body.WriteAsync(bytes, context.RequestAborted);
+                return;
             }
 
-            context.Response.ContentLength = bytes.Length;
-            await context.Response.Body.WriteAsync(bytes, context.RequestAborted);
+            // 其余静态资源无需改写,直接流式转发(旧实现整文件 ReadAllBytes,大文件会占满内存)
+            context.Response.ContentLength = info.Length;
+            await using var stream = File.OpenRead(full);
+            await stream.CopyToAsync(context.Response.Body, context.RequestAborted);
         });
-    }
-
-    /// <summary>Referer 是否来自指定 origin(精确边界,防止 localhost:3000evil.com 之类前缀误匹配)</summary>
-    private static bool IsTrustedReferer(string referer, string origin)
-    {
-        if (!referer.StartsWith(origin, StringComparison.OrdinalIgnoreCase)) return false;
-        return referer.Length == origin.Length
-            || referer[origin.Length] is '/' or '?' or '#';
     }
 
     /// <summary>把 src/href 相对路径改写为 /webtools/... 绝对路径；绝对路径/协议/锚点等原样保留</summary>
