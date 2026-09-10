@@ -14,9 +14,9 @@ public partial class BaiduNetdiskService
     /// 备份内容：SQLite 数据库 + 系统设置 + 知识库 + Wiki 文档 + 飞行日志。
     /// </summary>
     /// <returns>网盘中的备份文件路径</returns>
-    public async Task<string> BackupSystem()
+    public async Task<string> BackupSystem(CancellationToken ct = default)
     {
-        await GetAccessToken(); // ensure auth
+        await GetAccessToken(ct); // ensure auth
         var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         var zipName = $"backup-{timestamp}.zip";
         var zipPath = Path.Combine(Path.GetTempPath(), zipName);
@@ -61,7 +61,7 @@ public partial class BaiduNetdiskService
         // Upload zip to cloud (fallback: save locally)
         try
         {
-            await UploadFile(zipPath, remotePath);
+            await UploadFile(zipPath, remotePath, null, ct);
         }
         catch (Exception ex)
         {
@@ -106,7 +106,7 @@ public partial class BaiduNetdiskService
     ///     ├── photos-videos/
     ///     └── documents/
     /// </summary>
-    public async Task EnsureFolderStructure()
+    public async Task EnsureFolderStructure(CancellationToken ct = default)
     {
         // Create parent dirs first, then children (API doesn't auto-create parents)
         var dirs = new[]
@@ -126,7 +126,7 @@ public partial class BaiduNetdiskService
 
         foreach (var dir in dirs)
         {
-            if (await CreateDirectory(dir))
+            if (await CreateDirectory(dir, ct))
                 created++;
             else
                 existed++;

@@ -191,7 +191,7 @@ public static class AdminEndpoints
                     try
                     {
                         var remotePath = $"{BaiduNetdiskService.RootDir}/user-data/documents/{file.FileName}";
-                        await baidu.UploadFile(tmpPath, remotePath);
+                        await baidu.UploadFile(tmpPath, remotePath, null, ctx.RequestAborted);
                         cloudUrl = $"/api/baidu/view-by-path?path={Uri.EscapeDataString(remotePath)}";
                         log.Info("baidu", $"Document synced to cloud: {remotePath}");
                     }

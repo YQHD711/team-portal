@@ -15,7 +15,7 @@ public static class BaiduEndpoints
         {
             try
             {
-                var (stream, fileName, size) = await svc.GetDownloadStream(fsId);
+                var (stream, fileName, size) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
                 await using (stream)
                 {
                     var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -29,11 +29,12 @@ public static class BaiduEndpoints
                     ctx.Response.ContentType = ct;
                     ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
                     if (size > 0) ctx.Response.Headers.ContentLength = size;
-                    await stream.CopyToAsync(ctx.Response.Body);
+                    await stream.CopyToAsync(ctx.Response.Body, ctx.RequestAborted);
                 }
             }
             catch (Exception ex)
             {
+                if (ctx.Response.HasStarted) return; // 已在传输 body,无法再改状态码
                 ctx.Response.StatusCode = 404;
                 ctx.Response.ContentType = "text/plain";
                 await ctx.Response.WriteAsync($"File not found: {ex.Message}");
@@ -47,11 +48,11 @@ public static class BaiduEndpoints
             {
                 var parentDir = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "/";
                 var fileName = Path.GetFileName(path);
-                var files = await svc.ListFiles(parentDir);
+                var files = await svc.ListFiles(parentDir, ctx.RequestAborted);
                 var file = files.FirstOrDefault(f => f.FileName == fileName && !f.IsDir);
                 if (file is null) { ctx.Response.StatusCode = 404; await ctx.Response.WriteAsync("File not found"); return; }
 
-                var (stream, _, size) = await svc.GetDownloadStream(file.FsId);
+                var (stream, _, size) = await svc.GetDownloadStream(file.FsId, ctx.RequestAborted);
                 await using (stream)
                 {
                     var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -65,11 +66,12 @@ public static class BaiduEndpoints
                     ctx.Response.ContentType = ct;
                     ctx.Response.Headers.ContentDisposition = $"{inline}; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
                     if (size > 0) ctx.Response.Headers.ContentLength = size;
-                    await stream.CopyToAsync(ctx.Response.Body);
+                    await stream.CopyToAsync(ctx.Response.Body, ctx.RequestAborted);
                 }
             }
             catch (Exception ex)
             {
+                if (ctx.Response.HasStarted) return; // 已在传输 body,无法再改状态码
                 ctx.Response.StatusCode = 404;
                 ctx.Response.ContentType = "text/plain";
                 await ctx.Response.WriteAsync($"File not found: {ex.Message}");
@@ -86,40 +88,46 @@ public static class BaiduEndpoints
         });
 
         // Exchange authorization code
-        adminBaidu.MapPost("/auth-code", async (AuthCodeRequest req, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/auth-code", async (AuthCodeRequest req, HttpContext ctx, BaiduNetdiskService svc) =>
         {
-            var result = await svc.ExchangeCode(req.Code);
+            var result = await svc.ExchangeCode(req.Code, ctx.RequestAborted);
             return Results.Ok(new { success = true, message = result });
         });
 
-        adminBaidu.MapGet("/quota", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/quota", async (HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            var quota = await svc.GetQuota();
+            var quota = await svc.GetQuota(ctx.RequestAborted);
             return Results.Ok(quota);
         });
 
-        adminBaidu.MapGet("/files", async (string? dir, BaiduNetdiskService svc) =>
+        adminBaidu.MapGet("/files", async (string? dir, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            var files = await svc.ListFiles(dir ?? "/");
+            var files = await svc.ListFiles(dir ?? "/", ctx.RequestAborted);
             return Results.Ok(files);
         });
 
-        adminBaidu.MapPost("/upload", async (IFormFile file, string? remoteDir, BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/upload", async (IFormFile file, string? remoteDir, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
 
             var tempPath = Path.GetTempFileName();
-            await using (var stream = File.Create(tempPath))
-                await file.CopyToAsync(stream);
+            try
+            {
+                await using (var stream = File.Create(tempPath))
+                    await file.CopyToAsync(stream, ctx.RequestAborted);
 
-            var dir = remoteDir ?? BaiduNetdiskService.DefaultUploadDir;
-            var remotePath = $"{dir}/{file.FileName}";
-            await svc.UploadFile(tempPath, remotePath);
-            File.Delete(tempPath);
-            return Results.Ok(new { success = true, path = remotePath });
+                var dir = remoteDir ?? BaiduNetdiskService.DefaultUploadDir;
+                var remotePath = $"{dir}/{file.FileName}";
+                await svc.UploadFile(tempPath, remotePath, null, ctx.RequestAborted);
+                return Results.Ok(new { success = true, path = remotePath });
+            }
+            finally
+            {
+                File.Delete(tempPath); // 上传失败也要清理,否则 /tmp 会被临时文件堆满
+            }
         }).DisableAntiforgery();
 
         adminBaidu.MapGet("/download", async (long fsId, HttpContext ctx, BaiduNetdiskService svc) =>
@@ -131,34 +139,38 @@ public static class BaiduEndpoints
             }
             try
             {
-                var (stream, fileName, size) = await svc.GetDownloadStream(fsId);
-                ctx.Response.ContentType = "application/octet-stream";
-                ctx.Response.Headers.ContentDisposition = $"attachment; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
-                if (size > 0) ctx.Response.Headers.ContentLength = size;
-                await stream.CopyToAsync(ctx.Response.Body);
+                var (stream, fileName, size) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
+                await using (stream)
+                {
+                    ctx.Response.ContentType = "application/octet-stream";
+                    ctx.Response.Headers.ContentDisposition = $"attachment; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+                    if (size > 0) ctx.Response.Headers.ContentLength = size;
+                    await stream.CopyToAsync(ctx.Response.Body, ctx.RequestAborted);
+                }
             }
             catch (Exception ex)
             {
+                if (ctx.Response.HasStarted) return; // 已在传输 body,无法再改状态码
                 ctx.Response.StatusCode = 500;
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync($"{{\"error\":\"{ex.Message.Replace("\"", "'")}\"}}");
             }
         });
 
-        adminBaidu.MapDelete("/files", async (string path, BaiduNetdiskService svc) =>
+        adminBaidu.MapDelete("/files", async (string path, HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            await svc.DeleteFile(path);
+            await svc.DeleteFile(path, ctx.RequestAborted);
             return Results.Ok(new { success = true });
         });
 
         // One-click system backup (DB + settings → zip → cloud)
-        adminBaidu.MapPost("/backup", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/backup", async (HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
             try
             {
-                var path = await svc.BackupSystem();
+                var path = await svc.BackupSystem(ctx.RequestAborted);
                 return Results.Ok(new { success = true, path, message = $"备份已保存到 {path}" });
             }
             catch (Exception ex)
@@ -168,10 +180,10 @@ public static class BaiduEndpoints
         });
 
         // Initialize folder structure (one-click setup)
-        adminBaidu.MapPost("/init-folders", async (BaiduNetdiskService svc) =>
+        adminBaidu.MapPost("/init-folders", async (HttpContext ctx, BaiduNetdiskService svc) =>
         {
             if (!await svc.IsConfigured()) return Results.Problem("百度网盘未配置", statusCode: 400);
-            await svc.EnsureFolderStructure();
+            await svc.EnsureFolderStructure(ctx.RequestAborted);
             return Results.Ok(new
             {
                 success = true,
