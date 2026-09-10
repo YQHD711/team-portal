@@ -9,6 +9,7 @@ import type { MaterialItem } from "@/components/inventory/layoutTypes";
 import { parseLayout } from "@/components/inventory/layoutCodec";
 import { formatDims } from "@/components/inventory/layoutUnits";
 import { RoomCard } from "@/components/inventory/RoomCard";
+import { locationRoom } from "@/components/inventory/locCode";
 import type { RoomLayoutRow } from "@/components/inventory/layoutRow";
 
 // react-konva 依赖 Canvas，SSR 时不可用，关闭服务端渲染
@@ -38,7 +39,7 @@ export default function StorageLayoutPage() {
   }, [fetchData]);
 
   const roomItems = useMemo(
-    () => (selected ? items.filter(i => (i.locationCode || "").split("-")[0] === selected.roomCode) : []),
+    () => (selected ? items.filter(i => locationRoom(i.locationCode) === selected.roomCode) : []),
     [items, selected]
   );
   const isStaff = role === "admin" || role === "部长";

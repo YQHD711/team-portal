@@ -17,7 +17,7 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
 import { LOW_THRESHOLD, type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
-import { buildLocCode, parseLocParts } from "@/components/inventory/locCode";
+import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
 
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
 const FALLBACK_ROOMS = ["1012", "1013", "1014", "1015", "201", "202", "203"];
@@ -30,25 +30,15 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [form, setForm] = useState<InventoryFormState>({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" });
-  const [locRoom, setLocRoom] = useState("");
-  const [locCabinet, setLocCabinet] = useState("");
-  const [locShelf, setLocShelf] = useState("");
-  const [locPos, setLocPos] = useState("");
+  /** 房间 + 平面图：库位编码选择器据此列出「货架/柜子/工作台」与层位 */
+  const [rooms, setRooms] = useState<RoomLayoutOption[]>([]);
 
-  const parseLocCode = (code: string) => {
-    const parts = parseLocParts(code);
-    setLocRoom(parts.room);
-    setLocCabinet(parts.cabinet);
-    setLocShelf(parts.shelf);
-    setLocPos(parts.pos);
-  };
   const [importMsg, setImportMsg] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
   const { user } = useCurrentUser();
   const role = user?.role ?? "";
   // 库存预警文案仅 staff 可见;队员只见普通数量/状态
   const isStaff = role === "admin" || role === "部长";
-  const [roomOpts, setRoomOpts] = useState<string[]>(FALLBACK_ROOMS);
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
   const [txItem, setTxItem] = useState<InventoryItem | null>(null);
@@ -106,11 +96,11 @@ export default function InventoryPage() {
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
   useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
-  // 房间下拉从库位布局动态获取，失败回退硬编码列表
+  // 房间 + 平面图从库位布局动态获取（供库位编码联动选择），失败时回退硬编码房间号
   useEffect(() => {
-    api.get<{ roomCode: string }[]>("/api/storage/layouts")
-      .then(ls => { const rooms = ls.map(l => l.roomCode); if (rooms.length) setRoomOpts(rooms); })
-      .catch(() => {});
+    api.get<RoomLayoutOption[]>("/api/storage/layouts")
+      .then(setRooms)
+      .catch(() => setRooms([]));
   }, []);
 
   const fetchItems = async () => {
@@ -124,13 +114,13 @@ export default function InventoryPage() {
     finally { setLoading(false); }
   };
 
-  const openCreate = () => { setEditItem(null); setForm({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" }); setLocRoom(""); setLocCabinet(""); setLocShelf(""); setLocPos(""); setShowForm(true); };
-  const openEdit = (i: InventoryItem) => { setEditItem(i); setForm({ name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C", unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0, projectTag: i.projectTag || "", locationCode: i.locationCode || "" }); parseLocCode(i.locationCode || ""); setShowForm(true); };
+  const openCreate = () => { setEditItem(null); setForm({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" }); setShowForm(true); };
+  const openEdit = (i: InventoryItem) => { setEditItem(i); setForm({ name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C", unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0, projectTag: i.projectTag || "", locationCode: i.locationCode || "" }); setShowForm(true); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const locCode = buildLocCode(locRoom, locCabinet, locShelf, locPos) || null;
+      const locCode = form.locationCode.trim() || null;
       if (editItem) await api.put(`/api/inventory/${editItem.id}`, { grade: form.grade, unitPrice: form.unitPrice, departmentId: form.departmentId || null, projectTag: form.projectTag || null, locationCode: locCode });
       else await api.post("/api/inventory", { ...form, locationCode: locCode });
       setShowForm(false); fetchItems();
@@ -207,9 +197,9 @@ export default function InventoryPage() {
       {/* Modal */}
       {showForm && (
         <InventoryFormModal editItem={editItem} form={form} setForm={setForm}
-          locRoom={locRoom} setLocRoom={setLocRoom} locCabinet={locCabinet} setLocCabinet={setLocCabinet}
-          locShelf={locShelf} setLocShelf={setLocShelf} locPos={locPos} setLocPos={setLocPos}
-          roomOpts={roomOpts} departments={departments} buildLocCode={buildLocCode} calcGrade={calcGrade}
+          rooms={rooms} fallbackRooms={FALLBACK_ROOMS}
+          onLocationCode={code => setForm(f => ({ ...f, locationCode: code }))}
+          departments={departments} calcGrade={calcGrade}
           onClose={() => setShowForm(false)} onSubmit={handleSave} />
       )}
 

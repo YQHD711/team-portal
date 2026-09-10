@@ -42,7 +42,7 @@ const items = [
   { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "1012-C-01-03", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-const state = { approveCalls: 0, layoutPut: null as null | Record<string, unknown> };
+const state = { approveCalls: 0, layoutPut: null as null | Record<string, unknown>, itemPost: null as null | Record<string, unknown> };
 
 /** 物料布局用数据：一个房间 + 立体货架/柜子（坐标单位 cm） */
 const layoutItems = [
@@ -86,6 +86,10 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
       return json({});
     }
     if (/\/api\/finance\/requests\/\d+\/reject$/.test(path) && method === "POST") return json({});
+    if (path === "/api/inventory" && method === "POST") {
+      state.itemPost = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
+      return json({ id: 99, ...state.itemPost });
+    }
     if (path.startsWith("/api/inventory")) return json(inventory);
     if (path === "/api/admin/departments") return json([]);
     if (path === "/api/storage/layouts") return json(layouts);
@@ -213,6 +217,25 @@ test.describe("冒烟流程", () => {
     expect(body.cabinetCount).toBe(3);
     // 保存后回到查看模式
     await expect(page.getByRole("button", { name: "编辑平面图" })).toBeVisible();
+  });
+
+  test("库存表单：库位编码由「房间 → 货架 → 层 → 位」联动生成", async ({ page }) => {
+    const state = await mockApi(page, "admin", { layouts: [layoutRoom], items: layoutItems });
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/inventory");
+    await page.getByRole("button", { name: "添加零件" }).click();
+
+    // 名称是表单第一个输入框（该弹窗的 label 尚未与控件关联）
+    await page.locator("div.fixed.z-50 form input").first().fill("测试桨叶");
+    await page.getByLabel("房间").selectOption("201");
+    await page.getByLabel("库位元素").selectOption("201-A");
+    await page.getByLabel("层").selectOption("3");
+    await page.getByLabel("位", { exact: true }).selectOption("5");
+    await expect(page.locator("div.fixed.z-50").getByText("201-A-3-05")).toBeVisible();
+
+    await page.locator("div.fixed.z-50").getByRole("button", { name: "添加零件" }).click();
+    await expect.poll(() => state.itemPost?.locationCode, { timeout: 10_000 }).toBe("201-A-3-05");
   });
 });
 

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import type { MaterialItem } from "./layoutTypes";
 import { layoutSummary, parseLayout } from "./layoutCodec";
 import { formatDims } from "./layoutUnits";
+import { locationRoom } from "./locCode";
 import { LOW_THRESHOLD } from "./inventoryTypes";
 import type { RoomLayoutRow } from "./layoutRow";
 
@@ -18,7 +19,7 @@ interface RoomCardProps {
 export function RoomCard({ row, items, isStaff, onOpen }: RoomCardProps) {
   const layout = useMemo(() => parseLayout(row.layoutJson), [row.layoutJson]);
   const stats = useMemo(() => {
-    const list = items.filter(i => (i.locationCode || "").split("-")[0] === row.roomCode);
+    const list = items.filter(i => locationRoom(i.locationCode) === row.roomCode);
     return {
       kinds: list.length,
       totalQty: list.reduce((s, i) => s + i.quantity, 0),
