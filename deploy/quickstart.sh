@@ -36,7 +36,11 @@ if [ ! -f .env ]; then
     # 自动生成 JWT 密钥（至少 32 字符）
     JWT_KEY=$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')
     sed -i.bak "s|^JWT__KEY=.*|JWT__KEY=${JWT_KEY}|" .env && rm -f .env.bak
-    ok "已生成 .env，JWT 密钥已自动生成"
+    # 自动生成管理员初始密码:占位符 change-me 一旦直接上线就等于公开口令
+    ADMIN_PWD=$(openssl rand -base64 18 2>/dev/null | tr -d '\n/+=' || head -c 18 /dev/urandom | base64 | tr -d '\n/+=' )
+    sed -i.bak "s|^ADMIN__PASSWORD=.*|ADMIN__PASSWORD=${ADMIN_PWD}|" .env && rm -f .env.bak
+    ok "已生成 .env，JWT 密钥与管理员初始密码已自动生成"
+    warn "管理员初始密码: ${ADMIN_PWD}（请立即记录，首次登录后修改）"
 else
     warn ".env 已存在，跳过生成"
     if grep -q "JWT__KEY=change-me" .env; then
@@ -45,11 +49,18 @@ else
         sed -i.bak "s|^JWT__KEY=.*|JWT__KEY=${JWT_KEY}|" .env && rm -f .env.bak
         ok "JWT 密钥已更新"
     fi
+    if grep -qE "^ADMIN__PASSWORD=(change-me)?$" .env; then
+        warn "检测到 ADMIN__PASSWORD 为空或仍是占位符，正在生成随机密码..."
+        ADMIN_PWD=$(openssl rand -base64 18 2>/dev/null | tr -d '\n/+=' || head -c 18 /dev/urandom | base64 | tr -d '\n/+=' )
+        sed -i.bak "s|^ADMIN__PASSWORD=.*|ADMIN__PASSWORD=${ADMIN_PWD}|" .env && rm -f .env.bak
+        ok "管理员初始密码已更新"
+        warn "管理员初始密码: ${ADMIN_PWD}（请立即记录，首次登录后修改）"
+    fi
 fi
 
 # ── 3. 提示关键配置 ──
 warn "请确认 .env 中的关键配置（当前可先跳过，稍后再改）:"
-warn "  - ADMIN__PASSWORD: 管理员初始密码（默认 change-me，首次登录后请修改）"
+warn "  - ADMIN__PASSWORD: 管理员初始密码（已自动生成随机值，首次登录后请修改）"
 warn "  - AISERVICE__DEEPSEEKKEY: DeepSeek AI 密钥（可选，后端兜底配置）"
 echo
 

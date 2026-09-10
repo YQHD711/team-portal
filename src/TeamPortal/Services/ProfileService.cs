@@ -77,10 +77,12 @@ public class ProfileService
         return record;
     }
 
-    public async Task<bool> UpdateTrainingRecord(int id, string? courseName, double? score,
+    public async Task<bool> UpdateTrainingRecord(int id, int userId, string? courseName, double? score,
         DateTime? examDate, string? examiner, string? notes)
     {
-        var record = await _db.TrainingRecords.FindAsync(id);
+        // 必须带归属条件:端点只校验了路由上的 userId 可管理,记录 id 若不绑定该 userId,
+        // 部长就能用本部门成员 userId 过门禁、再拿他部门/管理员的记录 id 改删(IDOR)
+        var record = await _db.TrainingRecords.FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
         if (record is null) return false;
         if (courseName is not null) record.CourseName = courseName;
         if (score.HasValue) record.Score = score.Value;
@@ -91,9 +93,9 @@ public class ProfileService
         return true;
     }
 
-    public async Task<bool> DeleteTrainingRecord(int id)
+    public async Task<bool> DeleteTrainingRecord(int id, int userId)
     {
-        var record = await _db.TrainingRecords.FindAsync(id);
+        var record = await _db.TrainingRecords.FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
         if (record is null) return false;
         _db.TrainingRecords.Remove(record);
         await _db.SaveChangesAsync();
@@ -145,10 +147,11 @@ public class ProfileService
         return record;
     }
 
-    public async Task<bool> UpdateCompetitionRecord(int id, string? competitionName,
+    public async Task<bool> UpdateCompetitionRecord(int id, int userId, string? competitionName,
         DateTime? date, string? evt, string? ranking, string? certificate, string? notes)
     {
-        var record = await _db.CompetitionRecords.FindAsync(id);
+        // 同培训记录:按 id + userId 归属查询,避免跨用户改删(IDOR)
+        var record = await _db.CompetitionRecords.FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
         if (record is null) return false;
         if (competitionName is not null) record.CompetitionName = competitionName;
         if (date.HasValue) record.Date = date.Value;
@@ -160,9 +163,9 @@ public class ProfileService
         return true;
     }
 
-    public async Task<bool> DeleteCompetitionRecord(int id)
+    public async Task<bool> DeleteCompetitionRecord(int id, int userId)
     {
-        var record = await _db.CompetitionRecords.FindAsync(id);
+        var record = await _db.CompetitionRecords.FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
         if (record is null) return false;
         _db.CompetitionRecords.Remove(record);
         await _db.SaveChangesAsync();

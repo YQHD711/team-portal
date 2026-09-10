@@ -28,8 +28,15 @@ public partial class WikiGeneratorService
 
             // Clone the repo
             task.Status = "cloning"; await _db.SaveChangesAsync();
-            var psi = new System.Diagnostics.ProcessStartInfo("git", $"clone --depth 1 {task.SourceUrl} {cloneDir}")
+            var psi = new System.Diagnostics.ProcessStartInfo("git")
             { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            // 同 Workspace:URL 必须校验协议且用 ArgumentList 传参(防选项/协议注入)
+            psi.ArgumentList.Add("clone");
+            psi.ArgumentList.Add("--depth");
+            psi.ArgumentList.Add("1");
+            psi.ArgumentList.Add("--");
+            psi.ArgumentList.Add(ValidateCloneUrl(task.SourceUrl));
+            psi.ArgumentList.Add(cloneDir);
             var proc = System.Diagnostics.Process.Start(psi)!;
             await proc.WaitForExitAsync();
             if (proc.ExitCode != 0)

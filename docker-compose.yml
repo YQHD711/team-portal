@@ -34,7 +34,9 @@ services:
       context: ./src/TeamPortal
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      # 只发布到宿主机回环:后端不该被绕过 nginx/前端直接访问。
+      # 需要在局域网直连时用 docker-compose.lan.yml 覆盖。
+      - "127.0.0.1:8080:8080"
     env_file:
       - .env
     environment:

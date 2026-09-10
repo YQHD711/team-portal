@@ -136,10 +136,11 @@ public class BackupService
     /// </summary>
     public async Task<bool> Restore(string backupFileName, bool createSafetyBackup = true)
     {
-        var backupPath = Path.Combine(_backupDir, backupFileName);
-        if (!File.Exists(backupPath))
+        // 与 DeleteBackup 同样的边界校验:否则可传 ..\..\..\tmp\evil.db 用任意位置的库覆盖线上库
+        var backupPath = ResolveInside(_backupDir, backupFileName);
+        if (backupPath is null || !File.Exists(backupPath))
         {
-            _log.Error("backup", $"Restore failed: backup not found {backupFileName}");
+            _log.Error("backup", $"Restore failed: backup not found or out of bounds {backupFileName}");
             return false;
         }
 
@@ -170,16 +171,25 @@ public class BackupService
     }
 
     /// <summary>
+    /// 把用户提供的文件名解析到指定目录内;越界(../、绝对路径)返回 null。
+    /// 备份/回收站的读写删都必须经过它,避免以文件名逃逸到任意路径。
+    /// </summary>
+    private static string? ResolveInside(string dir, string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+        var normDir = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var path = Path.GetFullPath(Path.Combine(normDir, fileName));
+        if (!path.StartsWith(normDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
+        return path;
+    }
+
+    /// <summary>
     /// Delete a backup file. Won't delete the latest successful backup.
     /// </summary>
     public bool DeleteBackup(string fileName)
     {
-        // 校验 fileName 解析后在 _backupDir 内（防 ../ 逃逸到上级目录删任意文件）
-        if (string.IsNullOrWhiteSpace(fileName)) return false;
-        var path = Path.GetFullPath(Path.Combine(_backupDir, fileName));
-        var normDir = Path.GetFullPath(_backupDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!normPath.StartsWith(normDir, StringComparison.OrdinalIgnoreCase) || normPath == normDir)
+        var path = ResolveInside(_backupDir, fileName);
+        if (path is null)
         {
             _log.Warn("backup", $"拒绝删除越界备份: {fileName}");
             return false;
@@ -196,7 +206,7 @@ public class BackupService
         // 软删除：移到回收目录，可恢复（回收站）
         var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
         Directory.CreateDirectory(trashDir);
-        var dest = Path.Combine(trashDir, fileName);
+        var dest = Path.Combine(trashDir, Path.GetFileName(path));
         if (File.Exists(dest)) File.Delete(dest);
         File.Move(path, dest);
         _log.Info("backup", $"Backup moved to trash: {fileName}");
@@ -207,9 +217,9 @@ public class BackupService
     public bool RestoreBackupFromTrash(string fileName)
     {
         var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
-        var src = Path.Combine(trashDir, fileName);
-        if (!File.Exists(src)) return false;
-        var dest = Path.Combine(_backupDir, fileName);
+        var src = ResolveInside(trashDir, fileName);
+        if (src is null || !File.Exists(src)) return false;
+        var dest = Path.Combine(_backupDir, Path.GetFileName(src));
         if (File.Exists(dest)) File.Delete(dest);
         File.Move(src, dest);
         _log.Info("backup", $"Backup restored from trash: {fileName}");
@@ -220,8 +230,8 @@ public class BackupService
     public bool DeleteBackupForever(string fileName)
     {
         var trashDir = Path.Combine(Path.GetDirectoryName(_backupDir)!, "trash");
-        var src = Path.Combine(trashDir, fileName);
-        if (!File.Exists(src)) return false;
+        var src = ResolveInside(trashDir, fileName);
+        if (src is null || !File.Exists(src)) return false;
         File.Delete(src);
         _log.Info("backup", $"Backup deleted forever: {fileName}");
         return true;

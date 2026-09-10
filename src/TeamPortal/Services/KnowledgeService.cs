@@ -135,6 +135,10 @@ public class KnowledgeService
     {
         var fullPath = ResolvePath(relativePath);
         if (fullPath is null) throw new InvalidOperationException("Invalid path");
+        // 拒绝把知识库根目录当目标:CanAccess 已挡住非管理员,这里再做一层兜底,
+        // 否则 path="." 会让 Directory.Delete(..., recursive) 清空整个知识库
+        if (string.Equals(fullPath, Path.GetFullPath(_basePath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("不允许删除知识库根目录");
         if (Directory.Exists(fullPath)) { Directory.Delete(fullPath, true); _log.Warn("knowledge", $"Directory deleted: {relativePath}"); }
         else if (File.Exists(fullPath)) { File.Delete(fullPath); _log.Warn("knowledge", $"File deleted: {relativePath}"); }
         else throw new InvalidOperationException("File not found");
@@ -158,11 +162,31 @@ public class KnowledgeService
     public bool CanAccess(string relativePath, string? role, string? department)
     {
         if (role == "admin") return true;
+        // 先归一化再判断:否则 "公共/../组织部/x.md" 会因前缀是"公共"而放行,
+        // 实际却由 ResolvePath 解析到他部门文件(读取/写入/删除/重命名都会中招)。
+        if (!TryGetNormalizedRelative(relativePath, out var rel) || rel.Length == 0) return false;
+        // 归一化后仍残留 . / .. 段:Windows 上 GetFullPath 已消掉,Linux 上反斜杠是合法文件名字符,
+        // 转成 '/' 后会在这里现形,必须直接拒绝
+        if (rel.Split('/').Any(seg => seg is "." or "..")) return false;
         // Legacy root-level files are public
-        if (!relativePath.Contains('/')) return true;
-        if (relativePath.StartsWith("公共") || relativePath.StartsWith("公共/")) return true;
-        if (!string.IsNullOrEmpty(department) && (relativePath == department || relativePath.StartsWith(department + "/"))) return true;
+        if (!rel.Contains('/')) return true;
+        if (rel.StartsWith("公共/", StringComparison.Ordinal) || rel.StartsWith("公共知识库/", StringComparison.Ordinal)) return true;
+        if (!string.IsNullOrEmpty(department) &&
+            (rel == department || rel.StartsWith(department + "/", StringComparison.Ordinal))) return true;
         return false;
+    }
+
+    /// <summary>把用户输入归一化为 basePath 下的相对路径(统一分隔符、消掉 . 与 ..);越界返回 false。</summary>
+    private bool TryGetNormalizedRelative(string relativePath, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath)) return false;
+        var fullPath = ResolvePath(relativePath);
+        if (fullPath is null) return false;
+        var baseFull = Path.GetFullPath(_basePath);
+        if (string.Equals(fullPath, baseFull, StringComparison.OrdinalIgnoreCase)) return true; // 归一化到根基(调用方按空路径拒绝)
+        normalized = Path.GetRelativePath(baseFull, fullPath).Replace('\\', '/');
+        return true;
     }
 
     public void EnsureDirectories()
