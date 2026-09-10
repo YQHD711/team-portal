@@ -16,8 +16,9 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   ssr: false,
   loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
-import { LOW_THRESHOLD, type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
+import { type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
 import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
+import { useLowStock } from "@/components/inventory/LowStockProvider";
 
 const COLORS = ["#0284c7", "#f59e0b", "#16a34a", "#dc2626", "#7c3aed", "#0891b2"];
 const FALLBACK_ROOMS = ["1012", "1013", "1014", "1015", "201", "202", "203"];
@@ -39,6 +40,8 @@ export default function InventoryPage() {
   const role = user?.role ?? "";
   // 库存预警文案仅 staff 可见;队员只见普通数量/状态
   const isStaff = role === "admin" || role === "部长";
+  // 低库存阈值由后端设置下发（同一来源驱动仪表盘、库存页与库存预警通知）
+  const { threshold } = useLowStock();
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
   const [txItem, setTxItem] = useState<InventoryItem | null>(null);
@@ -155,7 +158,7 @@ export default function InventoryPage() {
 
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))];
   const chartData = categories.map(cat => ({ name: cat || "未分类", value: items.filter(i => i.category === cat).reduce((s, i) => s + i.quantity, 0) }));
-  const lowItems = items.filter(i => i.quantity < LOW_THRESHOLD);
+  const lowItems = items.filter(i => i.quantity < threshold);
   const totalItems = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
@@ -175,7 +178,7 @@ export default function InventoryPage() {
       {isStaff && lowItems.length > 0 && (
         <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
-          <span className="text-sm text-warning"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {LOW_THRESHOLD} 件）</span>
+          <span className="text-sm text-warning"><strong>{lowItems.length}</strong> 种零件库存不足（低于 {threshold} 件）</span>
         </div>
       )}
 

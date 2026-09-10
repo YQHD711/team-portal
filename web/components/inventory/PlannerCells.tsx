@@ -6,6 +6,7 @@ import { Rect, Text } from "react-konva";
 import type { ItemElement } from "./layoutTypes";
 import type { ElementCell } from "./elementGeometry";
 import { cellFill } from "./cellColors";
+import { useLowStock } from "./LowStockProvider";
 
 interface ElementCellsProps {
   el: ItemElement;
@@ -18,6 +19,7 @@ interface ElementCellsProps {
 }
 
 export function ElementCells({ el, cells, counts, scale = 1, onCellHover, onCellClick }: ElementCellsProps) {
+  const { threshold } = useLowStock();
   return (
     <>
       {cells.map(cell => {
@@ -29,7 +31,7 @@ export function ElementCells({ el, cells, counts, scale = 1, onCellHover, onCell
             <Rect
               x={cell.lx} y={cell.ly}
               width={Math.max(1, cell.w - 1.2)} height={Math.max(1, cell.h - 1.2)}
-              fill={cellFill(el.type, qty)}
+              fill={cellFill(el.type, qty, threshold)}
               cornerRadius={1.5}
               onMouseEnter={onCellHover && cell.code ? () => onCellHover(cell.code) : undefined}
               onMouseLeave={onCellHover ? () => onCellHover(null) : undefined}
