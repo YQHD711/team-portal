@@ -54,13 +54,16 @@ public class AiProxyService
         _search = search;
     }
 
-    public async Task<Stream?> ChatStream(string question, List<(string role, string content)>? history = null)
+    /// <summary>调用者身份,用于把知识库检索限制在其有权查看的范围内(跨部门/他人私人 wiki 不参与检索)。</summary>
+    public readonly record struct SearchScope(string? Role, string? Department, int UserId);
+
+    public async Task<Stream?> ChatStream(string question, SearchScope scope, List<(string role, string content)>? history = null)
     {
         var apiKey = await _settings.Get("AI:DeepSeekKey");
         if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
         if (string.IsNullOrEmpty(apiKey)) return null;
 
-        var results = _search.Search(question, topK: 8);
+        var results = _search.Search(question, topK: 8, scope.Role, scope.Department, scope.UserId);
         // Filter: only include results with meaningful TF-IDF score (>5% of top score)
         var topScore = results.FirstOrDefault()?.Score ?? 0;
         var relevant = results.Where(r => r.Score >= topScore * 0.05).Take(5).ToList();
@@ -102,9 +105,9 @@ public class AiProxyService
         return response.IsSuccessStatusCode ? await response.Content.ReadAsStreamAsync() : null;
     }
 
-    public async Task<object?> Search(string query)
+    public async Task<object?> Search(string query, SearchScope scope)
     {
-        var results = _search.Search(query);
+        var results = _search.Search(query, topK: 5, scope.Role, scope.Department, scope.UserId);
         var context = BuildContext(results);
 
         string? answer = null;

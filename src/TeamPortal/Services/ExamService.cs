@@ -93,7 +93,13 @@ public class ExamService
         return await ListPassedResultsCore(userId);
     }
 
-    private async Task<List<object>> ListPassedResultsCore(int? userId)
+    /// <summary>本部门成员的通过记录(部长视角,避免看到他部门认证)。</summary>
+    public async Task<List<object>> ListPassedResultsForDepartment(int departmentId)
+    {
+        return await ListPassedResultsCore(null, departmentId);
+    }
+
+    private async Task<List<object>> ListPassedResultsCore(int? userId, int? departmentId = null)
     {
         var query = _db.DepartmentExamResults
             .Where(r => r.Passed)
@@ -101,6 +107,11 @@ public class ExamService
             .Include(r => r.Exam)
             .AsQueryable();
         if (userId.HasValue) query = query.Where(r => r.UserId == userId.Value);
+        if (departmentId.HasValue)
+        {
+            var memberIds = _db.Users.Where(u => u.DepartmentId == departmentId.Value).Select(u => u.Id);
+            query = query.Where(r => memberIds.Contains(r.UserId));
+        }
         return await query
             .OrderByDescending(r => r.CreatedAt)
             .Select(r => new

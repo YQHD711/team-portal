@@ -50,5 +50,10 @@ public class KnowledgeTools
     }
 
     [McpServerTool(Name = "knowledge_search")]
-    public object Search(string query, int topK = 5) => _search.Search(query, topK);
+    public object Search(string query, int topK = 5)
+    {
+        // 检索索引覆盖全部部门,必须把调用者身份传下去做范围过滤
+        var (r, d, u) = GetUser();
+        return _search.Search(query, topK, r, d, u);
+    }
 }

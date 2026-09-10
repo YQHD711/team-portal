@@ -1,9 +1,26 @@
+using System.Security.Claims;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
 public static class BaiduEndpoints
 {
+    /// <summary>
+    /// 云端文件可见范围:非管理员只能访问 user-data 下的用户数据。
+    /// <para>
+    /// system 目录(如 system/backups/*.zip)是整库备份(含口令哈希),
+    /// 而 /api/baidu/view* 只要求登录 —— 不限制范围时任何成员都能下载备份。
+    /// 同时拒绝含 ".." 的路径,避免用 ../../ 绕过前缀判断。
+    /// </para>
+    /// </summary>
+    internal static bool CanViewCloudPath(string? cloudPath, string? role)
+    {
+        if (role == "admin") return true;
+        if (string.IsNullOrEmpty(cloudPath)) return false;
+        if (cloudPath.Contains("..", StringComparison.Ordinal)) return false;
+        return cloudPath.StartsWith(BaiduNetdiskService.RootDir + "/user-data/", StringComparison.Ordinal);
+    }
+
     public static void MapBaiduEndpoints(this WebApplication app)
     {
         var baidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("AdminOnly");
@@ -11,11 +28,19 @@ public static class BaiduEndpoints
         // Public cloud file view — authenticated users can view/download cloud files
         // Use /api/baidu/view/{fsId} as embeddable link in knowledge base, inventory, etc.
         var publicCloud = app.MapGroup("/api/baidu").RequireAuthorization();
-        publicCloud.MapGet("/view/{fsId:long}", async (long fsId, HttpContext ctx, BaiduNetdiskService svc) =>
+        publicCloud.MapGet("/view/{fsId:long}", async (long fsId, HttpContext ctx, ClaimsPrincipal user, BaiduNetdiskService svc) =>
         {
             try
             {
-                var (stream, fileName, size) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
+                var (stream, fileName, size, cloudPath) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
+                if (!CanViewCloudPath(cloudPath, user.FindFirstValue(ClaimTypes.Role)))
+                {
+                    await stream.DisposeAsync();
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    ctx.Response.ContentType = "text/plain";
+                    await ctx.Response.WriteAsync("Access denied");
+                    return;
+                }
                 await using (stream)
                 {
                     var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -42,17 +67,24 @@ public static class BaiduEndpoints
         });
 
         // View file by cloud path (resolves to fsId internally)
-        publicCloud.MapGet("/view-by-path", async (string path, HttpContext ctx, BaiduNetdiskService svc) =>
+        publicCloud.MapGet("/view-by-path", async (string path, HttpContext ctx, ClaimsPrincipal user, BaiduNetdiskService svc) =>
         {
             try
             {
+                if (!CanViewCloudPath(path, user.FindFirstValue(ClaimTypes.Role)))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    ctx.Response.ContentType = "text/plain";
+                    await ctx.Response.WriteAsync("Access denied");
+                    return;
+                }
                 var parentDir = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "/";
                 var fileName = Path.GetFileName(path);
                 var files = await svc.ListFiles(parentDir, ctx.RequestAborted);
                 var file = files.FirstOrDefault(f => f.FileName == fileName && !f.IsDir);
                 if (file is null) { ctx.Response.StatusCode = 404; await ctx.Response.WriteAsync("File not found"); return; }
 
-                var (stream, _, size) = await svc.GetDownloadStream(file.FsId, ctx.RequestAborted);
+                var (stream, _, size, _) = await svc.GetDownloadStream(file.FsId, ctx.RequestAborted);
                 await using (stream)
                 {
                     var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -139,7 +171,7 @@ public static class BaiduEndpoints
             }
             try
             {
-                var (stream, fileName, size) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
+                var (stream, fileName, size, _) = await svc.GetDownloadStream(fsId, ctx.RequestAborted);
                 await using (stream)
                 {
                     ctx.Response.ContentType = "application/octet-stream";

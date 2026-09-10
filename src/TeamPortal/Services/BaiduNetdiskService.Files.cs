@@ -14,7 +14,7 @@ public partial class BaiduNetdiskService
     /// 返回的 Stream 归调用方所有:必须 await using / using 释放,
     /// 否则底层 HttpResponseMessage 与连接不会归还连接池。
     /// </remarks>
-    public async Task<(Stream stream, string fileName, long size)> GetDownloadStream(long fsId, CancellationToken ct = default)
+    public async Task<(Stream stream, string fileName, long size, string? path)> GetDownloadStream(long fsId, CancellationToken ct = default)
     {
         if (fsId <= 0)
             throw new ArgumentException("Invalid fsId", nameof(fsId));
@@ -42,6 +42,8 @@ public partial class BaiduNetdiskService
                        "unknown";
         var size = file.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0;
         var dlink = file.TryGetProperty("dlink", out var dl) ? dl.GetString() : null;
+        // 一并返回云端路径:调用方据此判断是否属于其可访问范围(如 system 下的备份仅管理员可下)
+        var filePath = file.TryGetProperty("path", out var fp) ? fp.GetString() : null;
 
         if (string.IsNullOrEmpty(dlink))
             throw new InvalidOperationException($"No dlink returned for fsId={fsId}: {RedactSecrets(metaBody[..Math.Min(200, metaBody.Length)])}");
@@ -64,7 +66,7 @@ public partial class BaiduNetdiskService
         _log.Info("baidu", $"Download OK: {fileName} ({size} bytes)");
         // 注意:此处不能 using resp —— 响应生命周期交给返回的 stream,由调用方释放
         var stream = await resp.Content.ReadAsStreamAsync(ct);
-        return (stream, fileName, size);
+        return (stream, fileName, size, filePath);
     }
 
     /// <summary>
