@@ -1,0 +1,5 @@
+# 行尾规范：Shell 脚本与 Dockerfile 必须是 LF —— CRLF 会让 Linux 上的 bash / docker build 报错
+# （deploy/*.sh 只在部署那一刻才被执行，CI 的 test-deploy-scripts 用 bash -n + 行尾检查拦住）
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.dockerfile text eol=lf

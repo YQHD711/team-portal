@@ -35,6 +35,20 @@ jobs:
       - run: cd web && npm ci
       - run: cd web && npx vitest run
 
+  # 部署脚本语法 + 行尾守卫：CRLF 会让服务器上的 bash 报 `$'\r'` 语法错误，
+  # 而 deploy.sh 只在部署那一刻才被执行 —— 必须在合并前拦住。
+  test-deploy-scripts:
+    name: Deploy Scripts (bash -n)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: 检查行尾（脚本必须 LF）
+        run: |
+          if grep -lU $'\r' deploy/*.sh; then
+            echo "::error::以下脚本含 CRLF 行尾，服务器 bash 会报语法错误"; exit 1
+          fi
+      - run: for f in deploy/*.sh; do bash -n "$f"; done
+
   # E2E 冒烟：生产构建 + Playwright（后端接口全 mock，验证前端路由/守卫/交互闭环）
   e2e-smoke:
     name: E2E Smoke (Playwright)

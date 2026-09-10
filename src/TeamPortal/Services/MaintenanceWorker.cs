@@ -60,6 +60,7 @@ public class MaintenanceWorker : BackgroundService
                     using var scope = _scopeFactory.CreateScope();
                     var baidu = scope.ServiceProvider.GetRequiredService<BaiduNetdiskService>();
                     var logSvc = scope.ServiceProvider.GetRequiredService<LogService>();
+                    var archiver = scope.ServiceProvider.GetRequiredService<LogArchiver>();
                     var backupSvc = scope.ServiceProvider.GetRequiredService<BackupService>();
 
                     // 1. DB backup (always, even without Baidu)
@@ -79,29 +80,28 @@ public class MaintenanceWorker : BackgroundService
                             _logger.LogInformation("Maintenance: cloud backup → {Path}", backupPath);
                         }
                         catch (Exception ex) { _logger.LogError(ex, "Maintenance: cloud backup failed"); }
-
-                        // 3. Log archive + cleanup
-                        try
-                        {
-                            var csv = await logSvc.ExportCsv(level: null, from: null, to: null);
-                            var csvBytes = System.Text.Encoding.UTF8.GetBytes(csv);
-                            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                            var tmpPath = Path.Combine(Path.GetTempPath(), $"auto-logs-{timestamp}.csv");
-                            await File.WriteAllBytesAsync(tmpPath, csvBytes);
-
-                            var remotePath = $"{BaiduNetdiskService.RootDir}/system/logs/logs-{timestamp}.csv";
-                            await baidu.UploadFile(tmpPath, remotePath);
-                            File.Delete(tmpPath);
-
-                            var deleted = await logSvc.CleanupOldLogs();
-                            _logger.LogInformation("Maintenance: archived logs to {Path}, cleaned {Count} old entries", remotePath, deleted);
-                        }
-                        catch (Exception ex) { _logger.LogError(ex, "Maintenance: log archive failed"); }
                     }
-                    else
+
+                    // 3. 日志归档 + 清理：先落本地 CSV（无网盘也执行），再只清理已归档的行。
+                    //    归档失败 → 传 null → 该表跳过清理，绝不出现「删了却没归档」。
+                    try
                     {
-                        // Log cleanup even without Baidu
-                        try { await logSvc.CleanupOldLogs(); } catch { }
+                        var outcome = await archiver.ArchiveExpiredAsync();
+                        if (outcome.System.MaxId is null && outcome.Operation.MaxId is null)
+                        {
+                            _logger.LogInformation("Maintenance: no expired logs to archive");
+                        }
+                        else
+                        {
+                            var cleaned = await logSvc.CleanupOldLogs(outcome.System.MaxId, outcome.Operation.MaxId);
+                            _logger.LogInformation(
+                                "Maintenance: archived {Sys}+{Op} logs, cleaned {CS}+{CO} (local → {Dir})",
+                                outcome.System.Count, outcome.Operation.Count, cleaned.SystemDeleted, cleaned.OperationDeleted, outcome.System.Path);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Maintenance: log archive failed — cleanup skipped for this run");
                     }
 
                     lastDailyRun = DateTime.UtcNow;

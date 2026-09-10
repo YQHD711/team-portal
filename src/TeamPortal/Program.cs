@@ -164,6 +164,8 @@ builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddSingleton<LogService>();
+// LogArchiver 依赖 scoped 的 BaiduNetdiskService，但自身只在 scope 内被解析（worker 建 scope / 端点 scope）
+builder.Services.AddScoped<LogArchiver>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<ConversationService>();
@@ -294,11 +296,9 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
-else
-{
-    // D-4 fix: gate OpenAPI behind staff auth — previously /openapi/v1.json was world-readable
-    app.MapOpenApi("/api/admin/openapi").RequireAuthorization("StaffOnly");
-}
+
+// OpenAPI 文档：始终注册，但只对 staff 开放（原先仅 Development 注册，生产上就没有了）
+app.MapOpenApi("/api/admin/openapi").RequireAuthorization("StaffOnly");
 
 app.UseStatusCodePages();
 app.UseRateLimiter();

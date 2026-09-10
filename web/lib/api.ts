@@ -81,7 +81,12 @@ export const api = {
     }),
   delete: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { method: "DELETE", timeoutMs }),
-  /** SSE/流式请求：返回原生 Response，由调用方解析流（保留超时、401 重定向、错误处理） */
+  /**
+   * SSE/流式请求：返回原生 Response，由调用方解析流。
+   * 注意：timeoutMs 只约束「拿到响应头」这一段，拿到后立即清除定时器 ——
+   * 否则 30s 后 abort() 会在读 body 中途掐断长回答（AI 流式回答就是这么被截断的）。
+   * 长流的超时控制应由调用方按「读空闲」自行处理。
+   */
   stream: async (endpoint: string, body: unknown, timeoutMs?: number): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
@@ -96,6 +101,7 @@ export const api = {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (res.status === 401 && isBrowser()) {
         localStorage.removeItem("token");
         window.location.href = "/auth/login";

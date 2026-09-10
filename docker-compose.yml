@@ -43,7 +43,9 @@ services:
     env_file:
       - .env
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      # 生产环境：Development 会把未处理异常的完整堆栈回给客户端、并跳过 HSTS
+      # （局域网调试用 docker-compose.lan.yml 覆盖为 Development）
+      - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       # ArduPilot WebTools 静态文件根目录(/webtools-content 与 volumes 挂载点一致)
       - WebTools__Root=/webtools-content

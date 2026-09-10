@@ -68,8 +68,13 @@ rm ~/teamportal/deploy/AUTO_DEPLOY_OFF        # ③ 调试完恢复自动跟踪
 2. docker compose pull（TEAMPORTAL_IMAGE_TAG 必须在此之前 export！）
 3. docker compose up -d --no-build   ← --no-build 是保命符，永远不许删
 4. 恢复 wiki（独立 compose，严禁 --remove-orphans，会误删 wiki-nginx）
-5. docker image prune
+5. 健康门禁：轮询后端 /health ≤90s（再探前端 :3000 ≤40s）
+   ↳ 不通则打印 backend 日志并 exit 1 —— auto-deploy.sh 因此不写 .deployed_sha，下一轮自动重试
+6. docker image prune
 ```
+> ⚠️ 第 5 步为 2026-09 新增：`docker compose up -d` 对**崩溃重启循环**的容器同样返回 0，
+> 没有这道门禁时坏版本会被标记成「已部署」且永不重试（线上长时间 502 无人知）。
+> 脚本由 CI 的 `test-deploy-scripts` 用 `bash -n` + CRLF 行尾检查守着；`.gitattributes` 强制 `*.sh` 为 LF。
 
 ---
 
