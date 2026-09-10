@@ -40,6 +40,29 @@ public static class InventoryEndpoints
         return actorDeptId.HasValue && item.DepartmentId == actorDeptId.Value;
     }
 
+    /// <summary>
+    /// 导入文件必须位于 OS 临时目录或数据库所在目录内。
+    /// POST /api/inventory/import 的 FilePath 是客户端可控的,直接交给 File.OpenRead
+    /// 等于一个任意本地文件读取/探测原语;比较时带目录分隔符,避免 /data 匹配到 /data-evil。
+    /// </summary>
+    internal static bool IsImportPathAllowed(string filePath, AppDbContext db)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return false;
+        var full = Path.GetFullPath(filePath);
+        var roots = new List<string> { Path.GetTempPath() };
+        var dbPath = db.Database.GetDbConnection().DataSource;
+        if (!string.IsNullOrWhiteSpace(dbPath) && dbPath != ":memory:")
+        {
+            var dbDir = Path.GetDirectoryName(Path.GetFullPath(dbPath));
+            if (!string.IsNullOrEmpty(dbDir)) roots.Add(dbDir);
+        }
+        return roots.Any(root =>
+        {
+            var normRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return full.StartsWith(normRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
     private static readonly string[] UnsafeNameFragments = ["<script", "<img", "onerror=", "javascript:"];
     private static bool HasUnsafeName(string name) =>
         UnsafeNameFragments.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase));
@@ -90,10 +113,18 @@ public static class InventoryEndpoints
             if (string.IsNullOrWhiteSpace(req.FilePath))
                 return Results.Problem("FilePath is required", statusCode: 400);
 
-            var count = await svc.ImportFromExcel(req.FilePath);
-            log.Info("inventory", $"Parts imported from {req.FilePath}: {count} items by {user.Identity?.Name}");
+            // FilePath 会被直接交给 File.OpenRead:必须限制在可信目录内,
+            // 否则该接口等于一个任意本地文件读取/探测原语
+            var importPath = Path.GetFullPath(req.FilePath);
+            if (!IsImportPathAllowed(importPath, db))
+                return Results.Problem("仅允许导入服务器临时目录或数据目录下的文件", statusCode: 400);
+            if (!File.Exists(importPath))
+                return Results.Problem("文件不存在", statusCode: 400);
+
+            var count = await svc.ImportFromExcel(importPath);
+            log.Info("inventory", $"Parts imported from {importPath}: {count} items by {user.Identity?.Name}");
             log.Audit("import", user.Identity?.Name ?? "unknown", targetType: "item",
-                data: new { imported = count, filePath = req.FilePath }, ipAddress: LogService.ClientIp(ctx));
+                data: new { imported = count, filePath = importPath }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(new { imported = count });
         });
 
