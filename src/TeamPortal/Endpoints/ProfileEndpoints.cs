@@ -145,7 +145,7 @@ public static class ProfileEndpoints
         adminGroup.MapPut("/{userId:int}/training/{id:int}", async (int userId, int id, [FromBody] AddTrainingRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
-            var ok = await svc.UpdateTrainingRecord(id, req.CourseName, req.Score, req.ExamDate, req.Examiner, req.Notes);
+            var ok = await svc.UpdateTrainingRecord(id, userId, req.CourseName, req.Score, req.ExamDate, req.Examiner, req.Notes);
             if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
                 data: new { action = "training.update", id, courseName = req.CourseName }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("记录不存在", statusCode: 404);
@@ -154,7 +154,7 @@ public static class ProfileEndpoints
         adminGroup.MapDelete("/{userId:int}/training/{id:int}", async (int userId, int id, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
-            var ok = await svc.DeleteTrainingRecord(id);
+            var ok = await svc.DeleteTrainingRecord(id, userId);
             if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
                 data: new { action = "training.delete", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);
@@ -207,7 +207,7 @@ public static class ProfileEndpoints
         adminGroup.MapPut("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
-            var ok = await svc.UpdateCompetitionRecord(id, req.CompetitionName, req.Date, req.Event, req.Ranking, req.Certificate, req.Notes);
+            var ok = await svc.UpdateCompetitionRecord(id, userId, req.CompetitionName, req.Date, req.Event, req.Ranking, req.Certificate, req.Notes);
             if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
                 data: new { action = "competition.update", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("记录不存在", statusCode: 404);
@@ -216,7 +216,7 @@ public static class ProfileEndpoints
         adminGroup.MapDelete("/{userId:int}/competitions/{id:int}", async (int userId, int id, [FromBody] AddCompetitionRequest req, ClaimsPrincipal user, AppDbContext db, ProfileService svc, LogService log, HttpContext ctx) =>
         {
             if (await RequireCanManageAsync(user, db, userId) is { } denied) return denied;
-            var ok = await svc.DeleteCompetitionRecord(id);
+            var ok = await svc.DeleteCompetitionRecord(id, userId);
             if (ok) log.Audit("profile", user.Identity?.Name ?? "unknown", "profile", userId.ToString(),
                 data: new { action = "competition.delete", id }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("记录不存在", statusCode: 404);

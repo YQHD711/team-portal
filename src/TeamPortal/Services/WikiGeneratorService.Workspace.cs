@@ -24,10 +24,20 @@ public partial class WikiGeneratorService
             var cloneDir = Path.Combine(baseDir, "repo");
             if (Directory.Exists(cloneDir)) Directory.Delete(cloneDir, true);
 
-            var psi = new ProcessStartInfo("git", $"clone --depth 1 {task.SourceUrl} \"{cloneDir}\"")
+            var cloneUrl = ValidateCloneUrl(task.SourceUrl);
+            var psi = new ProcessStartInfo("git")
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
             };
+            // 用 ArgumentList 传参而非拼命令行字符串:仓库 URL 来自用户输入,
+            // 拼接会允许 `--upload-pack=...` 之类选项注入,而 ext::/file:// 协议会在
+            // git 解析仓库地址时触发命令执行或本地文件读取。
+            psi.ArgumentList.Add("clone");
+            psi.ArgumentList.Add("--depth");
+            psi.ArgumentList.Add("1");
+            psi.ArgumentList.Add("--");
+            psi.ArgumentList.Add(cloneUrl);
+            psi.ArgumentList.Add(cloneDir);
             var proc = Process.Start(psi)!;
             var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
@@ -52,6 +62,21 @@ public partial class WikiGeneratorService
     // ════════════════════════════════════════
     //  Project Context — 项目上下文收集
     // ════════════════════════════════════════
+
+    /// <summary>
+    /// 校验并规范化 git 仓库地址。
+    /// 只允许 http/https:git 支持 ext::、file:// 等传输协议,前者可直接执行命令,
+    /// 后者能读取服务端任意本地文件,必须在这里挡掉;同时拒绝非绝对 URL(如 --upload-pack=...)。
+    /// </summary>
+    internal static string ValidateCloneUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("仓库地址不能为空");
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+            throw new InvalidOperationException("仓库地址不是合法的绝对 URL");
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+            throw new InvalidOperationException($"不支持的仓库协议: {uri.Scheme}（仅允许 http/https）");
+        return uri.ToString();
+    }
 
     private string DetectProjectType()
     {

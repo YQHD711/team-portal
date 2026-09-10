@@ -49,7 +49,7 @@ public static class AuthEndpoints
                 log.Audit("register", req.Username.Trim(), targetType: "user", data: new { success = false, error = ex.Message }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Problem(ex.Message, statusCode: 400);
             }
-        });
+        }).RequireRateLimiting("login"); // 与登录同档:注册可被用来爆破邀请码/批量建号
 
         // ── Invite Codes (admin 看/管全部;部长可生成+只管理自己生成的) ──
         app.MapGet("/api/admin/invite-codes", async (ClaimsPrincipal user, AppDbContext db, AuthService auth) =>

@@ -9,7 +9,7 @@ public static class WikiEndpoints
 {
     public static void MapWikiEndpoints(this WebApplication app)
     {
-        var wiki = app.MapGroup("/api/wiki").RequireAuthorization();
+        var wiki = app.MapGroup("/api/wiki").RequireAuthorization().RequireRateLimiting("default");
 
         wiki.MapPost("/submit-git", async (GitSubmitRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
@@ -175,6 +175,8 @@ public static class WikiEndpoints
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
             var projName = lang == "en" ? $"{task.ProjectName}_EN" : task.ProjectName;
             var kbPath = $"{task.TargetFolder}/{projName}/{path}.md".Replace("//", "/");
+            // path 完全由客户端控制:必须过 CanAccess,否则可用 ../../../他部门/secret 读任意知识库文件
+            if (!knowledge.CanAccess(kbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             var content = knowledge.GetContent(kbPath);
             if (content is not null)
             {
@@ -202,6 +204,7 @@ public static class WikiEndpoints
             // Fallback: try the other language
             var fallbackName = lang == "en" ? task.ProjectName : $"{task.ProjectName}_EN";
             var fbPath = $"{task.TargetFolder}/{fallbackName}/{path}.md".Replace("//", "/");
+            if (!knowledge.CanAccess(fbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             var fbContent = knowledge.GetContent(fbPath);
             return fbContent is not null ? Results.Ok(new { path, content = fbContent }) : Results.Problem("Document not found", statusCode: 404);
         });
@@ -215,7 +218,11 @@ public static class WikiEndpoints
             var uid = GetUserId(user);
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
             var fullPath = Path.GetFullPath(Path.Combine(task.WorkspacePath, path));
-            if (!fullPath.StartsWith(Path.GetFullPath(task.WorkspacePath))) return Results.Problem("Access denied", statusCode: 403);
+            // 前缀比较必须带分隔符:否则 ...\teamportal-wiki\5 会匹配 ...\5x\... 这类同前缀兄弟目录
+            var workspaceRoot = Path.GetFullPath(task.WorkspacePath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!fullPath.StartsWith(workspaceRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return Results.Problem("Access denied", statusCode: 403);
             if (!File.Exists(fullPath)) return Results.Problem("File not found", statusCode: 404);
             var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             var isBinary = new[] { ".dll", ".exe", ".png", ".jpg", ".ico", ".zip" }.Contains(ext);

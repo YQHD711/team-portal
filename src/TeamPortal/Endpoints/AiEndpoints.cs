@@ -8,7 +8,8 @@ public static class AiEndpoints
 {
     public static void MapAiEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/ai").RequireAuthorization();
+        // 限流:AI 调用直接产生 DeepSeek 费用,必须挡住单账号刷量
+        var group = app.MapGroup("/api/ai").RequireAuthorization().RequireRateLimiting("default");
 
         group.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, AiProxyService proxy, ConversationService conv, LogService log) =>
         {

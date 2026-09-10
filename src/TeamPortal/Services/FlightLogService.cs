@@ -22,8 +22,9 @@ public class FlightLogService
         return new { logs };
     }
 
-    /// <summary>解析并校验 filename 必须落在 _logDir 内（防目录穿越）。非法返回 null。</summary>
-    private string? ResolveSafePath(string filename)
+    /// <summary>解析并校验 filename 必须落在 _logDir 内（防目录穿越）。非法返回 null。
+    /// 端点侧拼接派生路径(如 .meta.json)也必须走这里，不要自己 Path.Combine 用户输入。</summary>
+    public string? ResolveSafePath(string filename)
     {
         if (string.IsNullOrWhiteSpace(filename)) return null;
         if (filename.Contains('/') || filename.Contains('\\') || filename.StartsWith('.') || filename.Contains(".."))
