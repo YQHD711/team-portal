@@ -25,7 +25,16 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const handleLogout = () => { removeToken(); router.push("/auth/login"); };
+  const handleLogout = () => {
+    // 清理按用户存放的前端状态:共用电脑换人登录后,聊天面板否则会去加载上一位用户的会话 id,
+    // 云盘页也会因残留标记直接显示成"已授权"
+    try {
+      localStorage.removeItem("chatSessionId");
+      localStorage.removeItem("baidu_authed");
+    } catch { /* 隐私模式下 localStorage 可能不可用 */ }
+    removeToken();
+    router.push("/auth/login");
+  };
 
   const handleChangePwd = async (e: React.FormEvent) => {
     e.preventDefault();

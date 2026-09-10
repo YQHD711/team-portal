@@ -110,7 +110,10 @@ public static class AuthEndpoints
 
             using var reader = new StreamReader(file.OpenReadStream());
             var csv = await reader.ReadToEndAsync();
-            var count = await auth.BulkImportUsers(csv, req.Query["password"]);
+            // 初始密码改从 multipart 字段读取:此前走 query string 会进浏览器历史/访问日志/Referer,
+            // 且前端把它写死成 team123(全员同一个弱口令)。留空则逐个用户生成随机密码。
+            var password = form["password"].ToString();
+            var count = await auth.BulkImportUsers(csv, string.IsNullOrWhiteSpace(password) ? null : password);
             log.Audit("import", user.Identity?.Name ?? "unknown", targetType: "user", data: new { imported = count },
                 ipAddress: LogService.ClientIp(ctx));
 

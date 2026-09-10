@@ -82,7 +82,9 @@ export function ChatPanel() {
     e.stopPropagation();
     try {
       const token = getToken();
-      await fetch(`/api/chat/sessions/${sid}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/chat/sessions/${sid}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      // 未校验 res.ok 就本地删除:失败时列表已移除但服务端仍在,刷新后会话又出现
+      if (!res.ok) return;
       setSessions(prev => prev.filter(s => s.sessionId !== sid));
       if (sessionId === sid) { setSessionId(""); setMessages([]); }
     } catch { }

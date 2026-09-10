@@ -18,6 +18,28 @@ public static class InventoryEndpoints
 
     private static bool IsStaff(string? role) => role == "admin" || role == "部长";
 
+    private static async Task<int?> GetDeptIdAsync(ClaimsPrincipal user, AppDbContext db)
+    {
+        var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (idClaim is null) return null;
+        var uid = int.Parse(idClaim);
+        return await db.Users.Where(u => u.Id == uid).Select(u => (int?)u.DepartmentId).FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// 部长只能操作本部门零件(DepartmentId 为空的共享件按共享池处理);管理员不受限。
+    /// 旧实现只判 IsStaff(role),部长可改/删/借出任意部门的零件、改其它部门单价。
+    /// </summary>
+    internal static async Task<bool> CanManageItemAsync(ClaimsPrincipal user, AppDbContext db, InventoryItem item)
+    {
+        var role = user.FindFirstValue(ClaimTypes.Role);
+        if (role == "admin") return true;
+        if (role != "部长") return false;
+        if (item.DepartmentId is null) return true;
+        var actorDeptId = await GetDeptIdAsync(user, db);
+        return actorDeptId.HasValue && item.DepartmentId == actorDeptId.Value;
+    }
+
     private static readonly string[] UnsafeNameFragments = ["<script", "<img", "onerror=", "javascript:"];
     private static bool HasUnsafeName(string name) =>
         UnsafeNameFragments.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase));
@@ -80,6 +102,14 @@ public static class InventoryEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
 
+            var existing = await svc.GetById(id);
+            if (existing is null) return Results.Problem("Not found", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, existing))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
+            // 非管理员不得把零件挪到别的部门(否则等于绕过上面的范围校验)
+            if (role != "admin" && req.DepartmentId.HasValue && req.DepartmentId != existing.DepartmentId)
+                return Results.Problem("仅管理员可调整零件所属部门", statusCode: 403);
+
             if (req.Quantity is < 0 || req.Quantity > 1_000_000)
                 return Results.Problem(req.Quantity < 0 ? "数量不能为负数" : "数量超出合理范围(上限1000000)", statusCode: 400);
             if (req.UnitPrice is < 0)
@@ -109,6 +139,9 @@ public static class InventoryEndpoints
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除零件", statusCode: 403);
 
             var item = await svc.GetById(id);
+            if (item is null) return Results.Problem("Not found", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, item))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
             var deleted = await svc.Delete(id);
             if (deleted)
             {
@@ -136,6 +169,8 @@ public static class InventoryEndpoints
 
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, item))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             if (!await baidu.IsConfigured()) return Results.Problem("Cloud storage not configured", statusCode: 400);
 
@@ -166,6 +201,8 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, item))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             var userName = user.Identity?.Name ?? "unknown";
             // Atomic decrement: only succeeds if enough stock remains
@@ -201,6 +238,8 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, item))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             var userName = user.Identity?.Name ?? "unknown";
             var updated = await db.InventoryItems
@@ -235,6 +274,8 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("数量必须大于0", statusCode: 400);
             var item = await db.InventoryItems.FindAsync(id);
             if (item is null) return Results.Problem("零件不存在", statusCode: 404);
+            if (!await CanManageItemAsync(user, db, item))
+                return Results.Problem("仅可操作本部门零件", statusCode: 403);
             if (item.Quantity < req.Quantity) return Results.Problem("库存不足", statusCode: 400);
 
             var updated = await db.InventoryItems

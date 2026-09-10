@@ -144,9 +144,11 @@ public partial class SystemAgentService
         _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={maxTokens}, thinking={enableThinking}", null, userName);
 
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(agentTimeoutMin));
+        // AI:MaxIterations 此前只入库、从未被读取,循环仅受总超时约束(单次任务可在 20 分钟内无界调用 API 与工具)
+        var maxIterations = await _settings.GetInt("AI:MaxIterations", 25);
         var iteration = 0;
         var toolCallCount = 0;
-        while (!timeoutCts.Token.IsCancellationRequested)
+        while (!timeoutCts.Token.IsCancellationRequested && iteration < maxIterations)
         {
             var apiStart = DateTime.UtcNow;
             var payloadObj = new Dictionary<string, object>
@@ -266,6 +268,12 @@ public partial class SystemAgentService
                 _log.Info("agent", $"Agent done: {iteration} iters, {toolCallCount} tool calls, response={response.Length} chars", null, userName);
                 return response;
             }
+        }
+
+        if (iteration >= maxIterations)
+        {
+            _log.Warn("agent", $"Agent hit iteration cap: {iteration}/{maxIterations} iters, {toolCallCount} tools", null, userName);
+            return $"已达最大迭代次数（{maxIterations}轮），请增大 AI:MaxIterations 设置或简化任务";
         }
 
         _log.Warn("agent", $"Agent timeout: {iteration} iters, {toolCallCount} tools", null, userName);
