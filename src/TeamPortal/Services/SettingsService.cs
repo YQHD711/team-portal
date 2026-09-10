@@ -28,12 +28,18 @@ public class SettingsService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var setting = await db.SystemSettings.FindAsync(key);
-        if (setting is not null)
-        {
-            _cache[key] = setting.Value;
-            return setting.Value;
-        }
-        return defaultValue;
+        // 负结果一并缓存:未入库的键若不入缓存,热路径(如每次 Audit 读 AuditDataMaxLen)会反复回查 DB。
+        // 该键后续被写入时走 Set/BatchUpdate(会更新缓存)或 ClearCache()。
+        var value = setting?.Value ?? defaultValue;
+        _cache[key] = value;
+        return value;
+    }
+
+    /// <summary>只读内存缓存取 int,不查库;命中且可解析时返回 true。供不能 async 的热路径使用。</summary>
+    public bool TryGetCachedInt(string key, out int value)
+    {
+        value = 0;
+        return _cache.TryGetValue(key, out var raw) && int.TryParse(raw, out value);
     }
 
     /// <summary>Get typed value.</summary>
@@ -103,6 +109,7 @@ public class SettingsService
             new() { Key = "Auth:MaxLoginAttempts", Value = "5", Category = "认证安全", Description = "登录失败最大次数（超限后锁定）" },
             new() { Key = "Auth:LockoutMinutes", Value = "15", Category = "认证安全", Description = "登录锁定分钟数" },
             new() { Key = "Auth:PasswordMinLength", Value = "6", Category = "认证安全", Description = "密码最小长度" },
+            new() { Key = "Auth:OpenRegistration", Value = "false", Category = "认证安全", Description = "是否开放自助注册（false 时仅邀请码可注册）" },
             new() { Key = "AI:DeepSeekKey", Value = "", Category = "AI 服务", Description = "DeepSeek API Key" },
             new() { Key = "AI:DeepSeekBaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "DeepSeek API 地址" },
             new() { Key = "AI:ModelName", Value = "deepseek-v4-pro", Category = "AI 服务", Description = "AI 模型名称（deepseek-v4-pro / deepseek-v4-flash）" },
@@ -119,6 +126,8 @@ public class SettingsService
             new() { Key = "Wiki:PollingIntervalSec", Value = "30", Category = "系统参数", Description = "Wiki 任务轮询间隔（秒）" },
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
+            new() { Key = "System:OperationLogRetentionDays", Value = "180", Category = "系统参数", Description = "操作日志（审计）保留天数，列表查询时惰性清理超期行" },
+            new() { Key = "System:AuditDataMaxLen", Value = "2000", Category = "系统参数", Description = "操作日志 data 字段最大长度（字符），超出截断" },
             new() { Key = "Files:MaxUploadMB", Value = "1024", Category = "系统参数", Description = "资源共享/上传文件最大大小（MB），上限 1024；同步需要调整 Next.js proxyClientMaxBodySize/serverActions.bodySizeLimit 与后端 Kestrel MaxRequestBodySize（均已设 1GB）" },
             new() { Key = "Brand:TeamName", Value = "雏鹰之翼", Category = "品牌", Description = "团队名称（登录页/侧边栏/仪表盘）" },
             new() { Key = "Brand:TeamSubtitle", Value = "航模队", Category = "品牌", Description = "团队副标题（显示在队名旁）" },
@@ -137,6 +146,8 @@ public class SettingsService
         {
             db.SystemSettings.AddRange(toAdd);
             await db.SaveChangesAsync();
+            // 预热缓存:LogService 等同步热路径只读缓存不查库,启动后即可拿到真实值
+            foreach (var s in toAdd) _cache[s.Key] = s.Value;
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -66,23 +67,23 @@ public static class LogEndpoints
 
         // Manual cleanup — force=true clears all, default keeps recent 90 days
         // Before cleanup, auto-archive logs as CSV to Baidu cloud
-        log.MapPost("/cleanup", async (bool? force, LogService svc, BaiduNetdiskService baidu) =>
+        log.MapPost("/cleanup", async (bool? force, LogService svc, BaiduNetdiskService baidu,
+            ClaimsPrincipal user, HttpContext ctx) =>
         {
-            // 1. Export logs as CSV before deleting
-            string? archivePath = null;
+            var actor = user.Identity?.Name ?? "unknown";
+            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            string? sysArchive = null, opArchive = null;
+
+            // 1. Archive logs as CSV before deleting
+            // 操作日志(审计)同样归档:force 清理会把审计一并删除
             try
             {
                 if (await baidu.IsConfigured())
                 {
-                    var csv = await svc.ExportCsv(level: null, from: null, to: null);
-                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(csv);
-                    var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                    var tmpPath = Path.Combine(Path.GetTempPath(), $"logs-archive-{timestamp}.csv");
-                    await File.WriteAllBytesAsync(tmpPath, csvBytes);
-
-                    var remotePath = $"{BaiduNetdiskService.RootDir}/system/logs/logs-{timestamp}.csv";
-                    archivePath = await baidu.UploadFile(tmpPath, remotePath);
-                    File.Delete(tmpPath);
+                    sysArchive = await ArchiveCsv(baidu, await svc.ExportCsv(level: null, from: null, to: null),
+                        $"logs-{timestamp}.csv", "system/logs");
+                    opArchive = await ArchiveCsv(baidu, await svc.ExportOperationsCsv(),
+                        $"operations-{timestamp}.csv", "system/operation-logs");
                 }
             }
             catch (Exception ex)
@@ -92,7 +93,35 @@ public static class LogEndpoints
 
             // 2. Run cleanup
             var deleted = force == true ? await svc.ClearAllLogs() : await svc.CleanupOldLogs();
-            return Results.Ok(new { deleted, archivePath, message = archivePath is not null ? $"已清理 {deleted} 条日志，归档到 {archivePath}" : $"已清理 {deleted} 条日志" });
+
+            // 3. 清理动作本身必须留痕,且写在删除之后 —— force 清理会删掉此刻之前的全部审计
+            svc.Audit("cleanup-logs", actor, targetType: "log", data: new
+            {
+                force = force == true,
+                deleted,
+                systemArchive = sysArchive,
+                operationArchive = opArchive
+            }, ipAddress: LogService.ClientIp(ctx));
+
+            var message = sysArchive is not null
+                ? $"已清理 {deleted} 条日志，归档到 {sysArchive}"
+                : $"已清理 {deleted} 条日志";
+            return Results.Ok(new { deleted, archivePath = sysArchive, operationArchive = opArchive, message });
         });
+    }
+
+    /// <summary>把 CSV 写入临时文件并上传到网盘归档目录,返回远端路径(临时文件必定清理)。</summary>
+    private static async Task<string> ArchiveCsv(BaiduNetdiskService baidu, string csv, string fileName, string folder)
+    {
+        var tmpPath = Path.Combine(Path.GetTempPath(), $"logs-archive-{fileName}");
+        await File.WriteAllBytesAsync(tmpPath, System.Text.Encoding.UTF8.GetBytes(csv));
+        try
+        {
+            return await baidu.UploadFile(tmpPath, $"{BaiduNetdiskService.RootDir}/{folder}/{fileName}");
+        }
+        finally
+        {
+            File.Delete(tmpPath);
+        }
     }
 }
