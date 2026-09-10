@@ -36,7 +36,14 @@ public class AuthService
         if (!openRegistration && string.IsNullOrEmpty(inviteCode))
             throw new InvalidOperationException("注册需要邀请码");
 
+        // 密码长度先校验:校验失败不能消耗邀请码名额
+        var minLen = await _settings.GetInt("Auth:PasswordMinLength", 6);
+        if (password.Length < minLen)
+            throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
+
         // Validate invite code if provided (or if system requires it)
+        int? deptId = null;
+        int? invitedById = null;
         if (!string.IsNullOrEmpty(inviteCode))
         {
             var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Code == inviteCode && !c.IsRevoked);
@@ -45,21 +52,21 @@ public class AuthService
                 _log.Warn("auth", $"注册失败，邀请码无效: {inviteCode}");
                 throw new InvalidOperationException("邀请码无效或已过期");
             }
-            code.UsedCount++;
-        }
+            deptId = code.DepartmentId;
+            invitedById = code.CreatedByUserId;
 
-        var minLen = await _settings.GetInt("Auth:PasswordMinLength", 6);
-        if (password.Length < minLen)
-            throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
-
-        // Determine department & inviter from invite code
-        int? deptId = null;
-        int? invitedById = null;
-        if (!string.IsNullOrEmpty(inviteCode))
-        {
-            var code = await _db.InviteCodes.FirstOrDefaultAsync(c => c.Code == inviteCode);
-            deptId = code?.DepartmentId;
-            invitedById = code?.CreatedByUserId;
+            // 原子占用名额:上面的判断来自可能过期的快照,并发注册时两个请求都能通过,
+            // UsedCount 会超过 MaxUses。改用条件 UPDATE,由数据库决定谁拿到最后一个名额。
+            var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE InviteCodes SET UsedCount = UsedCount + 1
+                   WHERE Id = {code.Id} AND IsRevoked = 0 AND UsedCount < MaxUses");
+            if (claimed == 0)
+            {
+                _log.Warn("auth", $"注册失败，邀请码名额已用尽: {inviteCode}");
+                throw new InvalidOperationException("邀请码无效或已过期");
+            }
+            // 该实体的值已被原生 SQL 改动,脱离跟踪避免后续 SaveChanges 用陈旧值覆盖
+            _db.Entry(code).State = EntityState.Detached;
         }
 
         var user = new User
