@@ -65,7 +65,7 @@ public static class FinanceEndpoints
         {
             var userId = GetUserId(user);
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
-            // 队员也可发起采购申请(审批仍为 admin-only)
+            // 队员也可发起采购申请(审批为管理员+部长,见下方 /requests/{id}/approve 的 IsStaff 校验)
             if (string.IsNullOrWhiteSpace(req.ItemName)) return Results.Problem("物品名称不能为空", statusCode: 400);
             var r = await svc.CreateRequest(userId.Value, req.ItemName, req.Quantity, req.EstimatedPrice, req.Reason);
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "purchase", targetId: r.Id.ToString(),

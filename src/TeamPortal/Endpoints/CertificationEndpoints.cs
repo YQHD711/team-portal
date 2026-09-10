@@ -13,12 +13,12 @@ public static class CertificationEndpoints
         return idClaim is not null ? int.Parse(idClaim) : null;
     }
 
-    private static async Task<(string? role, string? dept)> GetUserCtx(ClaimsPrincipal user, AppDbContext db)
+    private static async Task<(string? role, string? dept, int? deptId)> GetUserCtx(ClaimsPrincipal user, AppDbContext db)
     {
         var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (idClaim is null) return (null, null);
+        if (idClaim is null) return (null, null, null);
         var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
-        return u is null ? (null, null) : (u.Role, u.Department?.Name);
+        return u is null ? (null, null, null) : (u.Role, u.Department?.Name, u.DepartmentId);
     }
 
     private static bool IsStaff(string? role) => role == "admin" || role == "部长";
@@ -37,17 +37,33 @@ public static class CertificationEndpoints
         // 个人端点只读:认证只能由管理员/部长通过考核或管理端授予,队员不可自行添加/修改/删除。
         // 写操作见下方 /api/admin/profiles/{userId}/certifications(StaffOnly)。
 
-        // ── 管理端:全部认证(组织架构页按 userId 分组) ──
-        app.MapGet("/api/admin/certifications", async (CertificationService svc) => Results.Ok(await svc.ListAllCertifications()))
-            .RequireAuthorization("StaffOnly");
+        // ── 管理端:全部认证(组织架构页按 userId 分组)。部长只拿本部门,否则响应体里能看到全队认证 ──
+        app.MapGet("/api/admin/certifications", async (ClaimsPrincipal user, AppDbContext db, CertificationService svc) =>
+        {
+            var (role, _, deptId) = await GetUserCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+            return Results.Ok(await svc.ListAllCertifications(role == "admin" ? null : deptId));
+        }).RequireAuthorization("StaffOnly");
 
         // ── 管理端:按队员查看认证(只读) ──
         var adminGroup = app.MapGroup("/api/admin/profiles").RequireAuthorization();
 
         adminGroup.MapGet("/{userId:int}/certifications", async (int userId, ClaimsPrincipal user, AppDbContext db, CertificationService svc) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
+            var (role, _, deptId) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+            // 同档案接口:部长只能看本部门成员的认证
+            if (role != "admin")
+            {
+                var selfId = GetUserId(user);
+                if (selfId != userId)
+                {
+                    var targetDeptId = await db.Users.AsNoTracking()
+                        .Where(u => u.Id == userId).Select(u => u.DepartmentId).FirstOrDefaultAsync();
+                    if (!deptId.HasValue || targetDeptId != deptId)
+                        return Results.Problem("仅管理员和本部门部长可查看该成员", statusCode: 403);
+                }
+            }
             return Results.Ok(await svc.GetCertifications(userId));
         });
         // 认证只读:认证只能由管理员/部长通过「发起考核 → 录入通过成绩」自动产生,
