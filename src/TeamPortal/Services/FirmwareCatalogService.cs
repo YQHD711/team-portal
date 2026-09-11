@@ -90,7 +90,10 @@ public partial class FirmwareCatalogService
     {
         try
         {
-            using var res = await _http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.UserAgent.ParseAdd(FirmwareUpstream.UserAgent);
+            req.Headers.Accept.ParseAdd(FirmwareUpstream.GitHubAccept);
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead);
             if (!res.IsSuccessStatusCode)
             {
                 _log.Warn("firmware", $"Upstream {url} returned {(int)res.StatusCode}");
