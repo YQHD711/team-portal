@@ -52,6 +52,10 @@ services:
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
       # CORS 从 .env 读取 (默认回退 localhost,生产部署覆盖 .env 即可)
       - Cors__Origins=${CORS__ORIGINS:-http://localhost:3000}
+      # 反向代理(nginx)之后的真实客户端 IP 只在 X-Forwarded-For 里。不配置这些可信网段时，
+      # 后端会忽略该头，审计日志与登录限流拿到的都是代理容器 IP（表现为所有记录同一个 IP）。
+      # 默认信任 Docker 常见私网 + 回环；要收窄可用 .env 的 FORWARDEDHEADERS__KNOWNNETWORKS 覆盖。
+      - ForwardedHeaders__KnownNetworks=${FORWARDEDHEADERS__KNOWNNETWORKS:-172.16.0.0/12;10.0.0.0/8;192.168.0.0/16;127.0.0.1}
     volumes:
       - ./data:/data
       # 把宿主机 ArduPilot WebTools 静态文件挂进 backend 容器(详见 deploy/README-WEBTOOLS.md)
