@@ -110,4 +110,40 @@ public class SettingsServiceTests
 
         Assert.Equal("warm", brand.Theme);
     }
+
+    [Fact]
+    public async Task SeedDefaults_SyncsDescriptionOnExistingRows()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+        var seeded = db.SystemSettings.Single(s => s.Key == "AI:ModelName");
+
+        // 模拟老库：描述还是旧文案（代码改了描述但库没更新，线上就永远看不到新文案）
+        seeded.Description = "AI 模型名称（deepseek-v4-pro / deepseek-v4-flash）";
+        seeded.Category = "旧分组";
+        await db.SaveChangesAsync();
+
+        await svc.SeedDefaults();
+
+        var refreshed = db.SystemSettings.Single(s => s.Key == "AI:ModelName");
+        Assert.Contains("可填任意模型名", refreshed.Description);
+        Assert.Equal("AI 服务", refreshed.Category);
+    }
+
+    [Fact]
+    public async Task SeedDefaults_DoesNotTouchStoredValues()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+        var row = db.SystemSettings.Single(s => s.Key == "AI:ModelName");
+        row.Value = "my-custom-model";
+        await db.SaveChangesAsync();
+
+        await svc.SeedDefaults();
+
+        // 描述/分组由代码维护，但 value 是运维配置，绝不能被种子覆盖
+        Assert.Equal("my-custom-model", db.SystemSettings.Single(s => s.Key == "AI:ModelName").Value);
+    }
 }

@@ -97,6 +97,23 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path === "/api/flightlogs") {
       return json({ logs: [{ filename: "flight-01.tlog", size: 204800, modified: 1780000000 }] });
     }
+    if (path === "/api/wiki/tasks" && method === "GET") {
+      return json([
+        {
+          id: "t1", type: "git", projectName: "ardupilot", status: "documents", errorMessage: null,
+          visibility: "public", targetFolder: "公共", createdAt: "2026-09-11T02:00:00Z", completedAt: null,
+          progress: { stage: "documents", done: 3, total: 12, note: "飞控驱动", updatedAt: "2026-09-11T02:05:00Z" },
+        },
+        {
+          id: "t2", type: "translate", projectName: "docs-zh", status: "completed", errorMessage: null,
+          visibility: "public", targetFolder: "公共", createdAt: "2026-09-11T01:00:00Z", completedAt: "2026-09-11T01:20:00Z",
+          progress: { stage: "completed", done: 8, total: 8, note: null, updatedAt: "2026-09-11T01:20:00Z" },
+        },
+      ]);
+    }
+    if (path === "/api/wiki/settings") {
+      return json({ contentModel: "deepseek-v4-pro", availableModels: ["deepseek-v4-pro", "deepseek-v4-flash"] });
+    }
     if (path === "/api/firmware/sources") {
       return json({
         sources: [
@@ -302,6 +319,34 @@ test.describe("冒烟流程", () => {
     expect(url).toContain("board=Pixhawk6X");
     expect(url).toContain("vehicle=Plane");
     expect(url).toContain("version=stable");
+  });
+
+  test("Wiki 导入：任务阶段进度与可自由填写的模型名", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/wiki/import");
+    await expect(page.getByRole("heading", { name: "Wiki 导入" })).toBeVisible();
+
+    // 首屏就要有任务（此前只在提交/手动刷新后才拉列表）
+    await expect(page.getByText("ardupilot")).toBeVisible();
+    // 文档阶段：3/12 + 当前文档名，进度条是确定态
+    await expect(
+      page.getByRole("progressbar", { name: "ardupilot 生成进度" })
+    ).toHaveAttribute("aria-valuenow", "25");
+    await expect(page.getByText(/3 \/ 12/)).toBeVisible();
+    await expect(page.getByText(/飞控驱动/)).toBeVisible();
+    // 每个任务用自己那套阶段条：翻译任务不该出现「审查」
+    const translateRow = page.getByTestId("wiki-task-t2");
+    await expect(translateRow.getByText("翻译", { exact: true })).toBeVisible();
+    await expect(translateRow.getByText("审查")).toHaveCount(0);
+    await expect(page.getByTestId("wiki-task-t1").getByText("审查")).toHaveCount(1);
+
+    // 模型名可自由填写：input + datalist 建议，不是写死的下拉
+    const model = page.getByLabel("生成模型");
+    await expect(model).toHaveAttribute("list");
+    await model.fill("my-own-model-7b");
+    await expect(model).toHaveValue("my-own-model-7b");
   });
 });
 

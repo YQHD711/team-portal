@@ -22,12 +22,14 @@ public partial class WikiGeneratorService
             _targetFolder = task.TargetFolder;
 
             task.Status = "preparing"; await _db.SaveChangesAsync();
+            _progress.Set(task.Id, "preparing", 0, 0, "准备翻译工作区");
             var baseDir = Path.Combine(Path.GetTempPath(), "teamportal-wiki", $"{task.Id}-{DateTime.UtcNow:yyyyMMddHHmmss}");
             Directory.CreateDirectory(baseDir);
             var cloneDir = Path.Combine(baseDir, "repo");
 
             // Clone the repo
             task.Status = "cloning"; await _db.SaveChangesAsync();
+            _progress.Set(task.Id, "cloning", 0, 0, "正在克隆仓库");
             var psi = new System.Diagnostics.ProcessStartInfo("git")
             { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
             // 同 Workspace:URL 必须校验协议且用 ArgumentList 传参(防选项/协议注入)
@@ -54,6 +56,7 @@ public partial class WikiGeneratorService
             task.Status = "translating"; await _db.SaveChangesAsync();
             var total = mdFiles.Count;
             var done = 0;
+            _progress.Set(task.Id, "translating", 0, total, $"共 {total} 个文档待翻译");
             var aiKey = await GetApiKey();
             var aiUrl = await GetBaseUrl();
             if (string.IsNullOrEmpty(aiKey)) throw new InvalidOperationException("AI API key not configured");
@@ -81,6 +84,7 @@ public partial class WikiGeneratorService
 
                     catalog.Add(new { path = file.Relative.Replace(".md", ""), title = Path.GetFileNameWithoutExtension(file.Relative) });
                     done++;
+                    _progress.Set(task.Id, "translating", done, total, file.Relative);
                     _logger.LogInformation("Translate [{Done}/{Total}]: {File}", done, total, file.Relative);
                 }
                 catch (Exception ex)
@@ -114,6 +118,7 @@ public partial class WikiGeneratorService
             task.Status = done > 0 ? "completed" : "failed";
             task.ErrorMessage = done == 0 ? $"All {total} pages failed to translate" : null;
             task.CompletedAt = DateTime.UtcNow;
+            _progress.Set(task.Id, task.Status, done, total, done == 0 ? task.ErrorMessage : null);
             await _db.SaveChangesAsync();
             _logger.LogInformation("Translation {Status}: {Done}/{Total} pages", task.Status, done, total);
         }

@@ -172,6 +172,8 @@ builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<ConversationService>();
 builder.Services.AddSingleton<MaintenanceService>();
+// Wiki 生成进度：进程内存单例（并行生成文档时不能并发写同一个 scoped DbContext）
+builder.Services.AddSingleton<WikiProgressTracker>();
 
 // ── MCP Server for external AI agents ──
 builder.Services.AddHttpContextAccessor();
