@@ -11,7 +11,7 @@ import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
 
 const pageTitles: Record<string, string> = {
-  "/": "仪表盘", "/admin/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志", "/incidents": "事故安全",
+  "/": "仪表盘", "/admin/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志 / 固件", "/incidents": "事故安全",
 };
 
 function getStoredScheme(): "dark" | "light" | null {

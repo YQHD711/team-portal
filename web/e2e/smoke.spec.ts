@@ -42,7 +42,7 @@ const items = [
   { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "1012-C-01-03", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-const state = { approveCalls: 0, layoutPut: null as null | Record<string, unknown>, itemPost: null as null | Record<string, unknown> };
+const state = { approveCalls: 0, layoutPut: null as null | Record<string, unknown>, itemPost: null as null | Record<string, unknown>, firmwareDownload: null as null | string };
 
 /** 物料布局用数据：一个房间 + 立体货架/柜子（坐标单位 cm） */
 const layoutItems = [
@@ -94,6 +94,35 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path.startsWith("/api/inventory")) return json(inventory);
     if (path === "/api/admin/departments") return json([]);
     if (path === "/api/storage/layouts") return json(layouts);
+    if (path === "/api/flightlogs") {
+      return json({ logs: [{ filename: "flight-01.tlog", size: 204800, modified: 1780000000 }] });
+    }
+    if (path === "/api/firmware/sources") {
+      return json({
+        sources: [
+          { id: "ardupilot", label: "ArduPilot", hint: "官方 firmware.ardupilot.org 目录", vehicles: [{ id: "Plane", label: "固定翼 Plane" }, { id: "Copter", label: "多旋翼 Copter" }] },
+          { id: "px4", label: "PX4", hint: "官方 GitHub Releases", vehicles: [] },
+        ],
+      });
+    }
+    if (path === "/api/firmware/versions") {
+      return json({ items: [{ id: "stable", label: "稳定版 stable", prerelease: false }, { id: "beta", label: "测试版 beta", prerelease: true }] });
+    }
+    if (path === "/api/firmware/boards") {
+      return json({ items: [{ name: "Pixhawk6X", size: null }, { name: "CubeOrange", size: null }] });
+    }
+    if (path === "/api/firmware/assets") {
+      return json({
+        items: [
+          { name: "arduplane.apj", kind: "apj", label: "APJ（Mission Planner / QGC 刷写，推荐）", size: 1538295 },
+          { name: "arduplane_with_bl.hex", kind: "hex", label: "HEX（含 Bootloader，DFU / 烧录器）", size: 4966108 },
+        ],
+      });
+    }
+    if (path === "/api/firmware/download") {
+      state.firmwareDownload = req.url();
+      return route.fulfill({ status: 200, contentType: "application/octet-stream", body: Buffer.from("firmware") });
+    }
     if (/\/api\/storage\/layouts\/\d+$/.test(path) && method === "PUT") {
       state.layoutPut = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
       return json({});
@@ -238,6 +267,41 @@ test.describe("冒烟流程", () => {
 
     await page.locator("div.fixed.z-50").getByRole("button", { name: "添加零件" }).click();
     await expect.poll(() => state.itemPost?.locationCode, { timeout: 10_000 }).toBe("201-A-3-05");
+  });
+
+  test("飞行日志 / 固件：固件级联选择并经服务端代理下载", async ({ page }) => {
+    const state = await mockApi(page, "member");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/flightlog");
+    // 导航栏与页面标题都已改名：Topbar 横幅标题 + 页面正文标题
+    await expect(page.getByRole("link", { name: "飞行日志 / 固件" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("heading", { name: "飞行日志 / 固件" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "飞行日志 / 固件" })).toBeVisible();
+    // 默认仍是日志文件 Tab，且日志列表正常渲染
+    await expect(page.getByRole("tab", { name: "日志文件" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("flight-01.tlog")).toBeVisible();
+
+    await page.getByRole("tab", { name: "固件下载" }).click();
+    await expect(page.getByLabel("机型")).toHaveValue("Plane");
+    await expect(page.getByLabel("版本")).toHaveValue("stable");
+
+    // 搜索过滤飞控板（PX4 一个版本有 400+ 块）
+    await page.getByLabel("搜索飞控板").fill("cube");
+    await expect(page.getByLabel("飞控板", { exact: true }).locator("option")).toHaveCount(2);
+    await page.getByLabel("搜索飞控板").fill("");
+
+    await page.getByLabel("飞控板", { exact: true }).selectOption("Pixhawk6X");
+    // 默认选中 APJ（最适合 Mission Planner / QGC 刷写）
+    await expect(page.getByRole("radio", { name: "arduplane.apj" })).toBeChecked();
+
+    await page.getByRole("button", { name: "下载固件" }).click();
+    await expect.poll(() => state.firmwareDownload, { timeout: 10_000 }).not.toBeNull();
+    const url = state.firmwareDownload as string;
+    expect(url).toContain("asset=arduplane.apj");
+    expect(url).toContain("board=Pixhawk6X");
+    expect(url).toContain("vehicle=Plane");
+    expect(url).toContain("version=stable");
   });
 });
 

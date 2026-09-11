@@ -1,87 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
-import { isAdmin } from "@/lib/auth";
-import { FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { FileText, Cpu } from "lucide-react";
+import { LogFileList } from "@/components/flightlog/LogFileList";
+import { FirmwarePanel } from "@/components/flightlog/FirmwarePanel";
 
-interface LogFile { filename: string; size: number; modified: number; }
+type Tab = "logs" | "firmware";
+
+const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
+  { id: "logs", label: "日志文件", icon: FileText },
+  { id: "firmware", label: "固件下载", icon: Cpu },
+];
 
 export default function FlightLogPage() {
-  const [logs, setLogs] = useState<LogFile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const admin = isAdmin();
-
-  const fetchLogs = () => {
-    setLoading(true);
-    api.get<{logs: LogFile[]}>("/api/flightlogs").then(r => setLogs(r.logs)).catch(()=>{}).finally(() => setLoading(false));
-  };
-
-  useEffect(() => { fetchLogs(); }, []);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    setUploading(true);
-    try { await api.post("/api/flightlogs/upload", formData); fetchLogs(); } catch { /* ignore */ }
-    finally { setUploading(false); }
-  };
-
-  const handleDelete = async (filename: string) => {
-    if (!window.confirm(`确定删除飞行日志「${filename}」吗？此操作不可恢复。`)) return;
-    try {
-      await api.delete(`/api/flightlogs/${encodeURIComponent(filename)}`);
-      fetchLogs();
-    } catch { /* ignore */ }
-  };
-
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
+  const [tab, setTab] = useState<Tab>("logs");
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">飞行日志</h1>
-          <p className="text-sm text-muted">飞控日志文件管理（.tlog / .bin）</p>
-        </div>
-        <label className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer">
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          上传日志
-          <input type="file" accept=".tlog,.bin" onChange={handleUpload} className="hidden" />
-        </label>
+      <div>
+        <h1 className="text-2xl font-bold">飞行日志 / 固件</h1>
+        <p className="text-sm text-muted">飞控日志管理与 ArduPilot / PX4 固件下载</p>
       </div>
 
-      <div className="rounded-xl border bg-surface divide-y">
-        {logs.length === 0 ? (
-          <div className="p-12 text-center text-faint">
-            <FileText className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
-            <p>暂无日志文件</p>
-            <p className="text-xs mt-1">上传 Pixhawk/ArduPilot 飞控日志进行分析</p>
-          </div>
-        ) : logs.map(l => (
-          <div key={l.filename} className="flex items-center justify-between p-4">
-            <div>
-              <div className="font-medium text-sm">{l.filename}</div>
-              <div className="text-xs text-faint mt-0.5">
-                {(l.size / 1024).toFixed(1)} KB · {new Date(l.modified * 1000).toLocaleString("zh-CN")}
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <a href={`/api/flightlogs/${l.filename}`} download className="p-2 hover:bg-surface-hover rounded-lg text-faint">
-                <Download className="h-4 w-4" />
-              </a>
-              {admin && (
-                <button onClick={() => handleDelete(l.filename)} className="p-2 hover:bg-red-50 hover:text-danger rounded-lg text-faint" title="删除日志">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
+      <div role="tablist" aria-label="飞行日志与固件" className="flex gap-1 border-b">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              tab === t.id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted hover:text-foreground"
+            }`}
+          >
+            <t.icon className="h-4 w-4" />
+            {t.label}
+          </button>
         ))}
       </div>
+
+      {/* 只挂载当前 Tab 的组件，避免未激活面板在后台打接口 */}
+      {tab === "logs" ? <LogFileList /> : <FirmwarePanel />}
     </div>
   );
 }

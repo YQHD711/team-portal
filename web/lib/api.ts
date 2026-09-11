@@ -82,6 +82,38 @@ export const api = {
   delete: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { method: "DELETE", timeoutMs }),
   /**
+   * 带鉴权的二进制下载。<a href> 发不出 Authorization 头，而 JWT 存在 localStorage，
+   * 所以下载必须走 fetch 拿 Blob 再由调用方另存（见 lib/download.ts）。
+   */
+  download: async (endpoint: string, timeoutMs?: number): Promise<Blob> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
+    const token = isBrowser() ? localStorage.getItem("token") : null;
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.status === 401 && isBrowser()) {
+        localStorage.removeItem("token");
+        window.location.href = "/auth/login";
+        throw new Error("登录已过期，请重新登录");
+      }
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: `下载失败 (${res.status})` }));
+        throw new Error(error.detail || `HTTP ${res.status}`);
+      }
+      return await res.blob();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("下载超时，请检查网络连接");
+      }
+      throw err;
+    }
+  },
+  /**
    * SSE/流式请求：返回原生 Response，由调用方解析流。
    * 注意：timeoutMs 只约束「拿到响应头」这一段，拿到后立即清除定时器 ——
    * 否则 30s 后 abort() 会在读 body 中途掐断长回答（AI 流式回答就是这么被截断的）。
