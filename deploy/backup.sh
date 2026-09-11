@@ -11,7 +11,8 @@ mkdir -p "$BACKUP_DIR"
 DATE=$(date +%Y%m%d-%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/team-portal-$DATE.tar.gz"
 
-tar -czf "$BACKUP_FILE" -C "$DATA_DIR" .
+# 固件缓存是可重新下载的派生物，不进备份（否则每天几十上百 MB 的重复镜像撑爆保留期）
+tar -czf "$BACKUP_FILE" -C "$DATA_DIR" --exclude='./firmware' --exclude='./log-archive' .
 
 # Remove backups older than retention period
 find "$BACKUP_DIR" -name "team-portal-*.tar.gz" -mtime +$RETENTION_DAYS -delete
