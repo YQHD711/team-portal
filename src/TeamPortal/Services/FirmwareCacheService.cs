@@ -67,7 +67,9 @@ public class FirmwareCacheService
 
         try
         {
-            using var res = await _http.GetAsync(target.Url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            using var req = new HttpRequestMessage(HttpMethod.Get, target.Url);
+            req.Headers.UserAgent.ParseAdd(FirmwareUpstream.UserAgent);
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (!res.IsSuccessStatusCode)
             {
                 _log.Warn("firmware", $"Download {target.Url} returned {(int)res.StatusCode}");

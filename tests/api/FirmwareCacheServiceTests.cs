@@ -99,6 +99,16 @@ public class FirmwareCacheServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureAsync_DownloadCarriesUserAgent()
+    {
+        // GitHub 资产地址同样要求 User-Agent，否则 403
+        var handler = BytesHandler(32);
+        await Build(handler).EnsureAsync(Target());
+
+        Assert.All(handler.UserAgents, ua => Assert.Contains("TeamPortal-Firmware", ua));
+    }
+
+    [Fact]
     public async Task EnsureAsync_AbortsStreamingWhenBodyExceedsCapWithoutDeclaredLength()
     {
         // 不声明 Content-Length（分块/谎报）时只能靠边读边计数兜住，否则大文件会灌满磁盘

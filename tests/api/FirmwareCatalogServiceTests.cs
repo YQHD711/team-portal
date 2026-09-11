@@ -213,6 +213,25 @@ public class FirmwareCatalogServiceTests
         Assert.DoesNotContain(assets, a => a.Name.EndsWith(".txt"));
     }
 
+    /// <summary>回归：.NET HttpClient 默认不发 User-Agent，GitHub REST API 会直接 403
+    /// （"Request forbidden by administrative rules"）。PX4 目录必须自带 UA 与 GitHub Accept 头。</summary>
+    [Fact]
+    public async Task UpstreamRequests_AlwaysCarryUserAgent()
+    {
+        var (arduPilot, apHandler) = Build(ArduPilotStub());
+        await arduPilot.GetVersionsAsync("ardupilot", "Plane");
+
+        var (px4, px4Handler) = Build(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(Px4JsonOk, System.Text.Encoding.UTF8, "application/json")
+        });
+        await px4.GetVersionsAsync("px4", null);
+
+        Assert.All(apHandler.UserAgents, ua => Assert.Contains("TeamPortal-Firmware", ua));
+        Assert.All(px4Handler.UserAgents, ua => Assert.Contains("TeamPortal-Firmware", ua));
+        Assert.All(px4Handler.Accepts, accept => Assert.Contains("application/vnd.github+json", accept));
+    }
+
     [Fact]
     public async Task Boards_KeepFirstBoardAfterUnclosedParentRow()
     {
@@ -224,7 +243,7 @@ public class FirmwareCatalogServiceTests
     }
 }
 
-/// <summary>记录调用次数与 URL 的假上游处理器。</summary>
+/// <summary>记录调用次数、URL 与请求头的假上游处理器。</summary>
 internal sealed class StubHttpHandler : HttpMessageHandler
 {
     private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
@@ -233,11 +252,16 @@ internal sealed class StubHttpHandler : HttpMessageHandler
 
     public int Calls { get; private set; }
     public List<string> Urls { get; } = [];
+    /// <summary>请求头在 HttpRequestMessage 释放后读不到，所以在处理时就抄下来。</summary>
+    public List<string> UserAgents { get; } = [];
+    public List<string> Accepts { get; } = [];
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Calls++;
         Urls.Add(request.RequestUri!.ToString());
+        UserAgents.Add(request.Headers.UserAgent.ToString());
+        Accepts.Add(request.Headers.Accept.ToString());
         return Task.FromResult(_responder(request));
     }
 }

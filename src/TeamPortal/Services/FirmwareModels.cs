@@ -24,6 +24,14 @@ public static class FirmwareSource
     ];
 }
 
+/// <summary>代理上游时固定的请求头。GitHub REST API 对缺少 User-Agent 的请求直接 403
+/// （"Request forbidden by administrative rules"），而 .NET HttpClient 默认不发 UA。</summary>
+public static class FirmwareUpstream
+{
+    public const string UserAgent = "TeamPortal-Firmware/1.0";
+    public const string GitHubAccept = "application/vnd.github+json";
+}
+
 /// <summary>Apache 目录列表的一行。/Vehicles/stable/Pixhawk6X/ 这类页面由 autotest 生成，结构固定。</summary>
 public record FirmwareListingEntry(string Name, string Href, bool IsDirectory, long? Size);
 
