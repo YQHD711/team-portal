@@ -2,9 +2,13 @@ namespace TeamPortal.Services;
 
 public record CachedFirmware(string Source, string Vehicle, string Version, string Board, string FileName, long Size, long Modified);
 
+/// <summary>一次下载的载荷。Cached=true 时 Stream 是本地文件流；false 时是边下边转的缓存流。</summary>
+public record FirmwareDownload(Stream Stream, long? Length, bool Cached, string FileName);
+
 /// <summary>
 /// 固件落盘缓存：磁盘布局 {CacheDir}/{source}/{vehicle|_}/{version}/{board}/{asset}。
-/// 首次请求边下边存，之后同队成员直接读本地；写入用唯一 .part 再原子改名，并发下载不会互相截断。
+/// 命中缓存直接读本地；未命中则由 <see cref="FirmwareCachingStream"/> 边下边转，
+/// 客户端从第一个字节就能看到真实进度，而不是干等服务器把整包拉完。
 /// </summary>
 public class FirmwareCacheService
 {
@@ -24,11 +28,11 @@ public class FirmwareCacheService
 
     public string Root { get; }
 
-    /// <summary>单次固件下载的总超时（默认 5 分钟），防止上游半死不活把请求永久挂住。</summary>
-    public TimeSpan DownloadTimeout { get; }
-
     /// <summary>单文件体积上限：ArduPilot HEX/ELF 约 5MB，PX4 约 2MB，64MB 留足余量同时挡住超大文件打爆磁盘。</summary>
     public long MaxBytes { get; }
+
+    /// <summary>单次固件下载的总超时（默认 5 分钟），防止上游半死不活把请求永久挂住。</summary>
+    public TimeSpan DownloadTimeout { get; }
 
     /// <summary>缓存文件的绝对路径；任一段非法或越出 Root 返回 null。</summary>
     public string? ResolveSafePath(FirmwareTarget target)
@@ -49,74 +53,78 @@ public class FirmwareCacheService
         return full;
     }
 
-    /// <summary>返回本地可读路径（命中缓存或下载成功）；失败返回 null，绝不返回半截文件。</summary>
-    public async Task<string?> EnsureAsync(FirmwareTarget target, CancellationToken ct = default)
+    /// <summary>命中本地缓存则返回路径与字节数（半截文件视为未命中）。</summary>
+    public bool TryGetCached(FirmwareTarget target, out string path, out long bytes)
     {
+        path = string.Empty;
+        bytes = 0;
+        var full = ResolveSafePath(target);
+        if (full is null || !File.Exists(full)) return false;
+        var length = new FileInfo(full).Length;
+        if (length <= 0) return false;
+        path = full;
+        bytes = length;
+        return true;
+    }
+
+    /// <summary>
+    /// 打开下载流：命中缓存返回文件流，否则回源并返回「边下边转」的流。
+    /// 失败（非法路径 / 上游 4xx5xx / 超时 / 磁盘不可写）一律返回 null，由端点转 502。
+    /// </summary>
+    public async Task<FirmwareDownload?> OpenAsync(FirmwareTarget target, CancellationToken ct = default)
+    {
+        if (TryGetCached(target, out var cachedPath, out var cachedBytes))
+            return new FirmwareDownload(File.OpenRead(cachedPath), cachedBytes, true, target.FileName);
+
         var path = ResolveSafePath(target);
         if (path is null) return null;
-        if (File.Exists(path) && new FileInfo(path).Length > 0) return path;
+        var temp = Path.Combine(Path.GetDirectoryName(path)!, $"{target.Asset.Name}.{Guid.NewGuid():N}.part");
 
-        var dir = Path.GetDirectoryName(path)!;
-        Directory.CreateDirectory(dir);
-        var temp = Path.Combine(dir, $"{target.Asset.Name}.{Guid.NewGuid():N}.part");
-
-        // 自带上限超时：HttpClient 的响应体流读取不受弹性管道总超时覆盖（AI 流式同理），
-        // 上游挂住时必须有兜底，否则请求会一直挂着。
+        // 自带上限超时：上游挂住时必须有兜底，否则请求会一直挂着。
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(DownloadTimeout);
 
+        HttpResponseMessage? res = null;
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
             using var req = new HttpRequestMessage(HttpMethod.Get, target.Url);
             req.Headers.UserAgent.ParseAdd(FirmwareUpstream.UserAgent);
-            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (!res.IsSuccessStatusCode)
             {
-                _log.Warn("firmware", $"Download {target.Url} returned {(int)res.StatusCode}");
+                _log.Warn("firmware", $"Upstream {target.Url} returned {(int)res.StatusCode}");
                 return null;
             }
             var declared = res.Content.Headers.ContentLength;
-            if (declared > 0 && declared > MaxBytes)
+            if (declared > MaxBytes)
             {
                 _log.Warn("firmware", $"Refusing {target.Asset.Name}: {declared} bytes exceeds cap {MaxBytes}");
                 return null;
             }
-
-            await using (var src = await res.Content.ReadAsStreamAsync(cts.Token))
-            await using (var dst = File.Create(temp))
+            // 空响应体不是合法固件：宁可报错，也别让成员存下一个 0 字节的"固件"
+            if (declared is 0)
             {
-                if (!await CopyCappedAsync(src, dst, MaxBytes, cts.Token)) return null;
+                _log.Warn("firmware", $"Upstream returned an empty body for {target.Url}");
+                return null;
             }
 
-            if (new FileInfo(temp).Length == 0) return null;
-            File.Move(temp, path, overwrite: true);
-            _log.Info("firmware", $"Cached firmware {target.FileName} ({new FileInfo(path).Length} bytes)");
-            return path;
+            var upstream = await res.Content.ReadAsStreamAsync(cts.Token);
+            // res 的所有权交给这个流（响应体流必须活到客户端读完）
+            var stream = new FirmwareCachingStream(upstream, res, temp, path, MaxBytes, _log);
+            res = null;
+            return new FirmwareDownload(stream, declared, false, target.FileName);
         }
         catch (Exception ex)
         {
-            _log.Warn("firmware", $"Download failed for {target.Url}: {ex.Message}");
+            _log.Warn("firmware", $"Upstream fetch failed for {target.Url}: {ex.Message}");
             return null;
         }
         finally
         {
-            if (File.Exists(temp)) { try { File.Delete(temp); } catch { /* 尽力清理 */ } }
+            res?.Dispose();
         }
-    }
-
-    /// <summary>受限拷贝；超限即停并返回 false（让 finally 删掉 .part）。</summary>
-    private static async Task<bool> CopyCappedAsync(Stream src, Stream dst, long maxBytes, CancellationToken ct)
-    {
-        var buffer = new byte[81920];
-        long total = 0;
-        int read;
-        while ((read = await src.ReadAsync(buffer, ct)) > 0)
-        {
-            total += read;
-            if (total > maxBytes) return false;
-            await dst.WriteAsync(buffer.AsMemory(0, read), ct);
-        }
-        return true;
     }
 
     public IReadOnlyList<CachedFirmware> List()
@@ -157,14 +165,14 @@ public class FirmwareCacheService
         return (deleted, freed);
     }
 
-    /// <summary>删文件后回收空目录，避免缓存面板出现一堆空壳。</summary>
+    /// <summary>删文件后回收空目录，避免缓存面板出现一堆空壳。只清 Root 之内，绝不动 Root 本身及其上层。</summary>
     private void PruneEmptyDirs(string? dir)
     {
         var root = Path.GetFullPath(Root);
         while (!string.IsNullOrEmpty(dir) && dir.Length > root.Length && Directory.Exists(dir))
         {
             if (Directory.EnumerateFileSystemEntries(dir).Any()) return;
-            Directory.Delete(dir);
+            try { Directory.Delete(dir); } catch { return; }
             dir = Path.GetDirectoryName(dir);
         }
     }

@@ -71,13 +71,16 @@ describe("飞行日志页", () => {
   it("下载走带鉴权的 api.download（<a href> 不带 Authorization 头会 401）", async () => {
     localStorage.setItem("token", jwt("member"));
     const blob = new Blob(["log"]);
-    vi.mocked(api.download as (endpoint: string, timeoutMs?: number) => Promise<Blob>).mockResolvedValue(blob);
+    vi.mocked(api.download as (endpoint: string, options?: unknown) => Promise<Blob>).mockResolvedValue(blob);
 
     render(<FlightLogPage />);
     fireEvent.click(await screen.findByRole("button", { name: /下载 a.tlog/ }));
 
     await waitFor(() =>
-      expect(api.download).toHaveBeenCalledWith("/api/flightlogs/a.tlog", 300000)
+      expect(api.download).toHaveBeenCalledWith(
+        "/api/flightlogs/a.tlog",
+        expect.objectContaining({ timeoutMs: 300000, onProgress: expect.any(Function) })
+      )
     );
     expect(saveBlob).toHaveBeenCalledWith(blob, "a.tlog");
   });

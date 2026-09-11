@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { api } from "@/lib/api";
+import { useRef, useState } from "react";
+import { api, type DownloadProgress } from "@/lib/api";
 import { isAdmin } from "@/lib/auth";
 import { saveBlob } from "@/lib/download";
 import { type FirmwareAsset, formatBytes, buildDownloadUrl } from "@/lib/firmware";
 import { Download, Loader2, Search } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { FirmwareCacheAdmin } from "./FirmwareCacheAdmin";
 import { useFirmwareCatalog, msgOf } from "./useFirmwareCatalog";
 
-const DOWNLOAD_TIMEOUT = 600000; // 10 分钟：首次下载要由服务器回源上游
+const DOWNLOAD_TIMEOUT = 600000; // 10 分钟：只约束「拿到响应头」，之后按读空闲判超时
+const PROGRESS_THROTTLE_MS = 100; // 每个数据块都 setState 会淹掉渲染
 
 const selectClass =
   "w-full rounded-lg border bg-surface px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50";
@@ -18,23 +20,47 @@ const selectClass =
 export function FirmwarePanel() {
   const c = useFirmwareCatalog();
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const admin = isAdmin();
 
   const handleDownload = async () => {
     if (!c.asset || !c.versionId || !c.board) return;
     setBusy(true);
     c.setError(null);
+    setProgress({ received: 0, total: null });
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let lastRender = 0;
+    const filename = c.asset.name;
     try {
       const url = buildDownloadUrl({
-        source: c.sourceId, vehicle: c.vehicle, version: c.versionId, board: c.board, asset: c.asset.name,
+        source: c.sourceId, vehicle: c.vehicle, version: c.versionId, board: c.board, asset: filename,
       });
-      saveBlob(await api.download(url, DOWNLOAD_TIMEOUT), c.asset.name);
+      const blob = await api.download(url, {
+        timeoutMs: DOWNLOAD_TIMEOUT,
+        signal: controller.signal,
+        onProgress: p => {
+          const now = Date.now();
+          if (now - lastRender >= PROGRESS_THROTTLE_MS) {
+            lastRender = now;
+            setProgress(p);
+          }
+        },
+      });
+      setProgress({ received: blob.size, total: blob.size });
+      saveBlob(blob, filename);
     } catch (err) {
       c.setError(msgOf(err, "固件下载失败"));
     } finally {
+      abortRef.current = null;
+      setProgress(null);
       setBusy(false);
     }
   };
+
+  const percent = progress && progress.total ? (progress.received / progress.total) * 100 : null;
 
   return (
     <div className="space-y-4">
@@ -110,14 +136,31 @@ export function FirmwarePanel() {
 
       <AssetList assets={c.assets} selected={c.asset} onSelect={c.setAsset} />
 
-      <button
-        onClick={handleDownload}
-        disabled={!c.asset || busy}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        下载固件
-      </button>
+      {progress ? (
+        <div className="space-y-2">
+          <ProgressBar
+            percent={percent}
+            label="固件下载进度"
+            left={progress.received === 0 ? "正在等待服务器回源…" : `已接收 ${formatBytes(progress.received)}`}
+            right={progress.total ? `共 ${formatBytes(progress.total)}` : "总长度未知"}
+          />
+          <button
+            onClick={() => abortRef.current?.abort()}
+            className="rounded-lg border px-3 py-1.5 text-sm text-muted hover:bg-surface-hover"
+          >
+            取消下载
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleDownload}
+          disabled={!c.asset}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          下载固件
+        </button>
+      )}
 
       {admin && c.active && <FirmwareCacheAdmin sourceLabel={c.active.label} />}
     </div>

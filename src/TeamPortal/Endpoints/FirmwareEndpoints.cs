@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using TeamPortal.Services;
 
@@ -53,19 +54,104 @@ public static class FirmwareEndpoints
                 : Catalog(await svc.GetAssetsAsync(source, vehicle, version, board))
         ).RequireRateLimiting("default");
 
-        // 下载：先解析成服务端信任的 URL，再确保落盘缓存，最后从本地发文件（支持断点续传）
-        group.MapGet("/download", async (string source, string? vehicle, string version, string board, string asset,
-            FirmwareCatalogService catalog, FirmwareCacheService cache, ClaimsPrincipal user, LogService log, CancellationToken ct) =>
+        group.MapGet("/download", Download);
+    }
+
+    /// <summary>
+    /// 下载。命中缓存直接发文件；未命中则边下边转（客户端从第一个字节就有真实进度，
+    /// 缓存只在整包读完后才发布）。
+    /// </summary>
+    private static async Task<IResult> Download(
+        string source, string? vehicle, string version, string board, string asset,
+        FirmwareCatalogService catalog, FirmwareCacheService cache, ClaimsPrincipal user,
+        LogService log, HttpContext ctx, CancellationToken ct)
+    {
+        var actor = user.Identity?.Name ?? "unknown";
+        var sw = Stopwatch.StartNew();
+        var target = await catalog.ResolveAsync(source, vehicle, version, board, asset);
+        if (target is null)
         {
-            var target = await catalog.ResolveAsync(source, vehicle, version, board, asset);
-            if (target is null) return Results.Problem("固件不存在，或上游目录暂时不可用", statusCode: 404);
+            log.Warn("firmware", $"Download rejected, unknown target: {source}/{vehicle}/{version}/{board}/{asset} by {actor}");
+            return Results.Problem("固件不存在，或上游目录暂时不可用", statusCode: 404);
+        }
+        var id = Describe(target);
 
-            var path = await cache.EnsureAsync(target, ct);
-            if (path is null) return Results.Problem("固件下载失败，请稍后重试", statusCode: 502);
+        if (cache.TryGetCached(target, out var cachedPath, out var cachedBytes))
+        {
+            log.Info("firmware", $"Download from cache: {id} ({cachedBytes} bytes) by {actor}");
+            AuditDownload(log, ctx, actor, target, cachedBytes, cached: true, sw.ElapsedMilliseconds);
+            return Results.File(cachedPath, "application/octet-stream", target.FileName, enableRangeProcessing: true);
+        }
 
-            log.Info("firmware", $"Firmware downloaded: {target.FileName} [{target.Source}/{target.Version}/{target.Board}] by {user.Identity?.Name ?? "unknown"}");
-            return Results.File(path, "application/octet-stream", target.FileName, enableRangeProcessing: true);
-        });
+        FirmwareDownload? download;
+        try
+        {
+            download = await cache.OpenAsync(target, ct);
+        }
+        catch (Exception ex)
+        {
+            log.Error("firmware", $"Download failed: {id} by {actor}: {ex.Message}");
+            AuditDownload(log, ctx, actor, target, 0, cached: false, sw.ElapsedMilliseconds, error: ex.Message);
+            return Results.Problem("固件下载失败，请稍后重试", statusCode: 502);
+        }
+        if (download is null)
+        {
+            log.Error("firmware", $"Download failed upstream: {id} by {actor}");
+            AuditDownload(log, ctx, actor, target, 0, cached: false, sw.ElapsedMilliseconds, error: "上游获取失败");
+            return Results.Problem("固件下载失败，请稍后重试", statusCode: 502);
+        }
+
+        // 未命中缓存：先把响应头发出（带 Content-Length），客户端即可显示真实进度
+        ctx.Response.ContentType = "application/octet-stream";
+        ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"{target.FileName}\"";
+        if (download.Length is > 0) ctx.Response.ContentLength = download.Length;
+        log.Info("firmware", $"Download streaming from upstream: {id} (declared {download.Length?.ToString() ?? "unknown"} bytes) by {actor}");
+
+        long delivered;
+        try
+        {
+            await using (download.Stream)
+                delivered = await CopyCountedAsync(download.Stream, ctx.Response.Body, ct);
+        }
+        catch (Exception ex)
+        {
+            // 响应头已发出，状态码改不了：断开连接让客户端判定为不完整传输，别让它存下坏固件
+            var partial = download.Stream is FirmwareCachingStream caching ? caching.Written : 0;
+            log.Error("firmware", $"Download aborted mid-stream: {id} by {actor} after {partial} bytes: {ex.Message}");
+            AuditDownload(log, ctx, actor, target, partial, cached: false, sw.ElapsedMilliseconds, error: ex.Message);
+            ctx.Abort();
+            return Results.Empty;
+        }
+
+        log.Info("firmware", $"Download completed: {id} ({delivered} bytes, {sw.ElapsedMilliseconds}ms) by {actor}");
+        AuditDownload(log, ctx, actor, target, delivered, cached: false, sw.ElapsedMilliseconds);
+        return Results.Empty;
+    }
+
+    private static async Task<long> CopyCountedAsync(Stream source, Stream destination, CancellationToken ct)
+    {
+        var buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer, ct)) > 0)
+        {
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+            total += read;
+        }
+        return total;
+    }
+
+    private static string Describe(FirmwareTarget t) => $"{t.Source}/{t.Version}/{t.Board}/{t.Asset.Name}";
+
+    /// <summary>下载审计：谁、什么固件、多大、是否命中缓存、耗时；失败也落一条（success=false）。</summary>
+    private static void AuditDownload(LogService log, HttpContext ctx, string actor, FirmwareTarget t,
+        long bytes, bool cached, long elapsedMs, string? error = null)
+    {
+        object data = error is null
+            ? new { success = true, bytes, cached, elapsedMs, asset = t.Asset.Name, vehicle = t.Vehicle }
+            : new { success = false, bytes, cached, elapsedMs, asset = t.Asset.Name, error };
+        log.Audit("download", actor, targetType: "firmware",
+            targetId: $"{t.Source}/{t.Version}/{t.Board}", data: data, ipAddress: LogService.ClientIp(ctx));
     }
 
     /// <summary>目录为 null 一律 503（上游不可达），绝不把"取不到"伪装成"没有"。</summary>

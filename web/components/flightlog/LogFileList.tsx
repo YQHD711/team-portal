@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
+import { useState, useEffect, useRef } from "react";
+import { api, type DownloadProgress } from "@/lib/api";
 import { isAdmin } from "@/lib/auth";
 import { saveBlob } from "@/lib/download";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
 
 export interface LogFile {
@@ -18,7 +19,9 @@ export function LogFileList() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const admin = isAdmin();
 
   // 初始 loading 为 true，刷新时不重新置位（effect 体内不同步 setState）
@@ -54,12 +57,28 @@ export function LogFileList() {
   const handleDownload = async (filename: string) => {
     setDownloading(filename);
     setError(null);
+    setProgress({ received: 0, total: null });
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let lastRender = 0;
     try {
-      const blob = await api.download(`/api/flightlogs/${encodeURIComponent(filename)}`, 300000);
+      const blob = await api.download(`/api/flightlogs/${encodeURIComponent(filename)}`, {
+        timeoutMs: 300000,
+        signal: controller.signal,
+        onProgress: p => {
+          const now = Date.now();
+          if (now - lastRender >= 100) {
+            lastRender = now;
+            setProgress(p);
+          }
+        },
+      });
       saveBlob(blob, filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : "下载失败");
     } finally {
+      abortRef.current = null;
+      setProgress(null);
       setDownloading(null);
     }
   };
@@ -94,6 +113,23 @@ export function LogFileList() {
       </div>
 
       {error && <div className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div>}
+
+      {progress && (
+        <div className="space-y-2">
+          <ProgressBar
+            percent={progress.total ? (progress.received / progress.total) * 100 : null}
+            label="日志下载进度"
+            left={`${downloading ?? ""} 已接收 ${(progress.received / 1024).toFixed(1)} KB`}
+            right={progress.total ? `共 ${(progress.total / 1024).toFixed(1)} KB` : "总长度未知"}
+          />
+          <button
+            onClick={() => abortRef.current?.abort()}
+            className="rounded-lg border px-3 py-1.5 text-sm text-muted hover:bg-surface-hover"
+          >
+            取消下载
+          </button>
+        </div>
+      )}
 
       <div className="rounded-xl border bg-surface divide-y">
         {logs.length === 0 ? (

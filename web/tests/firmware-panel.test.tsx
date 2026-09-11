@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { FirmwarePanel } from "@/components/flightlog/FirmwarePanel";
-import { api } from "@/lib/api";
+import { api, type DownloadOptions } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
 
 vi.mock("@/lib/api", () => ({
@@ -37,7 +37,9 @@ const assetsPayload = {
 };
 
 const mockGet = vi.mocked(api.get as (url: string) => Promise<unknown>);
-const mockDownload = vi.mocked(api.download as (url: string, timeoutMs?: number) => Promise<Blob>);
+const mockDownload = vi.mocked(
+  api.download as (url: string, options?: DownloadOptions) => Promise<Blob>
+);
 
 /** 后端 payload 与约定字段名（items / sources）一致，避免前端臆造响应结构 */
 function stubApiImpl(url: string) {
@@ -90,7 +92,39 @@ describe("固件下载面板", () => {
     expect(url).toContain("version=stable");
     expect(url).toContain("board=Pixhawk6X");
     expect(url).toContain("asset=arduplane.apj");
+    // 下载带进度回调与取消信号（进度条 + 「取消下载」靠它们工作）
+    expect(mockDownload.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ onProgress: expect.any(Function), signal: expect.any(AbortSignal) })
+    );
     expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), "arduplane.apj");
+  });
+
+  it("下载中显示进度条，取消按钮会中断请求", async () => {
+    // 用一个「卡住」的下载：进度回调先报 50%，再由测试触发取消
+    let captured: DownloadOptions | undefined;
+    let release: ((blob: Blob) => void) | undefined;
+    mockDownload.mockImplementation((_url: string, options?: DownloadOptions) => {
+      captured = options;
+      options?.onProgress?.({ received: 512, total: 1024 });
+      return new Promise<Blob>(resolve => { release = resolve; });
+    });
+
+    render(<FirmwarePanel />);
+    await screen.findByLabelText("机型");
+    await screen.findByRole("option", { name: "Pixhawk6X" });
+    fireEvent.change(screen.getByLabelText("飞控板"), { target: { value: "Pixhawk6X" } });
+    fireEvent.click(await screen.findByRole("button", { name: /下载固件/ }));
+
+    const bar = await screen.findByRole("progressbar", { name: "固件下载进度" });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "50"));
+    expect(screen.getByText(/已接收 512 B/)).toBeInTheDocument();
+
+    const controller = captured?.signal;
+    expect(controller?.aborted).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "取消下载" }));
+    expect(controller?.aborted).toBe(true);
+
+    release?.(new Blob(["x"]));
   });
 
   it("assets 请求带上已选板子（否则会拿到别的板子的文件列表）", async () => {
