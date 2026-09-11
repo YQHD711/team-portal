@@ -204,6 +204,45 @@ DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计�
 配置：`Firmware:CacheDir`（默认 `../../data/firmware`）、`Firmware:MaxBytes`（单文件上限，默认 64MB）、
 `Firmware:CatalogTtlMinutes`（目录内存缓存 TTL，默认 30 分钟）、`Firmware:DownloadTimeoutSeconds`（默认 300）。
 
+### Wiki 文档的存储位置与恢复
+
+**文档存在哪**（`Knowledge:BasePath`，默认 `../../data/knowledge`，容器内即挂载的 `/data/knowledge`）：
+
+```
+宿主机   <部署目录>/data/knowledge/<目标文件夹>/<项目名>/<目录项路径>.md
+容器内   /data/knowledge/<目标文件夹>/<项目名>/<目录项路径>.md
+例       /opt/team-portal/data/knowledge/公共/wiki1/getting-started/installation.md
+翻译任务 额外写一份 <项目名>_EN/ 原文档
+```
+
+其他相关位置：
+
+| 内容 | 位置 | 说明 |
+|---|---|---|
+| 覆盖写入的历史版本 | `data/knowledge/.history/<相同相对目录>/<文件名>.<yyyyMMdd-HHmmss>.bak` | `KnowledgeService.WriteFile` 每次覆盖前自动备份，**免费的恢复来源** |
+| 源码工作区 | `/tmp/teamportal-wiki/<taskId>/repo`（容器内） | 路径记在 `WikiTask.WorkspacePath`；存在时补写文档会复用，不重新 clone/上传 |
+| 任务与目录 JSON | SQLite `WikiTasks` 表（`CatalogJson` / `WorkspacePath` / `ErrorMessage`） | 目录决定"应该有哪些文档" |
+| 每日备份 | `/opt/backups/team-portal/*.tar.gz`（`deploy/backup.sh`） | 已排除 `firmware/`、`log-archive/` |
+
+**文档缺失时怎么恢复**（诊断接口会告诉你缺哪些、能免费恢复哪些）：
+
+```
+GET  /api/wiki/tasks/{id}/diagnose               → 文档应存在的位置、缺失列表、可恢复列表、工作区是否还在
+POST /api/wiki/tasks/{id}/restore-from-history   → 用 .history 历史版本恢复（零 AI 成本）
+POST /api/wiki/tasks/{id}/retry-missing          → 只补齐缺失文档（复用目录与工作区，只对缺失项调用 AI）
+```
+
+三条恢复路径的成本与适用场景：
+
+| 方式 | 成本 | 适用 |
+|---|---|---|
+| 从历史版本恢复 | **0** | 文档曾被覆盖/清空，但 `.history` 里还有旧版本 |
+| 只补齐缺失文档 | 与「缺失篇数」成正比 | 文档从未写入成功（AI 没调用 write_doc）；已生成的不重跑、目录不重算、源码不重下 |
+| 重新提交任务 | 整项目重跑 | 想换源/换目录结构时用（Wiki 导入页重新提交） |
+
+> 生成完成后会校验文档是否真的落盘；一篇都没写出来会把任务标为失败（而不是静默"完成"），
+> 部分缺失则在任务上留下告警文字。
+
 ### AI
 
 ```

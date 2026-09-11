@@ -3,11 +3,14 @@ using TeamPortal.Data;
 
 namespace TeamPortal.Services;
 
-public class KnowledgeService
+public partial class KnowledgeService
 {
     private readonly string _basePath;
     private readonly LogService _log;
     private readonly IServiceScopeFactory _scopeFactory;
+
+    /// <summary>知识库根目录（绝对路径；诊断/排查"文档到底存在哪"用）。</summary>
+    public string BasePath => Path.GetFullPath(_basePath);
 
     public KnowledgeService(IConfiguration config, LogService log, IServiceScopeFactory scopeFactory)
     {

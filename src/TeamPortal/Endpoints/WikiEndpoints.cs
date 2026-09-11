@@ -141,6 +141,71 @@ public static class WikiEndpoints
                       : Results.Problem("任务不存在或未完成", statusCode: 400);
         });
 
+        // 缺失文档预览：点「补齐」之前先告诉用户要补几篇（纯文件检查，不产生 AI 调用）
+        wiki.MapGet("/tasks/{id}/missing", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            var info = await generator.GetMissingDocuments(id);
+            if (info is null) return Results.Problem("Not found", statusCode: 404);
+            return Results.Ok(new { total = info.Value.Total, missing = info.Value.Missing, missingCount = info.Value.Missing.Count });
+        });
+
+        // 诊断：文档该在哪、缺了哪些、哪些能从历史版本零成本恢复（纯文件检查，不产生 AI 调用）
+        wiki.MapGet("/tasks/{id}/diagnose", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            var diag = await generator.DiagnoseTask(id);
+            return diag is null ? Results.Problem("Not found", statusCode: 404) : Results.Ok(diag);
+        });
+
+        // 从知识库 .history 恢复缺失文档：不调用 AI，零成本
+        wiki.MapPost("/tasks/{id}/restore-from-history", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            if (role != "admin" && role != "部长" && task.UserId != uid)
+                return Results.Problem("仅任务提交者、管理员和部长可恢复文档", statusCode: 403);
+
+            var result = await generator.RestoreMissingFromHistory(id);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Audit("restore-history", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
+                data: new { success = result.Ok, result.Missing, result.StillMissing }, ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new { success = result.Ok, result.Missing, result.StillMissing, message = result.Message });
+        });
+
+        // 只补齐缺失的文档：复用已存目录与已有工作区，只有缺失项会调用 AI。
+        // 大仓库的补写成本因此只与「缺了几篇」成正比，也不会重新 clone/上传源码。
+        wiki.MapPost("/tasks/{id}/retry-missing", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
+        {
+            var task = await generator.GetTask(id);
+            if (task is null) return Results.Problem("Not found", statusCode: 404);
+            var (role, dept) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
+            if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            if (role != "admin" && role != "部长" && task.UserId != uid)
+                return Results.Problem("仅任务提交者、管理员和部长可补齐文档", statusCode: 403);
+
+            var result = await generator.RetryMissingDocuments(id, ctx.RequestAborted);
+            var log = app.Services.GetRequiredService<LogService>();
+            log.Info("wiki", $"Wiki task {id} retry-missing by {user.Identity?.Name}: missing={result.Missing}, stillMissing={result.StillMissing}");
+            log.Audit("retry-missing", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
+                data: new { success = result.Ok, result.Missing, result.StillMissing }, ipAddress: LogService.ClientIp(ctx));
+            return result.Ok
+                ? Results.Ok(new { success = true, result.Missing, result.StillMissing, message = result.Message })
+                : Results.Problem(result.Message, statusCode: 400);
+        });
+
         // Change visibility of a wiki task
         wiki.MapPatch("/tasks/{id}/visibility", async (string id, VisibilityRequest req, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {

@@ -103,6 +103,114 @@ public partial class WikiGeneratorService
         return true;
     }
 
+    /// <summary>缺失文档预览：不产生任何 AI 调用，供前端在动手前告知"会花多少"。</summary>
+    public async Task<(int Total, List<string> Missing)?> GetMissingDocuments(string taskId)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null) return null;
+        PrepareFields(task);
+        var leaves = SafeLeaves();
+        return (leaves.Count, FindMissingDocuments(leaves, DocumentExists));
+    }
+
+    /// <summary>
+    /// 只补齐缺失的文档。刻意不重跑整条管线：
+    ///   1) 复用已存的目录 —— 省掉目录生成那一次 AI 调用
+    ///   2) 只对缺失的目录项调用 AI —— 已有文档一个字都不重写
+    ///   3) 不重复复审全项目
+    /// 所以大仓库的补写成本只与「缺了几篇」成正比，与仓库规模无关。
+    /// 源码工作区仍要重新准备（git 重新 clone / zip 重新解压），而这一步失败发生在任何 AI 调用之前，
+    /// 不会白花钱。
+    /// </summary>
+    public async Task<WikiRetryResult> RetryMissingDocuments(string taskId, CancellationToken ct = default)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null) return new WikiRetryResult(false, 0, 0, "任务不存在");
+        if (string.IsNullOrWhiteSpace(task.CatalogJson))
+            return new WikiRetryResult(false, 0, 0, "该任务没有目录信息，无法只补齐文档；请在「Wiki 导入」页重新提交");
+
+        PrepareFields(task);
+        var missing = MissingDocuments();
+        if (missing.Count == 0) return new WikiRetryResult(true, 0, 0, "没有缺失的文档，无需重新生成");
+
+        try
+        {
+            _progress.Set(task.Id, "preparing", 0, missing.Count, $"补齐 {missing.Count} 篇缺失文档：准备工作区");
+            // 复用上一次留下的工作区（task.WorkspacePath 里记着路径）——大仓库不必重新 clone / 重新上传 zip。
+            // 只有它已被清理时才回退到重新准备；而重新准备失败发生在任何 AI 调用之前，不会白花钱。
+            _workspacePath = ReusableWorkspace(task) ?? await PrepareWorkspace(task);
+            task.WorkspacePath = _workspacePath;
+            task.Status = "documents"; task.ErrorMessage = null; task.CompletedAt = null;
+            await _db.SaveChangesAsync();
+
+            var done = 0;
+            _progress.Set(task.Id, "documents", 0, missing.Count, $"只补齐 {missing.Count} 篇缺失文档（已有文档不重跑）");
+            using (var semaphore = new SemaphoreSlim(_options.ParallelCount))
+            {
+                var jobs = SafeLeaves().Where(i => missing.Contains(i.Path)).Select(async item =>
+                {
+                    await semaphore.WaitAsync(ct);
+                    try
+                    {
+                        await GenerateDocumentVerified(item);
+                        var finished = Interlocked.Increment(ref done);
+                        _progress.Set(task.Id, "documents", finished, missing.Count, item.Title);
+                    }
+                    finally { semaphore.Release(); }
+                });
+                await Task.WhenAll(jobs);
+            }
+
+            var stillMissing = MissingDocuments();
+            var written = missing.Count - stillMissing.Count;
+            task.Status = "completed";
+            task.CompletedAt = DateTime.UtcNow;
+            task.ErrorMessage = stillMissing.Count == 0
+                ? null
+                : $"仍有 {stillMissing.Count} 篇文档未生成（{MissingDocumentsSummary(stillMissing)}），可稍后再试或检查 AI 配置。";
+            _progress.Set(task.Id, "completed", written, missing.Count, task.ErrorMessage);
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Wiki task {TaskId} retry wrote {Written}/{Missing} missing documents", task.Id, written, missing.Count);
+            return new WikiRetryResult(true, missing.Count, stillMissing.Count, stillMissing.Count == 0
+                ? $"已补齐 {written} 篇文档"
+                : $"补齐 {written}/{missing.Count} 篇，仍有 {stillMissing.Count} 篇未生成");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Wiki task {TaskId} retry failed", taskId);
+            task.Status = "failed";
+            task.ErrorMessage = $"补齐文档失败：{ex.Message}";
+            await _db.SaveChangesAsync();
+            return new WikiRetryResult(false, missing.Count, missing.Count, task.ErrorMessage);
+        }
+    }
+
+    /// <summary>
+    /// 上一次生成留下的工作区是否还能直接用：目录存在且非空就复用。
+    /// 大仓库重新 clone 又慢又费流量，而补写文档用的还是同一份源码。
+    /// </summary>
+    private string? ReusableWorkspace(WikiTask task)
+    {
+        var path = task.WorkspacePath;
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return null;
+        if (!Directory.EnumerateFileSystemEntries(path).Any()) return null;
+        // 内容已清空的目录（例如 review 阶段之后被清理过）不算可用
+        _logger.LogInformation("Reusing existing workspace for {Project}: {Path}", task.ProjectName, path);
+        return path;
+    }
+
+    /// <summary>把任务字段灌进当前会话状态（补写路径复用）。</summary>
+    private void PrepareFields(WikiTask task)
+    {
+        _currentTaskId = task.Id;
+        _projectName = task.ProjectName;
+        _targetFolder = task.TargetFolder;
+        _catalogJson = string.IsNullOrWhiteSpace(task.CatalogJson) ? "[]" : task.CatalogJson;
+        _currentModel = task.Model ?? _options.ContentModel;
+        _currentCatalogModel = task.Model ?? _options.CatalogModel;
+        _customCatalogJson = task.CustomCatalogJson;
+    }
+
     public async Task<bool> DeleteTask(string id, KnowledgeService knowledge)
     {
         var task = await _db.WikiTasks.FindAsync(id);
@@ -173,6 +281,30 @@ public partial class WikiGeneratorService
             task.Status = "documents"; await _db.SaveChangesAsync();
             await GenerateAllDocuments();
 
+            // 校验文档真的落盘了：AI 只回文本而不调用 write_doc 时不会抛异常，
+            // 不校验就会出现「任务已完成但一篇文档都没有」——目录能点开、文档全 404。
+            var total = LeafCount();
+            var missing = MissingDocuments();
+            var written = total - missing.Count;
+            if (missing.Count > 0)
+            {
+                var sample = MissingDocumentsSummary(missing);
+                if (written == 0)
+                {
+                    // 一篇都没写出来：基本是 AI 配置/额度/模型问题，不能让用户以为成功了
+                    task.Status = "failed";
+                    task.ErrorMessage = $"文档生成失败：{missing.Count} 篇全部未写入（{sample}）。请检查 AI 配置后重新提交。";
+                    task.CompletedAt = DateTime.UtcNow;
+                    _progress.Set(task.Id, "failed", 0, total, task.ErrorMessage);
+                    _logger.LogError("Wiki task {TaskId} produced no documents. Missing: {Missing}", task.Id, sample);
+                    await _db.SaveChangesAsync();
+                    return;
+                }
+                // 部分缺失：已有文档仍可用，但必须让用户看见"不完整"
+                task.ErrorMessage = $"有 {missing.Count} 篇文档未生成（{sample}），可在「Wiki 导入」页重新提交该任务补齐。";
+                _logger.LogError("Wiki task {TaskId} missing {Count} documents. Missing: {Missing}", task.Id, missing.Count, sample);
+            }
+
             // Step 4: Self-review — fix mermaid syntax, markdown errors, etc.
             task.Status = "reviewing"; await _db.SaveChangesAsync();
             await ReviewAllDocuments();
@@ -180,8 +312,7 @@ public partial class WikiGeneratorService
             // Done
             task.Status = "completed";
             task.CompletedAt = DateTime.UtcNow;
-            var total = LeafCount();
-            _progress.Set(task.Id, "completed", total, total);
+            _progress.Set(task.Id, "completed", written, total, task.ErrorMessage);
             await _db.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -193,6 +324,93 @@ public partial class WikiGeneratorService
             _progress.Set(task.Id, "failed", current?.Done ?? 0, current?.Total ?? 0, ex.Message);
             await _db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>补齐缺失文档的结果（Missing=需要补的篇数，StillMissing=补完仍缺的）。</summary>
+    public record WikiRetryResult(bool Ok, int Missing, int StillMissing, string Message);
+
+    /// <summary>单个文档的状态：应存在的位置 + 是否缺失 + 有多少个历史版本可用来恢复。</summary>
+    public record WikiDocStatus(string Path, string RelativeFile, bool Exists, int HistoryVersions);
+
+    /// <summary>任务诊断：文档到底该存在哪、缺了哪些、哪些能零成本从 .history 恢复。</summary>
+    public record WikiTaskDiagnostics(
+        string TargetFolder, string ProjectName, string ProjectDir, string KbRoot,
+        string? WorkspacePath, bool WorkspaceExists,
+        IReadOnlyList<WikiDocStatus> Documents, IReadOnlyList<string> Missing,
+        IReadOnlyList<string> RecoverableFromHistory);
+
+    /// <summary>概览：文档应该存在哪个目录、缺了几篇、几篇能从历史版本恢复（纯文件检查，不花 AI）。</summary>
+    public async Task<WikiTaskDiagnostics?> DiagnoseTask(string taskId)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null) return null;
+        PrepareFields(task);
+
+        var docs = SafeLeaves().Select(item =>
+        {
+            var relative = RelativeDocPath(item);
+            return new WikiDocStatus(
+                item.Path, relative, _knowledge.FileExists(relative), _knowledge.HistoryVersions(relative).Count);
+        }).ToList();
+
+        var missing = docs.Where(d => !d.Exists).Select(d => d.Path).ToList();
+        var recoverable = docs.Where(d => !d.Exists && d.HistoryVersions > 0).Select(d => d.Path).ToList();
+        return new WikiTaskDiagnostics(
+            task.TargetFolder, task.ProjectName, $"{task.TargetFolder}/{task.ProjectName}", _knowledge.BasePath,
+            task.WorkspacePath,
+            !string.IsNullOrWhiteSpace(task.WorkspacePath) && Directory.Exists(task.WorkspacePath),
+            docs, missing, recoverable);
+    }
+
+    /// <summary>
+    /// 零成本恢复：用知识库 .history 里的历史版本补回缺失文档（不调用 AI、不产生费用）。
+    /// 适用于「文档曾被覆盖/清空，但历史备份还在」的情况；从未写成功过的文档不在历史里，只能重新生成。
+    /// </summary>
+    public async Task<WikiRetryResult> RestoreMissingFromHistory(string taskId)
+    {
+        var task = await _db.WikiTasks.FindAsync(taskId);
+        if (task is null) return new WikiRetryResult(false, 0, 0, "任务不存在");
+        PrepareFields(task);
+
+        var missing = MissingDocuments();
+        if (missing.Count == 0) return new WikiRetryResult(true, 0, 0, "没有缺失的文档，无需恢复");
+
+        var restored = 0;
+        var noHistory = new List<string>();
+        foreach (var item in SafeLeaves().Where(i => missing.Contains(i.Path)))
+        {
+            var relative = RelativeDocPath(item);
+            if (_knowledge.RestoreFromHistory(relative) is not null) restored++;
+            else noHistory.Add(item.Path);
+        }
+
+        var stillMissing = MissingDocuments();
+        if (restored > 0)
+        {
+            task.Status = "completed";
+            task.CompletedAt = DateTime.UtcNow;
+            task.ErrorMessage = stillMissing.Count == 0
+                ? null
+                : $"仍有 {stillMissing.Count} 篇文档没有历史版本（{MissingDocumentsSummary(stillMissing)}），需要用 AI 补齐。";
+            _progress.Set(task.Id, "completed", 0, 0, $"已从历史版本恢复 {restored} 篇文档");
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("Wiki task {TaskId} restore-from-history: restored={Restored}, stillMissing={Still}",
+            task.Id, restored, stillMissing.Count);
+        var message = restored == 0
+            ? $"没有可恢复的历史版本（{MissingDocumentsSummary(noHistory)} 从未写入成功过），需要用「补齐缺失文档」重新生成"
+            : stillMissing.Count == 0
+                ? $"已从历史版本恢复 {restored} 篇文档（未调用 AI，无费用）"
+                : $"已恢复 {restored} 篇；仍有 {stillMissing.Count} 篇需要 AI 补齐";
+        return new WikiRetryResult(restored > 0, missing.Count, stillMissing.Count, message);
+    }
+
+    /// <summary>纯函数便于单测：把缺失文档列表压成可读摘要（最多列 5 个）。</summary>
+    internal static string MissingDocumentsSummary(IReadOnlyList<string> missing)
+    {
+        var sample = string.Join("、", missing.Take(5));
+        return missing.Count > 5 ? sample + " 等" : sample;
     }
 
     /// <summary>解析当前目录 JSON；失败返回空表，避免调用方到处 try/catch。</summary>

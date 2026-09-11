@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { retryMissingDocuments } from "@/lib/wikiRetry";
+import { WikiDocRecovery } from "@/components/wiki/WikiDocRecovery";
 import { useCurrentUser } from "@/lib/hooks";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { ChevronRight, ChevronLeft, BookOpen, ExternalLink, ArrowLeft, Loader2, RefreshCw, Globe, Building2, Lock } from "lucide-react";
@@ -20,12 +22,15 @@ export default function WikiViewerPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [activePath, setActivePath] = useState<string>("");
   const [content, setContent] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { user } = useCurrentUser();
   const isStaff = user?.role === "admin" || user?.role === "部长";
   const [updating, setUpdating] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [lang, setLang] = useState<"zh" | "en">("zh");
   const [toc, setToc] = useState<{ id: string; text: string; level: number }[]>([]);
 
@@ -65,15 +70,21 @@ export default function WikiViewerPage() {
         const firstLeaf = findFirstLeaf(c);
         if (firstLeaf) setActivePath(firstLeaf);
       })
-      .catch(() => setCatalog([]));
+      .catch(() => setCatalog([]))
+      .finally(() => setCatalogLoaded(true));
   }, [taskId]);
 
   useEffect(() => {
     if (!activePath) return;
     setLoading(true);
     api.get<{ content: string }>(`/api/wiki/tasks/${taskId}/doc?path=${encodeURIComponent(activePath)}&lang=${lang}`)
-      .then(d => setContent(d.content))
-      .catch(() => setContent(null))
+      .then(d => { setContent(d.content); setDocError(null); })
+      .catch(err => {
+        // 文档缺失是「生成没写进去」的典型表现（目录里有、知识库里没有），
+        // 必须把原因显示出来，否则用户只看到内容区闪一下就空
+        setContent(null);
+        setDocError(err instanceof Error ? err.message : "文档加载失败");
+      })
       .finally(() => setLoading(false));
   }, [activePath, taskId, lang]);
 
@@ -169,6 +180,23 @@ export default function WikiViewerPage() {
                   <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
                   {updating ? "更新中..." : "检查修正"}
                 </button>
+                <button
+                  disabled={regenerating}
+                  onClick={async () => {
+                    setRegenerating(true);
+                    try {
+                      const msg = await retryMissingDocuments(taskId, task.projectName);
+                      if (msg) alert(msg);
+                    } catch (err) {
+                      alert("补齐失败：" + (err instanceof Error ? err.message : "未知错误"));
+                    } finally { setRegenerating(false); }
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors disabled:opacity-50 shrink-0"
+                  title="只补齐缺失的文档：不重跑已有文档、不重新生成目录、不重新下载源码"
+                >
+                  <RefreshCw className={cn("h-3 w-3", regenerating && "animate-spin")} />
+                  {regenerating ? "处理中..." : "补齐缺失文档"}
+                </button>
                 <select
                   value={task.visibility}
                   onChange={async (e) => {
@@ -200,7 +228,12 @@ export default function WikiViewerPage() {
         </div>
         {/* Catalog tree */}
         <div className="flex-1 overflow-y-auto p-3">
-          {catalog.length > 0 ? renderTree(catalog) : (
+          {catalog.length > 0 ? renderTree(catalog) : catalogLoaded ? (
+            <div className="text-center text-sm text-faint py-8 px-3">
+              <BookOpen className="h-5 w-5 mx-auto mb-2 text-zinc-300" />
+              该项目没有可用目录（生成可能未完成）
+            </div>
+          ) : (
             <div className="text-center text-sm text-faint py-8">
               <Loader2 className="h-5 w-5 mx-auto mb-2 animate-spin" />
               加载目录...
@@ -227,6 +260,20 @@ export default function WikiViewerPage() {
               </div>
             ) : content ? (
               <MarkdownRenderer content={content} />
+            ) : docError ? (
+              <WikiDocRecovery
+                taskId={taskId}
+                projectName={task?.projectName ?? ""}
+                docPath={activePath}
+                onRecovered={() => {
+                  // 恢复成功后重新拉这篇文档
+                  setDocError(null);
+                  setActivePath(p => p);
+                  api.get<{ content: string }>(`/api/wiki/tasks/${taskId}/doc?path=${encodeURIComponent(activePath)}&lang=${lang}`)
+                    .then(d => setContent(d.content))
+                    .catch(() => {});
+                }}
+              />
             ) : (
               <div className="text-center py-20 text-faint">
                 <BookOpen className="h-10 w-10 mx-auto mb-3 text-zinc-300" />

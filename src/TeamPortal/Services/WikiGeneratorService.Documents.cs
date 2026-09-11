@@ -13,9 +13,18 @@ public partial class WikiGeneratorService
     //  Document Generation
     // ════════════════════════════════════════
 
+    /// <summary>目录里可安全写入的叶节点（= 应当存在的文档集）。</summary>
+    private List<CatalogItem> SafeLeaves() =>
+        FlattenCatalog(ParseCatalog())
+            .Where(i => i.Children is null or { Count: 0 })
+            .Where(i => IsSafeCatalogPath(i.Path))
+            .ToList();
+
     private async Task GenerateAllDocuments()
     {
-        var leaves = FlattenCatalog(ParseCatalog()).Where(i => i.Children is null or { Count: 0 }).ToList();
+        // 只处理安全路径：目录可能来自请求方的 customCatalogJson，含 ../ 的项 ToolWriteDoc 会拒绝，
+        // 生成它纯属浪费 AI 调用（复审阶段也是同样过滤）
+        var leaves = SafeLeaves();
         _logger.LogInformation("Generating {Count} documents for {Project}", leaves.Count, _projectName);
 
         var done = 0;
@@ -26,7 +35,7 @@ public partial class WikiGeneratorService
             await semaphore.WaitAsync();
             try
             {
-                await GenerateDocument(item);
+                await GenerateDocumentVerified(item);
                 // Interlocked：文档是并行的，进度计数必须原子（也刻意不写库，见 WikiProgressTracker）
                 var finished = Interlocked.Increment(ref done);
                 _progress.Set(_currentTaskId, "documents", finished, leaves.Count, item.Title);
@@ -36,6 +45,43 @@ public partial class WikiGeneratorService
 
         await Task.WhenAll(tasks);
     }
+
+    /// <summary>
+    /// 生成一篇文档并**校验它真的落盘了**。
+    ///
+    /// 为什么必须校验：AI 有可能只回一段文本而不调用 write_doc（迭代耗尽、模型跑偏、被截断），
+    /// 此时 CallDeepSeekWithTools 正常返回、不抛异常，文档就"静默缺失"——任务照样算完成，
+    /// 表现为「目录能点开但文档 404、知识库里也找不到」。所以这里核对文件，缺失就补一次
+    /// 明确要求写文件的请求。
+    /// </summary>
+    private async Task GenerateDocumentVerified(CatalogItem item)
+    {
+        await GenerateDocument(item);
+        if (DocumentExists(item)) return;
+
+        _logger.LogWarning("Document not written by AI, retrying once: {Path}", item.Path);
+        await GenerateDocument(item, emphasizeWrite: true);
+        if (!DocumentExists(item))
+            _logger.LogError("Document still missing after retry: {Path}", item.Path);
+    }
+
+    /// <summary>该目录项对应的知识库相对路径（唯一拼法，生成/校验/恢复都用它）。</summary>
+    private string RelativeDocPath(CatalogItem item) =>
+        $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
+
+    /// <summary>该目录项对应的知识库文件是否已存在。</summary>
+    private bool DocumentExists(CatalogItem item)
+    {
+        if (!IsSafeCatalogPath(item.Path)) return false;
+        return _knowledge.FileExists(RelativeDocPath(item));
+    }
+
+    /// <summary>本次生成结束后仍缺失的文档路径（供上游据此判定成功/失败）。</summary>
+    private List<string> MissingDocuments() => FindMissingDocuments(SafeLeaves(), DocumentExists);
+
+    /// <summary>纯函数便于单测：挑出尚未落盘的目录项。</summary>
+    internal static List<string> FindMissingDocuments(IEnumerable<CatalogItem> leaves, Func<CatalogItem, bool> exists) =>
+        leaves.Where(i => !exists(i)).Select(i => i.Path).ToList();
 
     /// <summary>Review and fix all generated documents — mermaid syntax, markdown issues, etc.</summary>
     private async Task ReviewAllDocuments()
@@ -159,7 +205,7 @@ public partial class WikiGeneratorService
         }
     }
 
-    private async Task GenerateDocument(CatalogItem item)
+    private async Task GenerateDocument(CatalogItem item, bool emphasizeWrite = false)
     {
         var docPath = $"{item.Path}";
         var docTitle = item.Title;
@@ -210,6 +256,7 @@ public partial class WikiGeneratorService
 3. 基于代码撰写完整文档
 4. **重要**: 在文档中提及源码文件时，使用文件引用链接格式
 5. 用 write_doc(path: ""{docPath}"", content: <你的 Markdown 文档>) 写入
+{(emphasizeWrite ? "\n\n注意：上一次生成没有调用 write_doc，文档并未保存。这一次必须真正调用 write_doc 工具写入文件，不要只在回复里输出内容。" : "")}
 
 请开始撰写。";
 
