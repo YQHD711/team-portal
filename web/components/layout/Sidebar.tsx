@@ -22,7 +22,7 @@ const baseGroups: NavGroup[] = [
   {
     heading: "资源",
     items: [
-      { href: "/flightlog", label: "飞行日志", icon: TrendingUp },
+      { href: "/flightlog", label: "飞行日志 / 固件", icon: TrendingUp },
       { href: "/webtools", label: "日志分析", icon: Activity },
       { href: "/wiki", label: "Wiki 文档", icon: GitBranch },
     ],

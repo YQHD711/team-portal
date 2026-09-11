@@ -186,6 +186,24 @@ DELETE /api/flightlogs/{filename}         → 删除（AdminOnly，硬删 + 审�
 GET/PUT /api/flightlogs/{filename}/meta   → 侧车元数据 JSON
 ```
 
+### 固件下载（ArduPilot / PX4 代理）
+
+前端在 `/flightlog` 的「固件下载」Tab 内。服务端只接受白名单路径段（source/vehicle/version/board/asset），
+下载 URL 一律由上游目录数据推导并在目录中回查确认，因此不存在任意 URL/目录穿越面。
+
+```
+GET    /api/firmware/sources              → 来源列表（含 ArduPilot 机型白名单）
+GET    /api/firmware/versions             → 版本目录（ArduPilot channels/历史版本、PX4 Release tag）
+GET    /api/firmware/boards               → 飞控板目录（按 source/vehicle/version）
+GET    /api/firmware/assets               → 该板子的可刷写镜像（apj/abin/hex/elf、px4）
+GET    /api/firmware/download             → 代理下载（先落盘缓存 data/firmware 再发文件，支持 Range）
+GET    /api/firmware/cache                → 缓存清单（StaffOnly）
+DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计）
+```
+
+配置：`Firmware:CacheDir`（默认 `../../data/firmware`）、`Firmware:MaxBytes`（单文件上限，默认 64MB）、
+`Firmware:CatalogTtlMinutes`（目录内存缓存 TTL，默认 30 分钟）、`Firmware:DownloadTimeoutSeconds`（默认 300）。
+
 ### AI
 
 ```
