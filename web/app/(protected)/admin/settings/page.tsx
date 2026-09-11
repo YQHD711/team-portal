@@ -207,20 +207,35 @@ export default function SettingsPage() {
                 <div className="divide-y divide-border">
                   {items.map(s => {
                     const isSecret = s.key.includes("Key") || s.key.includes("Secret") || s.key.includes("Sign");
+                    // 提示词是长文本，单行输入框没法编辑
+                    const isLongText = /prompt/i.test(s.key);
                     return (
                       <div key={s.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 hover:bg-surface-hover/50">
                         <div className="flex-1 min-w-[220px]">
                           <div className="text-sm font-medium">{s.description}</div>
                           <div className="text-xs text-muted font-mono mt-0.5">{s.key}</div>
                         </div>
-                        <input
-                          type={isSecret ? "password" : "text"}
-                          value={s.value}
-                          onChange={e => updateValue(cat, s.key, e.target.value)}
-                          // 模型名之类的字段：给常用名建议但仍可自由输入（模型名由上游决定，不该写死）
-                          list={/model/i.test(s.key) ? MODEL_SUGGESTIONS_ID : undefined}
-                          className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        />
+                        {isLongText ? (
+                          <textarea
+                            aria-label={s.key}
+                            value={s.value}
+                            onChange={e => updateValue(cat, s.key, e.target.value)}
+                            rows={8}
+                            spellCheck={false}
+                            placeholder="留空 = 使用内置默认提示词"
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          />
+                        ) : (
+                          <input
+                            type={isSecret ? "password" : "text"}
+                            aria-label={s.key}
+                            value={s.value}
+                            onChange={e => updateValue(cat, s.key, e.target.value)}
+                            // 模型名之类的字段：给常用名建议但仍可自由输入（模型名由上游决定，不该写死）
+                            list={/model/i.test(s.key) ? MODEL_SUGGESTIONS_ID : undefined}
+                            className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          />
+                        )}
                       </div>
                     );
                   })}

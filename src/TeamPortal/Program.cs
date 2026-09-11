@@ -259,42 +259,27 @@ using (var scope = app.Services.CreateScope())
 
 // ── Middleware pipeline ──
 app.UseTeamPortalExceptionHandler();
-app.UseRequestLogging();
 
-// Forwarded Headers：只信任显式配置的代理网段，默认不信任任何代理（直接模式）。
-// 未配置时忽略所有 X-Forwarded-* 头，防止攻击者伪造 X-Forwarded-For 绕过
-// 基于 RemoteIpAddress 的限流/审计。部署在 nginx/docker 之后时配置环境变量，如：
-//   ForwardedHeaders__KnownNetworks=172.16.0.0/12;127.0.0.1
-// 格式：分号分隔的 CIDR 或单 IP；KnownProxies 为分号分隔的单 IP（可选）。
-var knownNetworksCfg = builder.Configuration["ForwardedHeaders:KnownNetworks"];
-var knownProxiesCfg = builder.Configuration["ForwardedHeaders:KnownProxies"];
-var useForwardedHeaders = !string.IsNullOrWhiteSpace(knownNetworksCfg) || !string.IsNullOrWhiteSpace(knownProxiesCfg);
-if (useForwardedHeaders)
+// Forwarded Headers：必须在其它中间件之前 —— 限流按 RemoteIpAddress 分桶、审计按它记 IP，
+// 晚注册会让它们都拿到代理容器 IP（所有用户共用同一个限流桶）。
+// 只信任显式配置的代理网段（见 ForwardedHeadersSetup 的说明）；未配置时不注册该中间件。
+var forwarded = ForwardedHeadersSetup.Create(
+    builder.Configuration["ForwardedHeaders:KnownNetworks"],
+    builder.Configuration["ForwardedHeaders:KnownProxies"]);
+if (forwarded is not null)
 {
-    // 配置了可信代理网段时才处理 X-Forwarded-* 头（部署在 nginx/docker 之后时设置，如：
-    //   ForwardedHeaders__KnownNetworks=172.16.0.0/12;127.0.0.1
-    // 格式：分号分隔的 CIDR 或单 IP；KnownProxies 为分号分隔的单 IP（可选）。）
-    // 注意：KnownProxies 与 KnownIPNetworks 为空时中间件会信任所有代理（伪造 XFF 可绕过
-    // 基于 RemoteIpAddress 的限流），因此未配置时绝不注册该中间件。
-    var fho = new ForwardedHeadersOptions
-    {
-        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-    };
-    foreach (var entry in (knownNetworksCfg ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-    {
-        var parts = entry.Split('/');
-        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out var prefix))
-            fho.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(ip, prefix));
-        else if (IPAddress.TryParse(entry, out var single))
-            fho.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-                single, single.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? 128 : 32));
-    }
-    foreach (var proxy in (knownProxiesCfg ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-    {
-        if (IPAddress.TryParse(proxy, out var pip)) fho.KnownProxies.Add(pip);
-    }
-    app.UseForwardedHeaders(fho);
+    app.UseForwardedHeaders(forwarded);
 }
+else if (!app.Environment.IsDevelopment())
+{
+    // 直连（无代理）时这是正常状态；但在反代后忘了配置会表现为「所有审计 IP 都是同一个」，
+    // 属于排查成本很高的静默故障，所以启动就提示。
+    app.Logger.LogWarning(
+        "未配置 ForwardedHeaders:KnownNetworks / KnownProxies：审计日志与登录限流将使用直连对端 IP。" +
+        "部署在 nginx / docker 反向代理之后时请设置 ForwardedHeaders__KnownNetworks（如 172.16.0.0/12;10.0.0.0/8;127.0.0.1）。");
+}
+
+app.UseRequestLogging();
 
 if (!app.Environment.IsDevelopment())
 {
