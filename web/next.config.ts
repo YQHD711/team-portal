@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
     // 默认 proxyClientMaxBodySize=10MB + serverActions 默认 1MB 都会 reset 超过限制的连接
     // 与后端 Kestrel MaxRequestBodySize / Settings Files:MaxUploadMB 三处同步(均 1GB)
     proxyClientMaxBodySize: "1gb",
+    // 反代 /api/* 默认 30s 超时（next/dist/server/lib/router-utils/proxy-request.js:
+    // `proxyTimeout || 30000`），慢速固件下载会被掐成 socket hang up，前端只看到 500
+    // Internal Server Error（与后端返回的 502 无关）。超时由后端自己治理
+    // （固件下载 Firmware:DownloadTimeoutSeconds 默认 300s，AI 另有各自上限），
+    // 这里放宽到 30 分钟。注意 schema 只接受数字：填 0 会因 `|| 30000` 回落成 30s。
+    proxyTimeout: 30 * 60 * 1000,
     serverActions: {
       bodySizeLimit: "1gb",
     },

@@ -27,14 +27,12 @@ public class FirmwareCacheServiceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private FirmwareCacheService Build(StubHttpHandler handler, long maxBytes = 1_000_000)
+    private FirmwareCacheService Build(StubHttpHandler handler, long? maxBytes = 1_000_000)
     {
+        var settings = new Dictionary<string, string?> { ["Firmware:CacheDir"] = _dir };
+        if (maxBytes is not null) settings["Firmware:MaxBytes"] = maxBytes.Value.ToString();
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Firmware:CacheDir"] = _dir,
-                ["Firmware:MaxBytes"] = maxBytes.ToString(),
-            })
+            .AddInMemoryCollection(settings)
             .Build();
 
         var conn = new SqliteConnection("Data Source=:memory:");
@@ -121,6 +119,16 @@ public class FirmwareCacheServiceTests : IDisposable
         Assert.Null(await svc.EnsureAsync(Target()));
         Assert.Empty(Directory.GetFiles(_dir, "*.apj", SearchOption.AllDirectories));
         Assert.Empty(Directory.GetFiles(_dir, "*.part", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void DownloadBudget_DefaultsToFiveMinutes()
+    {
+        // 不传 MaxBytes → 走默认 64MB 上限与 5 分钟下载预算
+        var svc = Build(BytesHandler(1), maxBytes: null);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), svc.DownloadTimeout);
+        Assert.Equal(64L * 1024 * 1024, svc.MaxBytes);
     }
 
     [Fact]
