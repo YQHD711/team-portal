@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { GitBranch, Upload, Loader2, Languages, Globe, Building2, Lock } from "lucide-react";
 import { ModelInput } from "@/components/ui/ModelInput";
+import { retryMissingDocuments } from "@/lib/wikiRetry";
 import { TaskQueue, isActiveTask, type WikiTaskInfo } from "@/components/wiki/TaskQueue";
 
 const ACTIVE_POLL_MS = 5000; // 有进行中的任务时自动刷新；全部结束后停表
@@ -34,6 +35,17 @@ export default function WikiImportPage() {
 
   const fetchTasks = () => api.get<WikiTaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
   const deleteTask = async (id: string) => { if (confirm("确定删除？")) { await api.delete(`/api/wiki/tasks/${id}`); fetchTasks(); } };
+  // 补齐缺失文档：先预览要补几篇再确认（不重跑已有文档/目录/源码，费用只与缺失篇数相关）
+  const regenerateTask = async (id: string) => {
+    const name = tasks.find(t => t.id === id)?.projectName ?? "该项目";
+    try {
+      const msg = await retryMissingDocuments(id, name);
+      if (msg) alert(msg);
+      fetchTasks();
+    } catch (err) {
+      alert("补齐失败：" + (err instanceof Error ? err.message : "未知错误"));
+    }
+  };
   const fetchModels = () => {
     api.get<{ availableModels?: string[]; contentModel?: string }>("/api/wiki/settings")
       .then(s => {
@@ -170,7 +182,7 @@ export default function WikiImportPage() {
         {message && <div className={`text-sm p-2.5 rounded-lg ${message.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{message}</div>}
       </form>
 
-      <TaskQueue tasks={tasks} isStaff={isStaff} onRefresh={fetchTasks} onDelete={deleteTask} />
+      <TaskQueue tasks={tasks} isStaff={isStaff} onRefresh={fetchTasks} onDelete={deleteTask} onRegenerate={regenerateTask} />
     </div>
   );
 }

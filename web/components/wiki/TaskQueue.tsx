@@ -142,12 +142,13 @@ function TaskProgress({ task }: { task: WikiTaskInfo }) {
 }
 
 export function TaskQueue({
-  tasks, isStaff, onRefresh, onDelete,
+  tasks, isStaff, onRefresh, onDelete, onRegenerate,
 }: {
   tasks: WikiTaskInfo[];
   isStaff: boolean;
   onRefresh: () => void;
   onDelete: (id: string) => void;
+  onRegenerate?: (id: string) => void;
 }) {
   return (
     <div>
@@ -179,6 +180,16 @@ export function TaskQueue({
                   <div className="text-xs text-muted">{statusLabel(t)}</div>
                 </div>
                 <div className="text-xs text-faint shrink-0">{new Date(t.createdAt).toLocaleString("zh-CN")}</div>
+                {/* 文档缺失/失败时给一条恢复入口：只补缺失的，不重跑已有文档 */}
+                {onRegenerate && !isActiveTask(t.status) && (t.status === "failed" || t.errorMessage) && (
+                  <button
+                    onClick={() => onRegenerate(t.id)}
+                    className="shrink-0 rounded-lg px-2 py-1 text-xs bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100"
+                    title="只补齐缺失的文档：不重跑已有文档、不重新生成目录、不重新下载源码"
+                  >
+                    补齐缺失文档
+                  </button>
+                )}
                 {isStaff && (
                   <button
                     onClick={() => onDelete(t.id)}
