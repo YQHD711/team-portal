@@ -111,6 +111,11 @@ public partial class FirmwareCatalogService
     private async Task<IReadOnlyList<FirmwareListingEntry>?> FetchListingAsync(string url)
     {
         var html = await FetchTextAsync(url);
-        return html is null ? null : FirmwareCatalogParser.ParseListing(html);
+        if (html is null) return null;
+        var entries = FirmwareCatalogParser.ParseListing(html);
+        // 上游改了目录页标记时会「解析成功但为空」——这种静默降级必须留痕，否则只表现为"这个机型没有固件"
+        if (entries.Count == 0)
+            _log.Warn("firmware", $"Listing {url} parsed to 0 entries, upstream markup may have changed");
+        return entries;
     }
 }

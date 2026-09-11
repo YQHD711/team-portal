@@ -1,12 +1,12 @@
 /** API client for Team Portal backend. All HTTP requests go through here. */
 
-const API_BASE = ""; // Relative URL — proxied through Next.js rewrites
+import { API_BASE, isBrowser } from "./api-base";
+import { downloadWithProgress, type DownloadOptions, type DownloadProgress } from "./api-download";
+
+export type { DownloadOptions, DownloadProgress };
+
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const UPLOAD_TIMEOUT = 1800000; // 30 minutes — 大文件上传(最高1GB)+ Next.js rewrites 转发
-
-function isBrowser() {
-  return typeof window !== "undefined";
-}
 
 type RequestOptions = RequestInit & {
   /** Override request timeout in milliseconds */
@@ -82,37 +82,12 @@ export const api = {
   delete: <T>(endpoint: string, timeoutMs?: number) =>
     request<T>(endpoint, { method: "DELETE", timeoutMs }),
   /**
-   * 带鉴权的二进制下载。<a href> 发不出 Authorization 头，而 JWT 存在 localStorage，
-   * 所以下载必须走 fetch 拿 Blob 再由调用方另存（见 lib/download.ts）。
+   * 带鉴权的流式下载：逐块读响应体并回调进度，最后拼成 Blob 由调用方另存（见 lib/download.ts）。
+   * <a href> 发不出 Authorization 头，而 JWT 存在 localStorage，所以下载必须走 fetch。
+   * 实现放在 lib/api-download.ts（本文件已接近 200 行上限）。
    */
-  download: async (endpoint: string, timeoutMs?: number): Promise<Blob> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
-    const token = isBrowser() ? localStorage.getItem("token") : null;
-    try {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.status === 401 && isBrowser()) {
-        localStorage.removeItem("token");
-        window.location.href = "/auth/login";
-        throw new Error("登录已过期，请重新登录");
-      }
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ detail: `下载失败 (${res.status})` }));
-        throw new Error(error.detail || `HTTP ${res.status}`);
-      }
-      return await res.blob();
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error("下载超时，请检查网络连接");
-      }
-      throw err;
-    }
-  },
+  download: (endpoint: string, options: DownloadOptions = {}): Promise<Blob> =>
+    downloadWithProgress(endpoint, options),
   /**
    * SSE/流式请求：返回原生 Response，由调用方解析流。
    * 注意：timeoutMs 只约束「拿到响应头」这一段，拿到后立即清除定时器 ——
