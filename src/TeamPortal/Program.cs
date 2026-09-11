@@ -152,10 +152,8 @@ builder.Services.AddScoped<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddHttpClient<WikiGeneratorService>();
 builder.Services.AddHttpClient<SystemAgentService>();
-// 固件代理：目录查询走默认弹性策略；实际文件下载自带上限超时（见 FirmwareCacheService）
-builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient<FirmwareCatalogService>();
-builder.Services.AddHttpClient<FirmwareCacheService>();
+// 固件代理（目录查询 + 大文件下载）的注册见 FirmwareServices.AddFirmwareServices
+builder.Services.AddFirmwareServices();
 builder.Services.AddScoped<BaiduNetdiskService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<CertificationService>();
