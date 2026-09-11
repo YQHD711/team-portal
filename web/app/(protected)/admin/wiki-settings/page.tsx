@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Save, RotateCcw } from "lucide-react";
+import { ModelInput } from "@/components/ui/ModelInput";
 
 interface WikiOptions {
   catalogModel: string; contentModel: string; maxOutputTokens: number;
@@ -41,8 +42,8 @@ export default function WikiSettingsPage() {
 
       <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="block text-sm font-medium mb-1">目录生成模型</label><select value={opts.catalogModel} onChange={e => update("catalogModel", e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50"><option value="deepseek-v4-pro">V4 Pro (推荐)</option><option value="deepseek-v4-flash">V4 Flash (省钱)</option></select></div>
-          <div><label className="block text-sm font-medium mb-1">文档生成模型</label><select value={opts.contentModel} onChange={e => update("contentModel", e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50"><option value="deepseek-v4-pro">V4 Pro (推荐)</option><option value="deepseek-v4-flash">V4 Flash (省钱)</option></select></div>
+          <div><label className="block text-sm font-medium mb-1">目录生成模型</label><ModelInput value={opts.catalogModel} onChange={v => update("catalogModel", v)} label="目录生成模型" /></div>
+          <div><label className="block text-sm font-medium mb-1">文档生成模型</label><ModelInput value={opts.contentModel} onChange={v => update("contentModel", v)} label="文档生成模型" /></div>
           <div><label className="block text-sm font-medium mb-1">最大 Token 数</label><input type="number" value={opts.maxOutputTokens} onChange={e => update("maxOutputTokens", Number(e.target.value))} min={1024} max={131072} step={1024} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50" /></div>
           <div><label className="block text-sm font-medium mb-1">并行数</label><input type="number" value={opts.parallelCount} onChange={e => update("parallelCount", Number(e.target.value))} min={1} max={10} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50" /></div>
           <div><label className="block text-sm font-medium mb-1">重试次数</label><input type="number" value={opts.maxRetryAttempts} onChange={e => update("maxRetryAttempts", Number(e.target.value))} min={0} max={5} className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50" /></div>
@@ -65,10 +66,10 @@ export default function WikiSettingsPage() {
 
       <div className="text-xs text-faint space-y-1">
         <p><strong>自动调整:</strong> 模型、目录树深度、并行数、超时、推理模式—根据项目复杂度自动调整（简单项目用 Flash 省钱提速，复杂项目用 Pro + 推理模式）。</p>
-        <p><strong>模型:</strong> V4 Pro 最佳质量，V4 Flash 更省钱（简单项目自动用 Flash）。</p>
+        <p><strong>模型:</strong> 两个模型名都可自由填写，常用名（V4 Pro / V4 Flash）仅作建议；对接自建或兼容端点时填实际模型名即可。</p>
         <p><strong>阶段超时:</strong> 每个阶段（目录生成/单文档）的超时。简单项目 30-60 分钟，复杂 120-180 分钟。</p>
         <p><strong>推理模式:</strong> thinking · non-thinking · thinking_max（复杂项目自动开启）。</p>
-        <p><strong>文档审查:</strong> 生成完成后 AI 自动检查修正 Mermaid 语法、Markdown 格式等问题。完成后可在 Wiki 查看页点击"检查修正"手动触发。</p>
+        <p><strong>文档审查:</strong> 生成完成后 AI 自动检查修正 Mermaid 语法、Markdown 格式等问题。完成后可在 Wiki 查看页点击「检查修正」手动触发。</p>
       </div>
     </div>
   );

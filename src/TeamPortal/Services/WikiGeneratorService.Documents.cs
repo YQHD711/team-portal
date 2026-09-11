@@ -15,18 +15,22 @@ public partial class WikiGeneratorService
 
     private async Task GenerateAllDocuments()
     {
-        List<CatalogItem> items;
-        try { items = JsonSerializer.Deserialize<List<CatalogItem>>(_catalogJson, JsonOpts) ?? new(); }
-        catch { items = new(); }
-
-        var leaves = FlattenCatalog(items).Where(i => i.Children is null or { Count: 0 }).ToList();
+        var leaves = FlattenCatalog(ParseCatalog()).Where(i => i.Children is null or { Count: 0 }).ToList();
         _logger.LogInformation("Generating {Count} documents for {Project}", leaves.Count, _projectName);
 
+        var done = 0;
+        _progress.Set(_currentTaskId, "documents", 0, leaves.Count, $"开始生成 {leaves.Count} 篇文档");
         using var semaphore = new SemaphoreSlim(_options.ParallelCount);
         var tasks = leaves.Select(async item =>
         {
             await semaphore.WaitAsync();
-            try { await GenerateDocument(item); }
+            try
+            {
+                await GenerateDocument(item);
+                // Interlocked：文档是并行的，进度计数必须原子（也刻意不写库，见 WikiProgressTracker）
+                var finished = Interlocked.Increment(ref done);
+                _progress.Set(_currentTaskId, "documents", finished, leaves.Count, item.Title);
+            }
             finally { semaphore.Release(); }
         });
 
@@ -36,17 +40,16 @@ public partial class WikiGeneratorService
     /// <summary>Review and fix all generated documents — mermaid syntax, markdown issues, etc.</summary>
     private async Task ReviewAllDocuments()
     {
-        List<CatalogItem> items;
-        try { items = JsonSerializer.Deserialize<List<CatalogItem>>(_catalogJson, JsonOpts) ?? new(); }
-        catch { return; }
-
-        var leaves = FlattenCatalog(items).Where(i => i.Children is null or { Count: 0 }).ToList();
+        var leaves = FlattenCatalog(ParseCatalog()).Where(i => i.Children is null or { Count: 0 }).ToList();
         _logger.LogInformation("Reviewing {Count} documents for {Project}", leaves.Count, _projectName);
 
+        _progress.Set(_currentTaskId, "reviewing", 0, leaves.Count, "正在检查修正文档格式");
+        var reviewedCount = 0;
         foreach (var item in leaves)
         {
             try
             {
+                _progress.Set(_currentTaskId, "reviewing", reviewedCount, leaves.Count, item.Title);
                 // 目录清单可来自请求方的 customCatalogJson,含 ../ 的项直接跳过(否则可覆盖他部门文档)
                 if (!IsSafeCatalogPath(item.Path))
                 {
@@ -114,6 +117,12 @@ public partial class WikiGeneratorService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Review failed for {Path}", item.Path);
+            }
+            finally
+            {
+                // continue 也会走这里：跳过/失败的条目同样推进计数，进度条才单调
+                reviewedCount++;
+                _progress.Set(_currentTaskId, "reviewing", reviewedCount, leaves.Count, item.Title);
             }
         }
     }

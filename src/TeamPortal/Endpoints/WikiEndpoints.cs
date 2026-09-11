@@ -85,7 +85,7 @@ public static class WikiEndpoints
             return Results.Ok(new { task.Id, task.Status });
         });
 
-        wiki.MapGet("/tasks", async (ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        wiki.MapGet("/tasks", async (ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, WikiProgressTracker progress) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
@@ -95,17 +95,21 @@ public static class WikiEndpoints
                 (t.Visibility == "department" && (role == "admin" || dept == t.TargetFolder)) ||
                 (t.Visibility == "personal" && (role == "admin" || t.UserId == uid))
             );
-            return Results.Ok(filtered.Select(t => new { t.Id, t.Type, t.ProjectName, t.Status, t.ErrorMessage, t.Visibility, t.TargetFolder, t.CreatedAt, t.CompletedAt }));
+            return Results.Ok(filtered.Select(t => new
+            {
+                t.Id, t.Type, t.ProjectName, t.Status, t.ErrorMessage, t.Visibility, t.TargetFolder, t.CreatedAt, t.CompletedAt,
+                Progress = progress.Get(t.Id)
+            }));
         });
 
-        wiki.MapGet("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator) =>
+        wiki.MapGet("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, WikiProgressTracker progress) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
             var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
-            return Results.Ok(new { task.Id, task.Type, task.ProjectName, task.Status, task.ErrorMessage, task.Visibility, task.TargetFolder, task.WorkspacePath, task.CatalogJson, task.CreatedAt, task.CompletedAt });
+            return Results.Ok(new { task.Id, task.Type, task.ProjectName, task.Status, task.ErrorMessage, task.Visibility, task.TargetFolder, task.WorkspacePath, task.CatalogJson, task.CreatedAt, task.CompletedAt, Progress = progress.Get(task.Id) });
         });
 
         // Delete a wiki task

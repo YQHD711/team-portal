@@ -23,6 +23,7 @@ public partial class WikiGeneratorService
     private readonly IConfiguration _config;
     private readonly HttpClient _http;
     private readonly ILogger<WikiGeneratorService> _logger;
+    private readonly WikiProgressTracker _progress;
     private WikiGeneratorOptions _options;
     private string _workspacePath = "";
     private string _projectName = "";
@@ -44,9 +45,9 @@ public partial class WikiGeneratorService
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
-    public WikiGeneratorService(AppDbContext db, KnowledgeService knowledge, IConfiguration config, HttpClient http, ILogger<WikiGeneratorService> logger)
+    public WikiGeneratorService(AppDbContext db, KnowledgeService knowledge, IConfiguration config, HttpClient http, ILogger<WikiGeneratorService> logger, WikiProgressTracker progress)
     {
-        _db = db; _knowledge = knowledge; _config = config; _http = http; _logger = logger;
+        _db = db; _knowledge = knowledge; _config = config; _http = http; _logger = logger; _progress = progress;
         _options = WikiSettingsStore.Load().Options;
     }
 
@@ -149,6 +150,7 @@ public partial class WikiGeneratorService
 
             // Step 1: Prepare workspace
             task.Status = "preparing"; await _db.SaveChangesAsync();
+            _progress.Set(task.Id, "preparing", 0, 0, "准备工作区");
             _workspacePath = await PrepareWorkspace(task);
             task.WorkspacePath = _workspacePath; await _db.SaveChangesAsync();
 
@@ -156,12 +158,14 @@ public partial class WikiGeneratorService
             var complexity = DetectProjectComplexity(_workspacePath);
             _complexityScore = complexity.Score;
             AutoAdjustParameters(complexity);
+            _progress.Set(task.Id, "preparing", 0, 0, $"扫描到 {complexity.FileCount} 个文件 / 约 {complexity.LinesOfCode} 行");
             _logger.LogInformation("Wiki complexity: {Score}/5 ({FileCount} files, {DirCount} dirs, ~{Loc} LOC). model={Model}, timeout={Timeout}min",
                 complexity.Score, complexity.FileCount, complexity.DirCount, complexity.LinesOfCode,
                 _options.ContentModel, _options.DocumentGenerationTimeoutMinutes);
 
             // Step 2: Generate catalog
             task.Status = "catalog"; await _db.SaveChangesAsync();
+            _progress.Set(task.Id, "catalog", 0, 0, "AI 正在规划目录结构");
             _catalogJson = await GenerateCatalog();
             task.CatalogJson = _catalogJson; await _db.SaveChangesAsync();
 
@@ -176,6 +180,8 @@ public partial class WikiGeneratorService
             // Done
             task.Status = "completed";
             task.CompletedAt = DateTime.UtcNow;
+            var total = LeafCount();
+            _progress.Set(task.Id, "completed", total, total);
             await _db.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -183,9 +189,21 @@ public partial class WikiGeneratorService
             _logger.LogError(ex, "Wiki task {TaskId} failed", taskId);
             task.Status = "failed";
             task.ErrorMessage = ex.Message;
+            var current = _progress.Get(task.Id);
+            _progress.Set(task.Id, "failed", current?.Done ?? 0, current?.Total ?? 0, ex.Message);
             await _db.SaveChangesAsync();
         }
     }
+
+    /// <summary>解析当前目录 JSON；失败返回空表，避免调用方到处 try/catch。</summary>
+    private List<CatalogItem> ParseCatalog()
+    {
+        try { return JsonSerializer.Deserialize<List<CatalogItem>>(_catalogJson, JsonOpts) ?? []; }
+        catch { return []; }
+    }
+
+    /// <summary>目录树叶节点数（= 要生成的文档数）。</summary>
+    private int LeafCount() => FlattenCatalog(ParseCatalog()).Count(i => i.Children is null or { Count: 0 });
 }
 
 public class ToolDef

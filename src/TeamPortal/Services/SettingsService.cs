@@ -112,7 +112,7 @@ public class SettingsService
             new() { Key = "Auth:OpenRegistration", Value = "false", Category = "认证安全", Description = "是否开放自助注册（false 时仅邀请码可注册）" },
             new() { Key = "AI:DeepSeekKey", Value = "", Category = "AI 服务", Description = "DeepSeek API Key" },
             new() { Key = "AI:DeepSeekBaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "DeepSeek API 地址" },
-            new() { Key = "AI:ModelName", Value = "deepseek-v4-pro", Category = "AI 服务", Description = "AI 模型名称（deepseek-v4-pro / deepseek-v4-flash）" },
+            new() { Key = "AI:ModelName", Value = "deepseek-v4-pro", Category = "AI 服务", Description = "对话/分析模型名称（可填任意模型名，如 deepseek-v4-pro、deepseek-v4-flash、deepseek-chat）" },
             new() { Key = "AI:MaxIterations", Value = "25", Category = "AI 服务", Description = "AI Agent 最大迭代次数" },
             new() { Key = "AI:Temperature", Value = "0.7", Category = "AI 服务", Description = "AI 温度参数 (0-1)" },
             new() { Key = "AI:AgentTimeoutMinutes", Value = "20", Category = "AI 服务", Description = "AI Agent 单次任务总超时（分钟）" },
@@ -140,11 +140,33 @@ public class SettingsService
             new() { Key = "Inventory:LowStockThreshold", Value = "5", Category = "库存", Description = "低库存阈值：数量 < 此值即视为不足，同时驱动仪表盘提醒、库存页高亮与库存预警通知（前端经 GET /api/inventory/meta 取值）" },
         };
 
-        var existingKeys = await db.SystemSettings.Select(s => s.Key).ToListAsync();
-        var toAdd = defaults.Where(d => !existingKeys.Contains(d.Key)).ToList();
+        var existing = await db.SystemSettings.ToListAsync();
+        var byKey = existing.ToDictionary(s => s.Key);
+        var toAdd = new List<SystemSetting>();
+        var changed = false;
+        foreach (var d in defaults)
+        {
+            if (!byKey.TryGetValue(d.Key, out var row))
+            {
+                toAdd.Add(d);
+                continue;
+            }
+            // 描述/分组属于代码维护的文档（界面只能改 value），改动文案后老库也要跟着更新，
+            // 否则改了说明只在全新库上生效 —— 线上库永远看不到新文案。
+            if (row.Description != d.Description || row.Category != d.Category)
+            {
+                row.Description = d.Description;
+                row.Category = d.Category;
+                changed = true;
+            }
+        }
         if (toAdd.Count > 0)
         {
             db.SystemSettings.AddRange(toAdd);
+            changed = true;
+        }
+        if (changed)
+        {
             await db.SaveChangesAsync();
             // 预热缓存:LogService 等同步热路径只读缓存不查库,启动后即可拿到真实值
             foreach (var s in toAdd) _cache[s.Key] = s.Value;

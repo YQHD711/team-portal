@@ -3,12 +3,11 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { GitBranch, Upload, Loader2, CheckCircle, XCircle, Clock, RefreshCw, Globe, Building2, Lock, Languages, Trash2 } from "lucide-react";
+import { GitBranch, Upload, Loader2, Languages, Globe, Building2, Lock } from "lucide-react";
+import { ModelInput } from "@/components/ui/ModelInput";
+import { TaskQueue, isActiveTask, type WikiTaskInfo } from "@/components/wiki/TaskQueue";
 
-interface TaskInfo {
-  id: string; type: string; projectName: string; status: string; visibility: string;
-  errorMessage: string | null; createdAt: string; completedAt: string | null;
-}
+const ACTIVE_POLL_MS = 5000; // 有进行中的任务时自动刷新；全部结束后停表
 
 const visOptions = [
   { value: "public", label: "公共", icon: Globe, desc: "全员可见" },
@@ -17,7 +16,7 @@ const visOptions = [
 ];
 
 export default function WikiImportPage() {
-  const [tasks, setTasks] = useState<TaskInfo[]>([]);
+  const [tasks, setTasks] = useState<WikiTaskInfo[]>([]);
   const [tab, setTab] = useState<"git" | "zip" | "translate">("git");
   const [gitUrl, setGitUrl] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -33,7 +32,7 @@ export default function WikiImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const initedRef = useRef(false);
 
-  const fetchTasks = () => api.get<TaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
+  const fetchTasks = () => api.get<WikiTaskInfo[]>("/api/wiki/tasks").then(setTasks).catch(() => {});
   const deleteTask = async (id: string) => { if (confirm("确定删除？")) { await api.delete(`/api/wiki/tasks/${id}`); fetchTasks(); } };
   const fetchModels = () => {
     api.get<{ availableModels?: string[]; contentModel?: string }>("/api/wiki/settings")
@@ -44,7 +43,15 @@ export default function WikiImportPage() {
         }
       }).catch(() => {});
   };
-  useEffect(() => { fetchModels(); }, []);
+  // 首屏必须拉一次任务列表（此前只在提交/手动刷新时拉，打开页面永远显示"暂无任务"）
+  useEffect(() => { fetchTasks(); fetchModels(); }, []);
+
+  // 进行中的任务自动刷新（此前必须手点刷新按钮，进度看起来是"卡住"的）
+  useEffect(() => {
+    if (!tasks.some(t => isActiveTask(t.status))) return;
+    const timer = setInterval(fetchTasks, ACTIVE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [tasks]);
 
   const submitGit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,13 +100,6 @@ export default function WikiImportPage() {
     finally { setSubmitting(false); }
   };
 
-  const statusIcon = (s: string) => {
-    switch (s) { case "completed": return <CheckCircle className="h-4 w-4 text-success" />; case "failed": return <XCircle className="h-4 w-4 text-danger" />; case "pending": return <Clock className="h-4 w-4 text-amber-500" />; default: return <Loader2 className="h-4 w-4 animate-spin text-sky-500" />; }
-  };
-  const statusLabel = (s: string) => {
-    switch (s) { case "completed": return "已完成"; case "failed": return "失败"; case "pending": return "排队中"; case "preparing": return "准备中"; case "cloning": return "克隆仓库"; case "translating": return "翻译中"; case "catalog": return "生成目录"; case "documents": return "生成文档"; default: return s; }
-  };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
@@ -143,11 +143,14 @@ export default function WikiImportPage() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">生成模型（可选，不选则用全局默认）</label>
-          <select value={model} onChange={e => setModel(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-            <option value="">使用全局默认</option>
-            {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <label className="block text-sm font-medium mb-1">生成模型（可选，留空则用全局默认；可填任意模型名）</label>
+          <ModelInput
+            value={model}
+            onChange={setModel}
+            suggestions={availableModels.length ? availableModels : undefined}
+            label="生成模型"
+            placeholder="留空使用全局默认，或填入模型名"
+          />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">
@@ -167,19 +170,7 @@ export default function WikiImportPage() {
         {message && <div className={`text-sm p-2.5 rounded-lg ${message.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{message}</div>}
       </form>
 
-      <div>
-        <div className="flex items-center gap-2 mb-3"><h2 className="font-bold">任务队列</h2><button onClick={fetchTasks} className="p-1 rounded hover:bg-surface-hover"><RefreshCw className="h-4 w-4 text-faint" /></button></div>
-        <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
-          {tasks.length === 0 ? <div className="p-8 text-center text-faint">暂无任务</div> : tasks.map(t => (
-            <div key={t.id} className="p-3 flex items-center gap-3">
-              {statusIcon(t.status)}
-              <div className="flex-1"><div className="font-medium text-sm">{t.projectName} <span className="text-xs text-faint ml-1">({t.visibility === "department" ? "部门" : t.visibility === "personal" ? "个人" : "公共"})</span></div><div className="text-xs text-muted">{statusLabel(t.status)}</div>{t.errorMessage && <div className="text-xs text-danger mt-1">{t.errorMessage}</div>}</div>
-              <div className="text-xs text-faint">{new Date(t.createdAt).toLocaleString("zh-CN")}</div>
-              {isStaff && <button onClick={() => deleteTask(t.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除任务"><Trash2 className="h-3.5 w-3.5" /></button>}
-            </div>
-          ))}
-        </div>
-      </div>
+      <TaskQueue tasks={tasks} isStaff={isStaff} onRefresh={fetchTasks} onDelete={deleteTask} />
     </div>
   );
 }

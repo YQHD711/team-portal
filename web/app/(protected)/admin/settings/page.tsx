@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Save, Server, Shield, Brain, Cloud, Settings2, Loader2, Palette, Check, RotateCcw } from "lucide-react";
 import { useBrand } from "@/lib/brand";
+import { MODEL_SUGGESTIONS } from "@/components/ui/ModelInput";
 
 interface SystemSetting {
   key: string; value: string; category: string; description: string;
@@ -24,6 +25,8 @@ const THEMES = [
   { key: "sky", name: "天青", dot: "linear-gradient(135deg,#0ea5e9,#38bdf8)" },
   { key: "warm", name: "暖橙", dot: "linear-gradient(135deg,#9c4d10,#b25e15)" },
 ];
+
+const MODEL_SUGGESTIONS_ID = "settings-model-suggestions";
 
 export default function SettingsPage() {
   const { refresh } = useBrand();
@@ -214,6 +217,8 @@ export default function SettingsPage() {
                           type={isSecret ? "password" : "text"}
                           value={s.value}
                           onChange={e => updateValue(cat, s.key, e.target.value)}
+                          // 模型名之类的字段：给常用名建议但仍可自由输入（模型名由上游决定，不该写死）
+                          list={/model/i.test(s.key) ? MODEL_SUGGESTIONS_ID : undefined}
                           className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
                         />
                       </div>
@@ -225,6 +230,11 @@ export default function SettingsPage() {
           })}
         </form>
       )}
+
+      {/* 模型名建议（可自由输入，这里只提供候选） */}
+      <datalist id={MODEL_SUGGESTIONS_ID}>
+        {MODEL_SUGGESTIONS.map(m => <option key={m} value={m} />)}
+      </datalist>
 
       {/* System info footer */}
       <div className="rounded-2xl border border-border bg-surface p-5">
