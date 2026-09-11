@@ -113,6 +113,7 @@ public class SettingsService
             new() { Key = "AI:DeepSeekKey", Value = "", Category = "AI 服务", Description = "DeepSeek API Key" },
             new() { Key = "AI:DeepSeekBaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "DeepSeek API 地址" },
             new() { Key = "AI:ModelName", Value = "deepseek-v4-pro", Category = "AI 服务", Description = "对话/分析模型名称（可填任意模型名，如 deepseek-v4-pro、deepseek-v4-flash、deepseek-chat）" },
+            new() { Key = "AI:SystemPrompt", Value = "", Category = "AI 服务", Description = "AI 助手系统提示词（留空用内置默认；内置默认已要求纯文本、不用 Markdown 装饰与 emoji）" },
             new() { Key = "AI:MaxIterations", Value = "25", Category = "AI 服务", Description = "AI Agent 最大迭代次数" },
             new() { Key = "AI:Temperature", Value = "0.7", Category = "AI 服务", Description = "AI 温度参数 (0-1)" },
             new() { Key = "AI:AgentTimeoutMinutes", Value = "20", Category = "AI 服务", Description = "AI Agent 单次任务总超时（分钟）" },

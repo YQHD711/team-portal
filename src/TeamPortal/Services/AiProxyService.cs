@@ -14,37 +14,36 @@ public class AiProxyService
     private readonly SettingsService _settings;
     private readonly KnowledgeSearchService _search;
 
-    private const string SystemPrompt = """
-        你是"雏鹰之翼"航模队的内部AI助手，专门为队员提供技术支持和知识查询服务。
+    /// <summary>
+    /// 内置默认提示词。前端是纯文本渲染（whitespace-pre-wrap），所以这里明确要求模型不要输出
+    /// Markdown 装饰与 emoji —— 否则 **加粗**、## 标题、--- 分割线会原样显示，看起来全是符号。
+    /// 管理员可在「系统设置 → AI 服务 → AI:SystemPrompt」整体替换。
+    /// </summary>
+    internal const string DefaultSystemPrompt = """
+        你是"雏鹰之翼"航模队的内部 AI 助手，为队员提供技术支持和知识查询服务。
 
-        ## 身份定位
-        你是航模队的专属技术顾问，熟悉航模设计、制作、飞行全流程。你的知识涵盖空气动力学、电子工程、材料科学、竞赛规则等多个领域。
+        身份：航模队的技术顾问，熟悉航模设计、制作、飞行全流程，涵盖空气动力学、电子工程、材料科学、竞赛规则等领域。
 
-        ## 核心规则
-        1. 始终优先检索知识库中的内部资料，基于队内文档作答并标注来源
-        2. 若知识库无相关内容，可基于通用知识回答，但必须注明"以下信息来自通用知识，请以队内最新规范为准"
-        3. 回答要精准务实，避免冗长。队员需要能直接操作的指导
-        4. 涉及技术参数、安全规范时必须严谨，不确定的信息要明确说明
-        5. 使用中文，保持专业且亲切的语气，像资深队员在指导新人
+        规则：
+        1. 优先使用知识库中的队内资料作答，并在结尾用「来源：文件名」注明出处
+        2. 知识库没有相关内容时可用通用知识回答，但必须说明「以下信息来自通用知识，请以队内最新规范为准」
+        3. 回答精准务实、避免冗长，让队员能直接照着做
+        4. 技术参数与安全规范必须严谨，不确定的信息要明确说明
+        5. 使用中文，语气专业而亲切，像资深队员在指导新人
 
-        ## 专业领域
-        - 飞行原理：升力、阻力、稳定性、操纵面设计
-        - 结构设计：材料选择、结构强度、重量优化
-        - 动力系统：电机、电调、电池选型与匹配
-        - 飞控系统：调试、参数配置、故障排查
-        - 无线电：遥控器设置、天线布置、信号干扰
-        - 竞赛规则：CUADC、全国赛等赛事规程解读
-        - 安全规范：操作流程、应急处理、设备检查
-        - 工具使用：测量仪器、焊接设备、调试工具
-        - 数据分析：飞行日志解读、性能优化建议
-
-        ## 回答格式
-        - 先给出简洁结论或直接答案
-        - 用分点展开详细说明（便于查阅）
-        - 涉及操作步骤时按顺序编号
-        - 引用知识库文件时标注 📄 来源
-        - 需要特别注意的安全事项用 ⚠️ 标记
+        输出格式（重要，务必遵守）：
+        - 直接输出纯文本，不要任何 Markdown 装饰：不用星号加粗、不用井号做标题、不用横线做分割、不用引用块、不要表格
+        - 不要输出 emoji 或装饰性小图标、符号
+        - 需要分点时用「1. 2. 3.」或「- 」的简单列表，最多一层；能用一两段话讲清楚就不要列表
+        - 先给结论，再给必要的说明
         """;
+
+    /// <summary>取生效的提示词：管理员配置优先，留空则用内置默认。</summary>
+    internal static string SystemPromptOrDefault(string? configured) =>
+        string.IsNullOrWhiteSpace(configured) ? DefaultSystemPrompt : configured.Trim();
+
+    private async Task<string> ResolveSystemPrompt() =>
+        SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
     public AiProxyService(HttpClient http, IConfiguration config, SettingsService settings, KnowledgeSearchService search)
     {
@@ -69,7 +68,7 @@ public class AiProxyService
         var relevant = results.Where(r => r.Score >= topScore * 0.05).Take(5).ToList();
         var context = BuildContext(relevant);
 
-        var messages = new List<object> { new { role = "system", content = SystemPrompt } };
+        var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };
 
         if (history != null && history.Count > 0)
             foreach (var (role, content) in history)
@@ -77,8 +76,8 @@ public class AiProxyService
 
         if (!string.IsNullOrEmpty(context))
         {
-            messages.Add(new { role = "system", content = $@"## 知识库参考资料
-以下是从队内知识库中检索到的相关文档（按相关度排序）。请优先使用这些资料回答问题，**忽略与问题无关的文档**。若所有文档都不相关，请基于通用知识回答并注明。
+            messages.Add(new { role = "system", content = $@"知识库参考资料（按相关度排序）：
+请优先使用这些资料回答；与问题无关的直接忽略；若都不相关则基于通用知识回答并注明。
 
 {context}" });
         }
@@ -117,9 +116,9 @@ public class AiProxyService
         {
             try
             {
-                var messages = new List<object> { new { role = "system", content = SystemPrompt } };
+                var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };
                 var ragPrompt = results.Count > 0
-                    ? $"根据以下参考资料回答问题。\n\n## 参考资料\n{context}\n\n## 问题\n{query}"
+                    ? $"根据以下参考资料回答问题。\n\n参考资料：\n{context}\n\n问题：{query}"
                     : query;
                 messages.Add(new { role = "user", content = ragPrompt });
 
@@ -150,9 +149,10 @@ public class AiProxyService
         return new { sources = results.Select(r => new { r.Path, r.Snippet, r.Score }), answer };
     }
 
-    private static string BuildContext(List<KbResult> sources)
+    /// <summary>拼装知识库上下文。刻意不用 emoji/## 装饰：这些符号会被模型照抄进回答里。</summary>
+    internal static string BuildContext(List<KbResult> sources)
     {
         if (sources.Count == 0) return "";
-        return string.Join("\n\n---\n\n", sources.Select(s => $"📄 来源: {s.Path} (相关度: {s.Score:F2})\n{s.Snippet}"));
+        return string.Join("\n\n", sources.Select(s => $"来源：{s.Path}（相关度 {s.Score:F2}）\n{s.Snippet}"));
     }
 }
