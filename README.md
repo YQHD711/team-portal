@@ -46,6 +46,8 @@ make build
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+- [使用指南](docs/使用指南.md)（给队员/部长/管理员，含常见问题）
+- [推广文案](docs/推广文案.md)（可直接复制发群）
 - [开发路线图](docs/ROADMAP.md)
 - [Agent 开发指南](docs/AGENT_GUIDE.md)
 
