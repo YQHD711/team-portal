@@ -47,6 +47,7 @@ make build
 
 - [架构设计](docs/ARCHITECTURE.md)
 - [使用指南](docs/使用指南.md)（给队员/部长/管理员，含常见问题）
+- [物料管理规范](docs/物料管理规范.md)（分级/库位/领用归还/盘点/报损/采购执行标准）
 - [推广文案](docs/推广文案.md)（可直接复制发群）
 - [开发路线图](docs/ROADMAP.md)
 - [Agent 开发指南](docs/AGENT_GUIDE.md)
