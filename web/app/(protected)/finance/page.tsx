@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { Plus, Check, X, ShoppingCart, PackageCheck, Loader2, TrendingUp, FileText } from "lucide-react";
+import { Plus, Check, X, ShoppingCart, PackageCheck, Loader2, TrendingUp, FileText, Trash2 } from "lucide-react";
 
 interface PurchaseReq { id: number; itemName: string; quantity: number; estimatedPrice: number; actualPrice: number | null; reason: string; status: string; requester: { username: string } | null; approver: { username: string } | null; approvedAt: string | null; purchasedAt: string | null; receivedAt: string | null; rejectReason: string | null; createdAt: string; }
 interface Stats { pending: number; approved: number; purchased: number; received: number; totalSpent: number; thisMonth: number; }
@@ -70,6 +70,12 @@ export default function FinancePage() {
     setPurchaseId(null); setPurchasePrice(""); reload();
   };
   const markReceived = (id: number) => api.post(`/api/finance/requests/${id}/receive`, {}).then(reload);
+  const remove = async (id: number) => {
+    // 管理员专属：删除不可撤销，需要二次确认
+    if (!window.confirm("确定删除这条采购申请吗？此操作不可撤销。")) return;
+    await api.delete(`/api/finance/requests/${id}`);
+    reload();
+  };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
 
@@ -151,6 +157,12 @@ export default function FinancePage() {
                   {r.reason && <div className="text-sm text-faint mt-1">📝 {r.reason}</div>}
                   {r.rejectReason && <div className="text-sm text-danger mt-1">❌ {r.rejectReason}</div>}
                 </div>
+                {isAdmin && (
+                  <button onClick={() => remove(r.id)} aria-label="删除申请"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-red-50 hover:border-red-200 border border-transparent transition-colors">
+                    <Trash2 className="h-3.5 w-3.5"/>删除
+                  </button>
+                )}
               </div>
 
               {/* Status flow bar (skip for rejected) */}

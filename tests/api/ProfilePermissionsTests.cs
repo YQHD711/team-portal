@@ -194,4 +194,27 @@ public class FinanceServiceTests
         Assert.Equal("approved", reloaded!.Status);
         Assert.Equal(2, reloaded.ApproverUserId);
     }
+
+    [Fact]
+    public async Task Delete_RemovesRequest()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        var req = await svc.CreateRequest(1, "桨叶", 1, 120m, "z");
+
+        var ok = await svc.Delete(req.Id);
+
+        Assert.True(ok);
+        Assert.Null(await db.PurchaseRequests.FindAsync(req.Id));
+        Assert.Empty(await svc.GetRequests(null, 1));
+    }
+
+    [Fact]
+    public async Task Delete_Missing_ReturnsFalse()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+
+        Assert.False(await svc.Delete(9999));
+    }
 }
