@@ -90,6 +90,16 @@ public class FinanceService
         return true;
     }
 
+    public async Task<bool> Delete(int id)
+    {
+        var req = await _db.PurchaseRequests.FindAsync(id);
+        if (req is null) return false;
+        _db.PurchaseRequests.Remove(req);
+        await _db.SaveChangesAsync();
+        _log.Warn("finance", $"Purchase request #{id} deleted: {req.ItemName} ({req.Status})");
+        return true;
+    }
+
     // ── Reports ──
 
     public async Task<object> GetMonthlyReport(int year, int month)

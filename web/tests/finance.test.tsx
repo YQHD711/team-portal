@@ -14,6 +14,7 @@ vi.mock("@/lib/hooks", () => ({
 
 const mockedGet = vi.mocked(api.get as (endpoint: string) => Promise<unknown>);
 const mockedPost = vi.mocked(api.post as (endpoint: string, body: unknown) => Promise<unknown>);
+const mockedDelete = vi.mocked(api.delete as (endpoint: string) => Promise<unknown>);
 const mockedUseCurrentUser = vi.mocked(useCurrentUser);
 
 const pendingReq = {
@@ -35,6 +36,7 @@ beforeEach(() => {
     return {};
   });
   mockedPost.mockResolvedValue({});
+  mockedDelete.mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -105,9 +107,37 @@ describe("采购审批页", () => {
     await screen.findByText("桨叶");
     expect(screen.queryByRole("button", { name: /批准采购/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^拒绝/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "删除申请" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "全部申请" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "月度报表" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "我的申请" })).toBeInTheDocument();
+  });
+
+  it("admin 可见删除按钮，确认后调用删除接口", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    render(<FinancePage />);
+
+    const delBtn = await screen.findByRole("button", { name: "删除申请" });
+    fireEvent.click(delBtn);
+
+    await waitFor(() =>
+      expect(mockedDelete).toHaveBeenCalledWith("/api/finance/requests/1")
+    );
+    // 删除后重新拉取列表
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith("/api/finance/requests")
+    );
+  });
+
+  it("删除取消则不调用删除接口", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    render(<FinancePage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "删除申请" }));
+
+    expect(mockedDelete).not.toHaveBeenCalled();
   });
 
   it("队员可发起采购申请,且不拉取全队统计", async () => {

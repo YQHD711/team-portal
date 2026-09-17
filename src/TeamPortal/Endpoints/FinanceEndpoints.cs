@@ -130,6 +130,21 @@ public static class FinanceEndpoints
             return ok ? Results.Ok(new { message = "已入库" }) : Results.Problem("操作失败（状态不是已购买）", statusCode: 400);
         });
 
+        group.MapDelete("/requests/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, FinanceService svc, LogService log, HttpContext ctx) =>
+        {
+            var (role, _) = await GetCtx(user, db);
+            if (!IsAdmin(role)) return Results.Problem("仅管理员可删除采购申请", statusCode: 403);
+            var userId = GetUserId(user) ?? 0;
+            var actor = user.Identity?.Name ?? "unknown";
+            var req = await svc.GetRequest(id);
+            if (req is null) return Results.Problem("Not found", statusCode: 404);
+            var ok = await svc.Delete(id);
+            if (ok) log.Warn("finance", $"Purchase #{id} deleted by {actor}: {req.ItemName} ({req.Status})");
+            log.Audit("delete", actor, targetType: "purchase", targetId: id.ToString(),
+                data: new { item = req.ItemName, status = req.Status, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            return ok ? Results.Ok(new { deleted = true }) : Results.Problem("删除失败", statusCode: 400);
+        });
+
         // ── Reports (admin only) ──
         group.MapGet("/report/monthly", async (int? year, int? month, ClaimsPrincipal user, AppDbContext db, FinanceService svc) =>
         {
