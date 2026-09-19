@@ -71,8 +71,8 @@ export default function FinancePage() {
   };
   const markReceived = (id: number) => api.post(`/api/finance/requests/${id}/receive`, {}).then(reload);
   const remove = async (id: number) => {
-    // 管理员专属：删除不可撤销，需要二次确认
-    if (!window.confirm("确定删除这条采购申请吗？此操作不可撤销。")) return;
+    // 管理员专属：删除即移入回收站(可恢复)，仍需二次确认
+    if (!window.confirm("确定删除这条采购申请吗？会移入回收站，可在「回收站」中恢复。")) return;
     await api.delete(`/api/finance/requests/${id}`);
     reload();
   };

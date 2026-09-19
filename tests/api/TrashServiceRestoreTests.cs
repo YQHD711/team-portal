@@ -99,4 +99,47 @@ public class TrashServiceRestoreTests
         Assert.False(await svc.Restore(id));
         Assert.NotNull(await db.TrashItems.FindAsync(id));
     }
+
+    [Fact]
+    public async Task Restore_PurchaseRequest_RecreatesRequestAndRemovesTrashRow()
+    {
+        var (db, svc) = Create();
+        // PurchaseRequests.RequesterUserId 有外键（Microsoft.Data.Sqlite 默认开 FK 检查），
+        // 恢复时必须存在对应申请人，否则插入会被数据库拒绝
+        db.Users.Add(new User { Id = 3, Username = "王睿翔", PasswordHash = "x", Role = "member" });
+        await db.SaveChangesAsync();
+        var payload = new PurchaseRequest
+        {
+            Id = 7, RequesterUserId = 3, ItemName = "桨叶", Quantity = 2,
+            EstimatedPrice = 120m, Reason = "训练损耗", Status = "pending",
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.TrashItems.Add(Row("PurchaseRequest", JsonSerializer.Serialize(payload)));
+        await db.SaveChangesAsync();
+        var id = db.TrashItems.Single().Id;
+
+        Assert.True(await svc.Restore(id));
+
+        var restored = db.PurchaseRequests.Single();
+        Assert.Equal("桨叶", restored.ItemName);
+        Assert.Equal(2, restored.Quantity);
+        Assert.Equal(120m, restored.EstimatedPrice);
+        Assert.Equal(3, restored.RequesterUserId);          // 外键标量随 JSON 保留
+        Assert.Equal("pending", restored.Status);
+        Assert.NotEqual(7, restored.Id);                    // 新主键，避免与原记录冲突
+        Assert.Null(await db.TrashItems.FindAsync(id));
+    }
+
+    [Fact]
+    public async Task Restore_PurchaseRequest_NullJson_KeepsRow()
+    {
+        var (db, svc) = Create();
+        db.TrashItems.Add(Row("PurchaseRequest", "null"));
+        await db.SaveChangesAsync();
+        var id = db.TrashItems.Single().Id;
+
+        Assert.False(await svc.Restore(id));
+        Assert.NotNull(await db.TrashItems.FindAsync(id));   // 行必须还在，否则数据找不回
+        Assert.Equal(0, db.PurchaseRequests.Count());
+    }
 }
