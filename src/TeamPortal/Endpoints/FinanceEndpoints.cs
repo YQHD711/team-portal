@@ -138,11 +138,13 @@ public static class FinanceEndpoints
             var actor = user.Identity?.Name ?? "unknown";
             var req = await svc.GetRequest(id);
             if (req is null) return Results.Problem("Not found", statusCode: 404);
-            var ok = await svc.Delete(id);
-            if (ok) log.Warn("finance", $"Purchase #{id} deleted by {actor}: {req.ItemName} ({req.Status})");
+            var ok = await svc.Delete(id, userId, actor);
+            if (ok) log.Warn("finance", $"Purchase #{id} moved to trash by {actor}: {req.ItemName} ({req.Status})");
             log.Audit("delete", actor, targetType: "purchase", targetId: id.ToString(),
-                data: new { item = req.ItemName, status = req.Status, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
-            return ok ? Results.Ok(new { deleted = true }) : Results.Problem("删除失败", statusCode: 400);
+                data: new { item = req.ItemName, status = req.Status, toTrash = true, success = ok }, ipAddress: LogService.ClientIp(ctx), userId: userId);
+            return ok
+                ? Results.Ok(new { deleted = true, message = "已移入回收站，可在「回收站」中恢复" })
+                : Results.Problem("删除失败", statusCode: 400);
         });
 
         // ── Reports (admin only) ──

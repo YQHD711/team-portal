@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using TeamPortal.Data;
@@ -196,25 +197,39 @@ public class FinanceServiceTests
     }
 
     [Fact]
-    public async Task Delete_RemovesRequest()
+    public async Task Delete_MovesRequestToTrash()
     {
         var db = CreateContext();
         var svc = CreateService(db);
         var req = await svc.CreateRequest(1, "桨叶", 1, 120m, "z");
 
-        var ok = await svc.Delete(req.Id);
+        var ok = await svc.Delete(req.Id, 2, "admin");
 
         Assert.True(ok);
+        // 业务行移除(列表里不再出现)
         Assert.Null(await db.PurchaseRequests.FindAsync(req.Id));
         Assert.Empty(await svc.GetRequests(null, 1));
+        // 但内容进了回收站，可恢复 → 财务数据不做物理删除
+        var trashed = await db.TrashItems.SingleAsync();
+        Assert.Equal("PurchaseRequest", trashed.OriginalTable);
+        Assert.Equal(req.Id, trashed.OriginalId);
+        Assert.Equal("桨叶", trashed.Title);
+        Assert.Equal(2, trashed.DeletedByUserId);
+        Assert.Equal("admin", trashed.DeletedByName);
+        // 快照是完整实体(非 ASCII 会被 JSON 转义，故按反序列化结果断言)
+        var snapshot = JsonSerializer.Deserialize<PurchaseRequest>(trashed.DataJson);
+        Assert.Equal("桨叶", snapshot!.ItemName);
+        Assert.Equal(req.Id, snapshot.Id);
+        Assert.Equal("pending", snapshot.Status);
     }
 
     [Fact]
-    public async Task Delete_Missing_ReturnsFalse()
+    public async Task Delete_Missing_ReturnsFalseAndWritesNoTrashRow()
     {
         var db = CreateContext();
         var svc = CreateService(db);
 
-        Assert.False(await svc.Delete(9999));
+        Assert.False(await svc.Delete(9999, 2, "admin"));
+        Assert.Empty(db.TrashItems);
     }
 }

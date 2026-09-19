@@ -89,22 +89,23 @@ public partial class BaiduNetdiskService
             body = await ReadBodyAsync(resp.Content, ct);
         using var doc = JsonDocument.Parse(body);
 
-        if (doc.RootElement.TryGetProperty("errno", out var errno))
+        if (doc.RootElement.TryGetProperty("errno", out var errnoElement))
         {
-            if (errno.GetInt32() == 0)
+            var code = JsonIntOrString(errnoElement);
+            if (code is null or 0)
             {
                 _log.Info("baidu", $"Directory created: {remotePath}");
                 return true;
             }
 
             // errno 17 = "file already exists" — not an error for our use case
-            if (errno.GetInt32() == 17)
+            if (code == 17)
             {
                 _log.Info("baidu", $"Directory already exists: {remotePath}");
                 return false;
             }
 
-            _log.Warn("baidu", $"Create directory '{remotePath}' failed (errno={errno.GetInt32()}): {RedactSecrets(body[..Math.Min(200, body.Length)])}");
+            _log.Warn("baidu", $"Create directory '{remotePath}' failed (errno={code}): {RedactSecrets(body[..Math.Min(200, body.Length)])}");
             return false;
         }
 

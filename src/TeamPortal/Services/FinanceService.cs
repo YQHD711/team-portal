@@ -90,13 +90,19 @@ public class FinanceService
         return true;
     }
 
-    public async Task<bool> Delete(int id)
+    /// <summary>
+    /// 删除采购申请。财务数据不做物理删除：回收站记录与业务行在**同一次 SaveChanges** 内落库，
+    /// 要么都成功、要么都不发生，可在「回收站」里恢复。快照用 FindAsync 取（不带导航属性），
+    /// 避免把关联 User 实体一并序列化进 DataJson。
+    /// </summary>
+    public async Task<bool> Delete(int id, int userId, string userName)
     {
         var req = await _db.PurchaseRequests.FindAsync(id);
         if (req is null) return false;
+        _db.TrashItems.Add(TrashService.NewItem("PurchaseRequest", req.Id, req.ItemName, req, userId, userName));
         _db.PurchaseRequests.Remove(req);
         await _db.SaveChangesAsync();
-        _log.Warn("finance", $"Purchase request #{id} deleted: {req.ItemName} ({req.Status})");
+        _log.Warn("finance", $"Purchase request #{id} moved to trash: {req.ItemName} ({req.Status})");
         return true;
     }
 

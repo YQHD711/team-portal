@@ -13,14 +13,21 @@ public class TrashService
     private readonly BackupService _backup;
     public TrashService(AppDbContext db, LogService log, BackupService backup) { _db = db; _log = log; _backup = backup; }
 
-    public async Task<TrashItem> MoveToTrash(string table, int originalId, string title, object data, int userId, string userName)
-    {
-        var item = new TrashItem
+    /// <summary>
+    /// 构造一条回收站记录（不入库）。调用方可把它与业务行的删除放进同一次
+    /// SaveChangesAsync，避免「回收站写成功、业务行没删掉」这类中间态。
+    /// </summary>
+    public static TrashItem NewItem(string table, int originalId, string title, object data, int userId, string userName)
+        => new()
         {
             OriginalTable = table, OriginalId = originalId, Title = title,
             DataJson = JsonSerializer.Serialize(data),
             DeletedByUserId = userId, DeletedByName = userName
         };
+
+    public async Task<TrashItem> MoveToTrash(string table, int originalId, string title, object data, int userId, string userName)
+    {
+        var item = NewItem(table, originalId, title, data, userId, userName);
         _db.TrashItems.Add(item);
         await _db.SaveChangesAsync();
         _log.Info("trash", $"Moved to trash: {title} ({table}#{originalId})");
@@ -74,6 +81,18 @@ public class TrashService
                         return false;
                     }
                     inc.Id = 0; _db.IncidentRecords.Add(inc);
+                    break;
+                case "PurchaseRequest":
+                    var pur = JsonSerializer.Deserialize<PurchaseRequest>(item.DataJson);
+                    if (pur is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "DataJson 反序列化为 null，已保留回收站记录不删除");
+                        return false;
+                    }
+                    // 导航属性置空：DataJson 若带出了关联 User，EF 会把它们当新实体一起插入。
+                    // 外键标量(RequesterUserId/ApproverUserId)已随 JSON 保留，信息不丢。
+                    pur.Id = 0; pur.Requester = null; pur.Approver = null;
+                    _db.PurchaseRequests.Add(pur);
                     break;
                 default:
                     return false;

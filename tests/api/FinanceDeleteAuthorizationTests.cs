@@ -82,6 +82,10 @@ public class FinanceDeleteAuthorizationTests : IClassFixture<WebApplicationFacto
             var memberRes = await client.SendAsync(memberReq);
             Assert.Equal(HttpStatusCode.Forbidden, memberRes.StatusCode);
 
+            // 403 不得留下任何回收站痕迹
+            await using (var afterMember = new AppDbContext(opts))
+                Assert.Empty(afterMember.TrashItems);
+
             // admin → 200，且记录被移除
             var adminReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/finance/requests/{requestId}");
             adminReq.Headers.Authorization = new("Bearer", MakeToken(jwtKey, adminId, "boss", "admin"));
@@ -90,6 +94,11 @@ public class FinanceDeleteAuthorizationTests : IClassFixture<WebApplicationFacto
 
             await using var verify = new AppDbContext(opts);
             Assert.Null(await verify.PurchaseRequests.FindAsync(requestId));
+            // 软删除：内容进了回收站，管理员可恢复
+            var trashed = await verify.TrashItems.SingleAsync();
+            Assert.Equal("PurchaseRequest", trashed.OriginalTable);
+            Assert.Equal(requestId, trashed.OriginalId);
+            Assert.Equal("桨叶", trashed.Title);
         }
         finally
         {

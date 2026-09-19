@@ -68,7 +68,9 @@ public partial class BaiduNetdiskService
         if (!preDoc.RootElement.TryGetProperty("uploadid", out var uploadIdProp))
             throw new InvalidOperationException($"Pre-create missing uploadid: {RedactSecrets(preBody[..Math.Min(200, preBody.Length)])}");
 
-        var uploadId = uploadIdProp.GetString()!;
+        // uploadid 可能是数字（大整数），用宽容读取避免 GetString() 抛类型异常
+        var uploadId = JsonStringOrNumber(uploadIdProp)
+            ?? throw new InvalidOperationException($"Pre-create missing uploadid: {RedactSecrets(preBody[..Math.Min(200, preBody.Length)])}");
         // 服务端已存在的分块(秒传/上次中断残留):跳过上传,直接用于 create
         var serverBlocks = ReadServerBlockList(preDoc.RootElement);
         _log.Info("baidu", $"Upload step 1/3 OK: uploadid={uploadId[..Math.Min(12, uploadId.Length)]}..., {serverBlocks.Count} chunk(s) already on server");
@@ -127,14 +129,21 @@ public partial class BaiduNetdiskService
         return remotePath;
     }
 
-    /// <summary>precreate 响应里的 block_list = 服务端已存在的分块 MD5(用于秒传/续传跳过)。</summary>
+    /// <summary>
+    /// precreate 响应里表示「服务端已存在的分块」的 MD5 列表（用于秒传/续传跳过）。
+    /// 线上接口实际返回的是 <b>数字</b>（分片序号，见百度网盘开放平台「预上传」文档），
+    /// 数字项一律忽略：其语义（待上传 vs 已上传）在各接口版本间不一致，
+    /// 猜错会让后续 create 因 block_list 与内容不符而失败——宁可退化成
+    /// 「全部分片都上传」（结果依然正确，只是少一次秒传优化），也不能让备份上传崩掉。
+    /// </summary>
     private static HashSet<string> ReadServerBlockList(JsonElement precreateRoot)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (precreateRoot.TryGetProperty("block_list", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in arr.EnumerateArray())
-                if (item.GetString() is { Length: > 0 } md5) set.Add(md5);
+                if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } md5)
+                    set.Add(md5);
         }
         return set;
     }
@@ -169,7 +178,7 @@ public partial class BaiduNetdiskService
                     throw new InvalidOperationException($"Upload chunk {index}/{total} failed: {RedactSecrets(body[..Math.Min(200, body.Length)])}");
 
                 // Use server-returned MD5, fall back to local MD5
-                return uploadDoc.RootElement.TryGetProperty("md5", out var md5) && md5.GetString() is { Length: > 0 } serverMd5
+                return uploadDoc.RootElement.TryGetProperty("md5", out var md5) && JsonStringOrNumber(md5) is { Length: > 0 } serverMd5
                     ? serverMd5
                     : fallbackMd5;
             }
