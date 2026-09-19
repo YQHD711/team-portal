@@ -46,6 +46,12 @@ tmp_*.cs
 *.suo
 *.user
 
+# Office 文档临时锁文件（打开 Word/Excel/PPT 时生成，程序崩溃或强制关闭后常残留）
+# ~$ 前缀是 Office 的 owner file；.~lock.*# 是 LibreOffice 的锁文件
+# 教训：docs/~$物料管理规范.docx 曾长期以未跟踪状态挂在 git status 里，随时可能被 git add . 带进仓库
+~$*
+.~lock.*#
+
 # Code intelligence
 .codegraph/
 
