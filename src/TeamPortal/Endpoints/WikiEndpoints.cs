@@ -66,25 +66,6 @@ public static class WikiEndpoints
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         }).DisableAntiforgery();
 
-        // Submit translation task — clone doc repo + AI translate to Chinese
-        wiki.MapPost("/submit-translate", async (TranslateRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
-        {
-            var (role, dept) = await GetUserCtx(user, db);
-            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
-            if (string.IsNullOrWhiteSpace(req.Url) || string.IsNullOrWhiteSpace(req.ProjectName))
-                return Results.Problem("URL and project name required", statusCode: 400);
-
-            var folder = req.TargetFolder ?? "公共";
-            var vis = req.Visibility ?? "public";
-            var uid = GetUserId(user);
-            var task = await generator.SubmitTranslate(req.Url, req.ProjectName, folder, uid, vis, req.Model, req.CustomCatalogJson);
-            var log = app.Services.GetRequiredService<LogService>();
-            log.Info("wiki", $"Translate task submitted: {req.ProjectName}");
-            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
-                data: new { projectName = req.ProjectName, visibility = vis, targetFolder = folder, type = "translate" }, ipAddress: LogService.ClientIp(ctx), userId: uid);
-            return Results.Ok(new { task.Id, task.Status });
-        });
-
         wiki.MapGet("/tasks", async (ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, WikiProgressTracker progress) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
@@ -356,5 +337,4 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
 }
 
 public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null);
-public record TranslateRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null);
 public record VisibilityRequest(string Visibility);

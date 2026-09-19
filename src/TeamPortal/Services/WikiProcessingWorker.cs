@@ -41,10 +41,19 @@ public class WikiProcessingWorker : BackgroundService
                     log.Info("wiki", $"Processing {task.Type} task: {task.ProjectName} (status={task.Status})");
                     try
                     {
+                        // 翻译功能已下线。库里可能残留历史 translate 任务，必须在这里挡掉：
+                        // 若落到下面的生成管线，会克隆仓库跑一整套 AI 生成（真金白银且非用户本意）。
                         if (task.Type == "translate")
-                            await generator.ProcessTranslateTask(task.Id);
-                        else
-                            await generator.ProcessTask(task.Id);
+                        {
+                            task.Status = "failed";
+                            task.ErrorMessage = "翻译文档功能已下线，请删除该任务";
+                            await db.SaveChangesAsync();
+                            log.Warn("wiki", $"Legacy translate task rejected: {task.ProjectName}");
+                            notify.Notify("任务失败", $"{task.ProjectName}: {task.ErrorMessage}", userId: task.UserId);
+                            continue;
+                        }
+
+                        await generator.ProcessTask(task.Id);
                     }
                     catch (Exception ex)
                     {
@@ -62,15 +71,12 @@ public class WikiProcessingWorker : BackgroundService
                     if (task.Status == "completed")
                     {
                         log.Info("wiki", $"Task completed: {task.ProjectName}");
-                        notify.Notify(task.Type == "translate" ? "文档翻译完成" : "Wiki 生成完成",
-                            task.Type == "translate" ? $"项目 {task.ProjectName} 的文档已翻译" : $"项目 {task.ProjectName} 的文档已生成",
-                            $"/wiki/{task.Id}");
+                        notify.Notify("Wiki 生成完成", $"项目 {task.ProjectName} 的文档已生成", $"/wiki/{task.Id}");
                     }
                     else
                     {
                         log.Error("wiki", $"Task failed: {task.ProjectName}", task.ErrorMessage);
-                        notify.Notify(task.Type == "translate" ? "文档翻译失败" : "Wiki 生成失败",
-                            $"{task.ProjectName}: {task.ErrorMessage}", userId: task.UserId);
+                        notify.Notify("Wiki 生成失败", $"{task.ProjectName}: {task.ErrorMessage}", userId: task.UserId);
                     }
                 }
             }

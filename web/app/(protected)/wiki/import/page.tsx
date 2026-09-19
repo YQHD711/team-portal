@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { GitBranch, Upload, Loader2, Languages, Globe, Building2, Lock } from "lucide-react";
+import { GitBranch, Upload, Loader2, Globe, Building2, Lock } from "lucide-react";
 import { ModelInput } from "@/components/ui/ModelInput";
 import { retryMissingDocuments } from "@/lib/wikiRetry";
 import { TaskQueue, isActiveTask, type WikiTaskInfo } from "@/components/wiki/TaskQueue";
@@ -18,7 +18,7 @@ const visOptions = [
 
 export default function WikiImportPage() {
   const [tasks, setTasks] = useState<WikiTaskInfo[]>([]);
-  const [tab, setTab] = useState<"git" | "zip" | "translate">("git");
+  const [tab, setTab] = useState<"git" | "zip">("git");
   const [gitUrl, setGitUrl] = useState("");
   const [projectName, setProjectName] = useState("");
   const [targetFolder, setTargetFolder] = useState("");
@@ -100,18 +100,6 @@ export default function WikiImportPage() {
     finally { setSubmitting(false); }
   };
 
-  const submitTranslate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!gitUrl || !projectName) return;
-    setSubmitting(true); setMessage("");
-    try {
-      await api.post("/api/wiki/submit-translate", { url: gitUrl, projectName, targetFolder: targetFolder || "公共", visibility, model: model || undefined, customCatalogJson: customCatalogJson || undefined });
-      setMessage("✅ 翻译任务已提交，后台正在处理...");
-      setGitUrl(""); setProjectName(""); fetchTasks();
-    } catch (err) { setMessage("❌ " + (err instanceof Error ? err.message : "提交失败")); }
-    finally { setSubmitting(false); }
-  };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
@@ -120,24 +108,18 @@ export default function WikiImportPage() {
       </div>
 
       <div className="flex gap-1 rounded-xl bg-surface-subtle p-1 w-fit flex-wrap">
-        {[{ key: "git", label: "GitHub 仓库", icon: GitBranch }, { key: "zip", label: "ZIP 上传", icon: Upload }, { key: "translate", label: "翻译文档", icon: Languages }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as "git" | "zip" | "translate")}
+        {[{ key: "git", label: "GitHub 仓库", icon: GitBranch }, { key: "zip", label: "ZIP 上传", icon: Upload }].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key as "git" | "zip")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
             <t.icon className="h-4 w-4" />{t.label}
           </button>
         ))}
       </div>
 
-      <form key={tab} onSubmit={tab === "translate" ? submitTranslate : tab === "git" ? submitGit : submitZip} className="space-y-3 rounded-xl border border-border bg-surface p-5">
-        {tab === "translate" && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-sm">
-            <Languages className="h-4 w-4 shrink-0" />
-            克隆文档仓库后自动逐页翻译为中文。建议先翻译较小仓库测试效果。
-          </div>
-        )}
+      <form key={tab} onSubmit={tab === "git" ? submitGit : submitZip} className="space-y-3 rounded-xl border border-border bg-surface p-5">
         <div><label className="block text-sm font-medium mb-1">项目名称 *</label><input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="例如: my-awesome-project" required className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
-        {tab === "git" || tab === "translate" ? (
-          <div><label className="block text-sm font-medium mb-1">Git URL *</label><input value={gitUrl ?? ""} onChange={e => setGitUrl(e.target.value)} placeholder={tab === "translate" ? "https://github.com/ArduPilot/ardupilot_wiki.git" : "https://github.com/user/repo.git"} required className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono" /></div>
+        {tab === "git" ? (
+          <div><label className="block text-sm font-medium mb-1">Git URL *</label><input value={gitUrl ?? ""} onChange={e => setGitUrl(e.target.value)} placeholder="https://github.com/user/repo.git" required className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono" /></div>
         ) : (
           <div><label className="block text-sm font-medium mb-1">代码压缩包 * (.zip, 最大100MB)</label><input ref={fileRef} type="file" accept=".zip" required className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 dark:file:bg-sky-950 dark:file:text-sky-300" /></div>
         )}
@@ -176,8 +158,8 @@ export default function WikiImportPage() {
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
         <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-sm">
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "translate" ? <Languages className="h-4 w-4" /> : tab === "git" ? <GitBranch className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
-          {submitting ? "提交中..." : tab === "translate" ? "开始翻译" : "提交任务"}
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "git" ? <GitBranch className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+          {submitting ? "提交中..." : "提交任务"}
         </button>
         {message && <div className={`text-sm p-2.5 rounded-lg ${message.startsWith("✅") ? "bg-green-50 dark:bg-green-950 text-green-700" : "bg-red-50 dark:bg-red-950 text-danger"}`}>{message}</div>}
       </form>

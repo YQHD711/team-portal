@@ -212,8 +212,10 @@ DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计�
 宿主机   <部署目录>/data/knowledge/<目标文件夹>/<项目名>/<目录项路径>.md
 容器内   /data/knowledge/<目标文件夹>/<项目名>/<目录项路径>.md
 例       /opt/team-portal/data/knowledge/公共/wiki1/getting-started/installation.md
-翻译任务 额外写一份 <项目名>_EN/ 原文档
 ```
+
+> 历史遗留：此前「翻译文档」功能会额外写一份 `<项目名>_EN/` 原文档。该功能已下线，
+> 但已翻译项目留下的 `_EN/` 目录仍在，Wiki 详情页对这类历史任务仍可切「中 / EN」查看。
 
 其他相关位置：
 
@@ -303,16 +305,16 @@ GET    /api/admin/me                                   → 当前用户角色+�
 OpenDeepWiki(已停用)          Team Portal
 ┌──────────────────┐          ┌──────────────────┐
 │ 代码→Wiki 生成     │  ──融合──▶ │ Wiki 文档模块      │
-│ (git/zip/翻译)    │          │ /wiki + /wiki/import │
+│ (git/zip)         │          │ /wiki + /wiki/import │
 │                  │          │ WikiGeneratorService │
 └──────────────────┘          │ (AI读源码生成文档)   │
-                              │ git提交/ZIP上传/翻译  │
+                              │ git提交/ZIP上传      │
                               └──────────────────┘
 ```
 
 融合情况:
 - **WikiGeneratorService.cs**(`src/TeamPortal/Services/`)= 原 OpenDeepWiki 生成器移植版("Inspired by OpenDeepWiki WikiGenerator")
-- 前端 Wiki 导入页(`web/app/(protected)/wiki/import/`)支持 git/ZIP/翻译三种方式
+- 前端 Wiki 导入页(`web/app/(protected)/wiki/import/`)支持 git/ZIP 两种方式
 - 生成的文档进入知识库(`data/knowledge/`),可被 AI RAG 检索
 - **端口冲突说明**:OpenDeepWiki 原占 8080/3000,与 Team Portal 相同;因已融合,OpenDeepWiki 不再需要运行,冲突不存在
 

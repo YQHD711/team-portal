@@ -25,12 +25,6 @@ export interface WikiTaskInfo {
 
 /** 每个任务类型的阶段顺序（用于步骤条）。 */
 const STAGES: Record<string, { key: string; label: string }[]> = {
-  translate: [
-    { key: "preparing", label: "准备" },
-    { key: "cloning", label: "克隆" },
-    { key: "translating", label: "翻译" },
-    { key: "completed", label: "完成" },
-  ],
   default: [
     { key: "preparing", label: "准备" },
     { key: "catalog", label: "目录" },
@@ -40,7 +34,7 @@ const STAGES: Record<string, { key: string; label: string }[]> = {
   ],
 };
 
-const ACTIVE = new Set(["pending", "preparing", "cloning", "catalog", "documents", "translating", "reviewing"]);
+const ACTIVE = new Set(["pending", "preparing", "catalog", "documents", "reviewing"]);
 
 export function isActiveTask(status: string): boolean {
   return ACTIVE.has(status);
@@ -56,8 +50,6 @@ function statusLabel(task: WikiTaskInfo): string {
     case "failed": return "失败";
     case "pending": return "排队中（后台每 30 秒取一次任务）";
     case "preparing": return "准备中";
-    case "cloning": return "克隆仓库";
-    case "translating": return "翻译中";
     case "catalog": return "生成目录";
     case "documents": return "生成文档";
     case "reviewing": return "审查文档";
