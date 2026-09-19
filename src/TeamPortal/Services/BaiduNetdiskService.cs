@@ -64,15 +64,44 @@ public partial class BaiduNetdiskService
     internal static string RedactSecrets(string body) => TokenValuePattern.Replace(body, "${p}***");
 
     /// <summary>
+    /// 宽容读取 JSON 字段为整数：百度接口对同一字段时而返回数字、时而返回数字字符串。
+    /// 直接 GetInt32() 遇字符串会抛 "requires an element of type 'Number'" 中断流程。
+    /// 解析不出来返回 null（由调用方决定是当作成功还是失败）。
+    /// </summary>
+    internal static int? JsonIntOrString(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Number => element.TryGetInt32(out var n) ? n : null,
+        JsonValueKind.String => int.TryParse(element.GetString(), out var s) ? s : null,
+        _ => null,
+    };
+
+    /// <summary>
+    /// 宽容读取 JSON 字段为字符串：precreate 的 block_list 元素、部分响应里的
+    /// uploadid / md5 都可能是数字。GetString() 遇到数字会抛
+    /// "The requested operation requires an element of type 'String', but the target element has type 'Number'"
+    /// ——该异常曾让整个系统备份上传失败并回退本地副本。
+    /// </summary>
+    internal static string? JsonStringOrNumber(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Number => element.GetRawText(),
+        _ => null,
+    };
+
+    /// <summary>
     /// Check Baidu API response for errno != 0. Returns true if no error.
     /// On auth errors (6, 111, -6), resets cached token for re-auth.
     /// </summary>
     private bool CheckBaiduError(JsonElement root, string operation, string rawBody)
     {
-        if (!root.TryGetProperty("errno", out var errno) || errno.GetInt32() == 0)
+        if (!root.TryGetProperty("errno", out var errnoElement))
             return true;
 
-        var code = errno.GetInt32();
+        // 类型不符(errno 为字符串等)时无法判定错误码，按成功处理，不阻断业务
+        var code = JsonIntOrString(errnoElement);
+        if (code is null or 0)
+            return true;
+
         if (code == 6 || code == 111 || code == -6)
         {
             _accessToken = null;

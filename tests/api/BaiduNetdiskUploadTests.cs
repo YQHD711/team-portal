@@ -124,4 +124,92 @@ public class BaiduNetdiskUploadTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public async Task UploadFile_NumericBlockListFromRealApi_DoesNotCrash()
+    {
+        // 回归：线上 precreate 的 block_list 是【数字】(分片序号，见百度网盘开放平台「预上传」文档)。
+        // 旧代码用 item.GetString() 读它，抛
+        // "The requested operation requires an element of type 'String', but the target element has type 'Number'"
+        // → 整个系统备份上传失败并回退本地副本。
+        const int chunkSize = 4 * 1024 * 1024;
+        var path = TempFile(chunkSize + 10);
+        var ctx = BaiduTestFactory.Create((url, _, _) =>
+        {
+            if (url.Contains("method=precreate", StringComparison.Ordinal))
+                return FakeBaiduHandler.Json("{\"errno\":0,\"uploadid\":\"up-1\",\"block_list\":[0,1]}");
+            if (url.Contains("method=upload", StringComparison.Ordinal))
+                return FakeBaiduHandler.Json("{\"errno\":0,\"md5\":\"server-md5\"}");
+            return FakeBaiduHandler.Json("{\"errno\":0}");
+        });
+
+        try
+        {
+            await ctx.Service.UploadFile(path, "/apps/team-portal/system/backups/x.bin");
+
+            // 数字 block_list 的语义(待上传/已上传)在各接口版本间不一致，
+            // 猜错会让 create 失败 → 保守策略是两块都传，保证 create 的 MD5 列表完整
+            Assert.Equal(2, ctx.Handler.CountCalls("method=upload"));
+            Assert.Equal(1, ctx.Handler.CountCalls("method=create"));
+            var createBody = FakeBaiduHandler.FormField(ctx.Handler.BodyOfCall(ctx.Handler.IndexOfCall("method=create")), "block_list");
+            using var doc = JsonDocument.Parse(createBody);
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task UploadFile_NumericUploadId_IsAccepted()
+    {
+        // uploadid 也可能以大整数返回，GetString() 同样会抛类型异常
+        var path = TempFile(1024);
+        var ctx = BaiduTestFactory.Create((url, _, _) =>
+        {
+            if (url.Contains("method=precreate", StringComparison.Ordinal))
+                return FakeBaiduHandler.Json("{\"errno\":0,\"uploadid\":123456789012345}");
+            if (url.Contains("method=upload", StringComparison.Ordinal))
+                return FakeBaiduHandler.Json("{\"errno\":0,\"md5\":\"server-md5\"}");
+            return FakeBaiduHandler.Json("{\"errno\":0}");
+        });
+
+        try
+        {
+            await ctx.Service.UploadFile(path, "/apps/team-portal/system/backups/x.bin");
+
+            // 数字 uploadid 应原样回传给 create
+            var uploadId = FakeBaiduHandler.FormField(ctx.Handler.BodyOfCall(ctx.Handler.IndexOfCall("method=create")), "uploadid");
+            Assert.Equal("123456789012345", uploadId);
+        }
+        finally { File.Delete(path); }
+    }
+}
+
+/// <summary>JSON 宽容读取：百度同一字段可能数字/字符串混返，两种都必须能读出来。</summary>
+public class BaiduJsonTypeToleranceTests
+{
+    [Theory]
+    [InlineData("123456789012345", "123456789012345")]   // 大整数 uploadid
+    [InlineData("\"up-1\"", "up-1")]
+    [InlineData("0", "0")]
+    [InlineData("\"\"", "")]
+    [InlineData("null", null)]
+    [InlineData("true", null)]
+    public void JsonStringOrNumber_ReadsStringAndNumber(string json, string? expected)
+    {
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expected, BaiduNetdiskService.JsonStringOrNumber(doc.RootElement));
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("17", 17)]
+    [InlineData("-6", -6)]
+    [InlineData("\"17\"", 17)]                            // errno 为数字字符串
+    [InlineData("\"abc\"", null)]
+    [InlineData("null", null)]
+    public void JsonIntOrString_ReadsStringAndNumber(string json, int? expected)
+    {
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expected, BaiduNetdiskService.JsonIntOrString(doc.RootElement));
+    }
 }
