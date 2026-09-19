@@ -14,7 +14,7 @@ namespace TeamPortal.Services;
 /// <remarks>
 /// 主类部分：字段、构造函数、DeepSeek 配置读取、任务管理（提交/查询/删除）与生成管线编排。
 /// 其余职责拆分为 partial：Workspace（工作区准备）、DeepSeek（AI 调用+工具）、
-/// Catalog（目录生成）、Documents（文档生成/复审）、Translate（翻译）。
+/// Catalog（目录生成）、Documents（文档生成/复审）。
 /// </remarks>
 public partial class WikiGeneratorService
 {
@@ -85,12 +85,6 @@ public partial class WikiGeneratorService
     public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
     {
         var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
-        _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
-    }
-
-    public async Task<WikiTask> SubmitTranslate(string url, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
-    {
-        var task = new WikiTask { Type = "translate", SourceUrl = url, ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 

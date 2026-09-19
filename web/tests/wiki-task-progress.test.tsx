@@ -61,16 +61,15 @@ describe("Wiki 任务进度", () => {
     expect(screen.getByText(/AI 正在规划目录结构/)).toBeInTheDocument();
   });
 
-  it("已完成任务显示 100%，翻译任务用翻译阶段条", () => {
+  it("已完成任务显示 100%，并走生成流程的阶段条", () => {
     const done: WikiTaskInfo = {
-      ...baseTask, type: "translate", status: "completed", completedAt: new Date().toISOString(),
+      ...baseTask, type: "git", status: "completed", completedAt: new Date().toISOString(),
       progress: { stage: "completed", done: 8, total: 8, note: null, updatedAt: "" },
     };
     render(<TaskQueue tasks={[done]} isStaff={false} onRefresh={() => {}} onDelete={() => {}} />);
 
     expect(screen.getByRole("progressbar", { name: "ardupilot 生成进度" })).toHaveAttribute("aria-valuenow", "100");
-    expect(screen.getByText("翻译")).toBeInTheDocument();
-    expect(screen.queryByText("审查")).not.toBeInTheDocument();
+    expect(screen.getByText("审查")).toBeInTheDocument();
   });
 
   it("失败任务保留错误信息并标红当前阶段", () => {
@@ -87,7 +86,7 @@ describe("Wiki 任务进度", () => {
   it("isActiveTask 只把进行中的状态算作活跃（决定要不要轮询）", () => {
     expect(isActiveTask("pending")).toBe(true);
     expect(isActiveTask("documents")).toBe(true);
-    expect(isActiveTask("translating")).toBe(true);
+    expect(isActiveTask("reviewing")).toBe(true);
     expect(isActiveTask("completed")).toBe(false);
     expect(isActiveTask("failed")).toBe(false);
   });
