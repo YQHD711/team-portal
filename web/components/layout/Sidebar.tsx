@@ -10,6 +10,7 @@ import {
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
 import { useCurrentUser } from "@/lib/hooks";
+import { buildLabel } from "@/lib/build-info";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -239,6 +240,8 @@ export function Sidebar() {
           <div className="flex items-center gap-2 text-[10px] text-faint">
             <Sparkles className="h-3 w-3" />
             <span>{teamName} © 2026 · 内部系统</span>
+            {/* 构建版本：用来一眼确认线上跑的是哪个 commit（对照 CI/CD 运行编号） */}
+            <span className="ml-auto font-mono" title={`构建版本 ${buildLabel}`}>{buildLabel}</span>
           </div>
         </div>
       </aside>

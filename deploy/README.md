@@ -50,6 +50,8 @@ deploy.sh（纯拉取，服务器永不构建）→ docker compose up -d --no-bu
 
 ### 3.1 自动部署（默认路径，零操作）
 - push 全绿 → 5 分钟内自动拉取上线
+- **确认线上跑的是哪个版本**：左侧栏页脚显示 `#CI运行编号 · commit短sha`（如 `#120 · 2f72a11`），
+  与 Actions 页面对一下就知道部署有没有生效 —— 不必登服务器。本地构建或未注入时显示 `dev`。
 - 部署日志：`~/teamportal/deploy/auto-deploy.log`（空闲零输出，只在有动作时写）
 - 当前版本：`cat ~/teamportal/deploy/.deployed_sha`
 

@@ -112,6 +112,8 @@ jobs:
             NPM_REGISTRY=https://registry.npmjs.org
             ALLOWED_DEV_ORIGINS=8.137.161.160
             API_PROXY_URL=http://backend:8080
+            BUILD_SHA=${{ github.sha }}
+            BUILD_RUN=${{ github.run_number }}
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/teamportal-frontend:latest
             ghcr.io/${{ env.OWNER_LC }}/teamportal-frontend:sha-${{ github.sha }}
