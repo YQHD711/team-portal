@@ -348,6 +348,7 @@ test.describe("路由完整性守卫", () => {
     for (const route of [
       "/admin/logs", "/admin/users", "/admin/settings", "/admin/backup",
       "/finance", "/inventory", "/inventory/layout", "/profile", "/flightlog",
+      "/study",
     ]) {
       const res = await request.get(route);
       expect(res.status(), `${route} 不应是404(路由疑似被构建遗漏)`).not.toBe(404);
