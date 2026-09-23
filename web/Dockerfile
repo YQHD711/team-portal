@@ -32,6 +32,11 @@ WORKDIR /app
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG API_PROXY_URL=http://localhost:8080
 ENV API_PROXY_URL=$API_PROXY_URL
+# 构建版本：CI 注入 commit 与运行编号，页脚展示（NEXT_PUBLIC_* 编译期内联）
+ARG BUILD_SHA=dev
+ARG BUILD_RUN=
+ENV NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA
+ENV NEXT_PUBLIC_BUILD_RUN=$BUILD_RUN
 # build 阶段需要 devDependencies (Tailwind/PostCSS/TypeScript 等工具链);
 # prod 运行时由 standalone output 自包含,不再需要 devDependencies。
 COPY package*.json ./

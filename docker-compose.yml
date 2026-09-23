@@ -11,6 +11,9 @@ services:
         ALLOWED_DEV_ORIGINS: ${ALLOWED_DEV_ORIGINS:-8.137.161.160}
         # build 时 next.config.ts 读取 API_PROXY_URL,必须注入;走 compose 网络访问 backend
         API_PROXY_URL: http://backend:8080
+        # 构建版本（页脚展示）:CI 传真实值;本地 compose build 留空 → 页脚显示 dev
+        BUILD_SHA: ${BUILD_SHA:-dev}
+        BUILD_RUN: ${BUILD_RUN:-}
     ports:
       - "3000:3000"
     environment:
