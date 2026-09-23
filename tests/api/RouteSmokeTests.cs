@@ -83,4 +83,25 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
             try { File.Delete(dbPath); } catch { }
         }
     }
+
+    [Fact]
+    public async Task StudyLibrary_RouteExistsAndRequiresAuth()
+    {
+        // 前端 /study 页依赖该接口；未登录必须 401（缺路由会是 404，页面会静默变空）
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-routesmoke-{Guid.NewGuid():N}.db");
+        var client = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        try
+        {
+            var res = await client.GetAsync("/api/study/library");
+
+            Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { }
+        }
+    }
 }

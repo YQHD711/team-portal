@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid, GraduationCap
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
@@ -22,6 +22,7 @@ const baseGroups: NavGroup[] = [
   {
     heading: "资源",
     items: [
+      { href: "/study", label: "学习库", icon: GraduationCap },
       { href: "/flightlog", label: "飞行日志 / 固件", icon: TrendingUp },
       { href: "/webtools", label: "日志分析", icon: Activity },
       { href: "/wiki", label: "Wiki 文档", icon: GitBranch },

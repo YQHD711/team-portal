@@ -307,6 +307,7 @@ app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API"
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
+app.MapStudyEndpoints();
 app.MapInventoryEndpoints();
 app.MapAiEndpoints();
 app.MapFlightLogEndpoints();
