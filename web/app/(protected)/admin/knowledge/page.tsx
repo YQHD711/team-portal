@@ -15,6 +15,15 @@ function urlParam(key: string): string {
   return new URLSearchParams(window.location.search).get(key) ?? "";
 }
 
+/**
+ * 取错误的可读原因。api 客户端会把后端的 detail 放进 Error.message，
+ * 以前这里一律 alert("保存失败") 把它丢了 —— 结果"能读不能写"这类问题
+ * 完全没有线索可查（同样的坑前面在 ?path= 深链接上踩过一次）。
+ */
+function reason(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : "未知错误";
+}
+
 export default function KnowledgeAdminPage() {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -119,18 +128,18 @@ export default function KnowledgeAdminPage() {
   const handleSave = async () => {
     if (!selected) return; setSaving(true);
     try { await api.post("/api/admin/knowledge/write", { path: selected, content }); setOriginal(content); setDirty(false); }
-    catch { alert("保存失败"); } finally { setSaving(false); }
+    catch (err) { alert("保存失败：\n" + reason(err)); } finally { setSaving(false); }
   };
   const handleCreate = async () => {
     if (!newName.trim()) return;
     const path = showNew === "folder" ? newName + "/.gitkeep" : newName + ".md";
     try { await api.post("/api/admin/knowledge/write", { path, content: showNew === "folder" ? "" : "# " + newName + "\n\n" }); setShowNew(null); setNewName(""); fetchTree(); }
-    catch { alert("创建失败"); }
+    catch (err) { alert("创建失败：\n" + reason(err)); }
   };
   const handleDelete = async (path: string) => {
     if (!confirm(`确认删除 "${path}"？此操作不可撤销。`)) return;
     try { await api.delete(`/api/admin/knowledge/delete?path=${encodeURIComponent(path)}`); if (selected === path) { setSelected(null); setContent(""); } fetchTree(); }
-    catch { alert("删除失败"); }
+    catch (err) { alert("删除失败：\n" + reason(err)); }
   };
   const openRename = (n: TreeNode) => { setRenameTarget(n); setRenameNew(n.name); };
   const handleRename = async () => {
@@ -141,7 +150,7 @@ export default function KnowledgeAdminPage() {
     const newPath = dir + renameNew.trim() + ext;
     if (newPath === old) { setRenameTarget(null); return; }
     try { await api.post("/api/admin/knowledge/rename", { path: old, newPath }); setRenameTarget(null); fetchTree(); if (selected === old) setSelected(newPath); }
-    catch { alert("重命名失败（目标可能已存在）"); }
+    catch (err) { alert("重命名失败：\n" + reason(err)); }
   };
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
