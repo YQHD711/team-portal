@@ -197,6 +197,20 @@ data/knowledge/<部门>/学习库/          ← 仅该部门 + admin 可见
 
 编辑入口：有权限时 /study 页面显示「编辑本库」，直接跳到既有的 `/admin/knowledge?path=...`（不重写编辑器）。
 
+**学习进度（服务端，不是 localStorage）**
+
+```
+POST /api/study/progress   { path, completed }   本人勾选/取消（幂等）
+GET  /api/study/stats?scope=飞训部                完成情况（部长/管理员）
+```
+
+- 表 `StudyProgresses`：`(UserId, Path)` 唯一 + 级联外键，一个用户一个课时只有一条记录
+- 存服务端的原因：换设备不丢、清缓存不归零、用户改不了 —— 因此才能作为部门完成率与
+  后续培训考核的依据。localStorage 版本做不出「完成情况」这个视图，因为那只存在于一个人浏览器里
+- 勾选只允许**本人可见的真实课时**：用同一棵 ACL 过滤后的树校验，不另写一套判断
+- 完成情况的范围语义：`公共` = 全队；部门名 = 该部门成员。权限为 admin 全部、
+  部长仅「公共 + 本部门」，队员 403（`CanViewScopeStats`，有测试矩阵）
+
 ### 零件库存
 
 ```

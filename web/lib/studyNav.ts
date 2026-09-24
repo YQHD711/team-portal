@@ -1,6 +1,6 @@
 /** 学习库的共享类型与纯函数（可单测）。 */
 
-export interface StudyLesson { title: string; path: string; canEdit: boolean; }
+export interface StudyLesson { title: string; path: string; canEdit: boolean; completed?: boolean; }
 
 export interface StudyStage {
   title: string;
@@ -11,6 +11,7 @@ export interface StudyStage {
   description?: string | null;
   duration?: string | null;
   goal?: string | null;
+  completedCount?: number;
   lessons: StudyLesson[];
 }
 
@@ -23,8 +24,13 @@ export interface StudyScope {
   overview?: string | null;
   duration?: string | null;
   goal?: string | null;
+  completedCount?: number;
+  lessonCount?: number;
   stages: StudyStage[];
 }
+
+export interface StudyStatsLesson { title: string; path: string; completedCount: number; }
+export interface StudyStats { scope: string; memberCount: number; lessons: StudyStatsLesson[]; }
 
 /** 按阶段顺序拉平全部课时 —— 上一课/下一课的遍历依据。 */
 export function flattenLessons(stages: StudyStage[]): StudyLesson[] {
@@ -34,6 +40,30 @@ export function flattenLessons(stages: StudyStage[]): StudyLesson[] {
 /** 该课时在整个学习路径里的序号（从 1 开始）；找不到返回 0。 */
 export function lessonOrdinal(stages: StudyStage[], path: string): number {
   return flattenLessons(stages).findIndex(l => l.path === path) + 1;
+}
+
+/**
+ * 勾选/取消后就地更新结构（不改后端返回的原对象）。
+ * 计数字段一并重算 —— 否则进度条会和勾选状态对不上。
+ */
+export function applyCompletion(scope: StudyScope, path: string, completed: boolean): StudyScope {
+  const stages = scope.stages.map(stage => {
+    const lessons = stage.lessons.map(l => (l.path === path ? { ...l, completed } : l));
+    return { ...stage, lessons, completedCount: lessons.filter(l => l.completed).length };
+  });
+
+  return {
+    ...scope,
+    stages,
+    completedCount: stages.reduce((n, s) => n + (s.completedCount ?? 0), 0),
+    lessonCount: stages.reduce((n, s) => n + s.lessons.length, 0),
+  };
+}
+
+/** 完成百分比（0–100 取整）；没有课时时返回 0 而不是 NaN。 */
+export function percent(done: number | undefined, total: number | undefined): number {
+  if (!total || total <= 0) return 0;
+  return Math.round(((done ?? 0) / total) * 100);
 }
 
 export interface TocItem { level: number; text: string; id: string; }

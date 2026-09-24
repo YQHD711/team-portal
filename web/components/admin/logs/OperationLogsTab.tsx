@@ -16,7 +16,7 @@ const baseActionLabels: Record<string, string> = {
   import: "导入", create: "创建", update: "修改", delete: "删除",
   settings: "系统设置", invite: "邀请", upload: "上传",
   purchase: "标记已购买", receive: "收货入库", "dept-approve": "部长审批", "admin-approve": "管理员审批",
-  profile: "档案",
+  profile: "档案", complete: "标记完成", uncomplete: "取消完成",
 };
 
 /* 按 (targetType, action) 精化的标签 */
@@ -28,6 +28,9 @@ const targetActionLabel: Record<string, Record<string, string>> = {
   material: {
     approve: "领用审批", reject: "驳回领用",
   },
+  study: {
+    complete: "学完一课", uncomplete: "取消完成",
+  },
 };
 
 const targetTypeOptions = [
@@ -36,6 +39,7 @@ const targetTypeOptions = [
   { value: "item", label: "零件" }, { value: "invite-code", label: "邀请码" },
   { value: "knowledge", label: "知识库" }, { value: "document", label: "文档" },
   { value: "settings", label: "系统设置" }, { value: "backup", label: "备份" }, { value: "exam", label: "考核" },
+  { value: "study", label: "学习库" },
 ];
 
 const actionColors: Record<string, string> = {
@@ -47,6 +51,7 @@ const actionColors: Record<string, string> = {
   checkout: "bg-warning/15 text-warning", checkin: "bg-info/15 text-info", "damage-report": "bg-warning/15 text-warning",
   stocktake: "bg-info/15 text-info", invite: "bg-info/15 text-info", "dept-approve": "bg-info/15 text-info",
   "admin-approve": "bg-info/15 text-info", receive: "bg-success/15 text-success", approve: "bg-success/15 text-success",
+  complete: "bg-success/15 text-success", uncomplete: "bg-warning/15 text-warning",
 };
 
 /** 动作中文标签: 先按 targetType 精化,否则粗粒度表 */

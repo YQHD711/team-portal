@@ -162,6 +162,7 @@ builder.Services.AddScoped<FlightService>();
 builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<MaterialService>();
+builder.Services.AddScoped<StudyProgressService>();
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
