@@ -59,7 +59,14 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   }, [content, activated]);
 
   return (
-    <div className="prose prose-sm sm:prose-base prose-zinc dark:prose-invert max-w-none overflow-x-auto">
+    <div className="prose prose-zinc dark:prose-invert max-w-none overflow-x-auto
+      prose-headings:font-semibold
+      prose-h1:text-2xl prose-h2:text-xl prose-h2:mt-8 prose-h2:pb-1.5 prose-h2:border-b prose-h2:border-border
+      prose-h3:text-base
+      prose-table:text-sm prose-th:bg-surface-subtle prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-1.5
+      prose-table:border prose-table:border-border prose-th:border prose-th:border-border prose-td:border prose-td:border-border
+      prose-blockquote:border-l-4 prose-blockquote:border-sky-400/60 prose-blockquote:bg-sky-50/50 prose-blockquote:py-1 prose-blockquote:not-italic
+      prose-li:my-1 prose-hr:my-8">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
