@@ -50,6 +50,28 @@ const layoutItems = [
   { id: 12, name: "M3螺丝", category: "耗材", quantity: 2, locationCode: "201-A-3-05", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
+/** 学习库：一个阶段 + 一课，正文里刻意同时放「行内代码」和「围栏代码块」 */
+const studyMarkdown = [
+  "# 认识航模",
+  "",
+  "调用 `GEH_NEW_TRAJ` 生成轨迹，再交给 `EXEC_TRAJ` 执行。",
+  "",
+  "```bash",
+  "echo hello",
+  "```",
+  "",
+].join("\n");
+
+const studyScope = {
+  scope: "飞训部", label: "飞训部学习库", libraryPath: "飞训部/学习库", canEdit: false,
+  overviewPath: null, overview: null, completedCount: 0, lessonCount: 1,
+  stages: [{
+    title: "入门筑基", path: "飞训部/学习库/01-入门筑基", canEdit: false, descriptionPath: null,
+    completedCount: 0,
+    lessons: [{ title: "认识航模", path: "飞训部/学习库/01-入门筑基/01-认识航模.md", canEdit: false, completed: false }],
+  }],
+};
+
 const layoutRoom = {
   id: 1, roomCode: "201", roomName: "库房", floor: 1,
   cabinetCount: 2, shelfCount: 4, positionCount: 8, description: "航模器材库房",
@@ -87,6 +109,8 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     }
     if (/\/api\/finance\/requests\/\d+\/reject$/.test(path) && method === "POST") return json({});
     if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
+    if (path === "/api/study/library") return json({ scopes: [studyScope] });
+    if (path === "/api/knowledge/content") return json({ content: studyMarkdown });
     if (path === "/api/inventory" && method === "POST") {
       state.itemPost = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
       return json({ id: 99, ...state.itemPost });
@@ -339,6 +363,34 @@ test.describe("冒烟流程", () => {
     await expect(model).toHaveAttribute("list");
     await model.fill("my-own-model-7b");
     await expect(model).toHaveValue("my-own-model-7b");
+  });
+
+  /**
+   * Markdown 排版回归（真实浏览器 + 真实 CSS，jsdom 测不出来）：
+   * 1. typography 默认给行内 code 注入一对反引号（::before/::after content:"`"），
+   *    页面上会真的显示出来 —— 必须被去掉
+   * 2. 围栏代码块外面不能再套一层 <pre>：SyntaxHighlighter 自带容器，
+   *    两层叠加会让背景/内边距加倍、对比度变差
+   */
+  test("Markdown 排版：行内代码不带反引号、代码块不套两层", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/study");
+    await page.getByRole("button", { name: "认识航模", exact: true }).click();
+
+    const article = page.locator("article");
+    await expect(article).toBeVisible();
+
+    const inline = article.locator("p code").first();
+    await expect(inline).toHaveText("GEH_NEW_TRAJ");
+    const before = await inline.evaluate((el) => getComputedStyle(el, "::before").content);
+    const after = await inline.evaluate((el) => getComputedStyle(el, "::after").content);
+    expect(before, "行内代码左侧不该出现反引号").not.toContain("`");
+    expect(after, "行内代码右侧不该出现反引号").not.toContain("`");
+
+    await expect(article).toContainText("echo hello");
+    await expect(article.locator("pre pre")).toHaveCount(0);
   });
 });
 

@@ -41,6 +41,23 @@ describe("Markdown 排版（prose）配置", () => {
     expect(src).toContain("dark:prose-invert");
   });
 
+  it("去掉了 typography 默认给行内代码注入的反引号", () => {
+    // 默认规则是 `.prose :where(code)::before/::after { content: "`" }`，
+    // 页面上会真的显示出一对反引号。注意 `prose-code:before:content-none`
+    // 那个工具类只生成了 `pre code` 的覆盖，管不到行内代码 —— 所以必须用显式选择器。
+    const css = read("app/globals.css");
+
+    expect(css).toContain(".prose code::before");
+    expect(css).toContain(".prose code::after");
+    expect(css).toMatch(/\.prose code::before[\s\S]*?content:\s*none/);
+  });
+
+  it("代码块不再套一层 <pre>（外层容器由 SyntaxHighlighter/MermaidBlock 自带）", () => {
+    const src = read("components/knowledge/MarkdownRenderer.tsx");
+
+    expect(src).toMatch(/pre:\s*\(\{\s*children\s*\}\)\s*=>\s*<>\{children\}<\/>/);
+  });
+
   it("表格有显式样式 —— 学习文档大量用表格，默认样式最显挤", () => {
     const src = read("components/knowledge/MarkdownRenderer.tsx");
 

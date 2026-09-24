@@ -62,6 +62,8 @@ tmp_*.cs
 !/logs/.gitkeep
 test-results/
 !test-results/.gitkeep
+# Playwright 在 CI 模式(CI=1)下生成的 HTML 报告，本地跑也可能出现
+playwright-report/
 
 # OS
 .DS_Store
