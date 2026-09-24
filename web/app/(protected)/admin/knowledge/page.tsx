@@ -2,12 +2,19 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield, Folder, Pencil } from "lucide-react";
+import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield } from "lucide-react";
 import { getToken, isStaff } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
 import DOMPurify from "dompurify";
-interface TreeNode { name: string; type: "folder" | "file" | "wiki"; path?: string; children?: TreeNode[]; extra?: Record<string, string>; }
+import { ancestorFolders, findFirstFile, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
+import { KnowledgeTree } from "@/components/knowledge/KnowledgeTree";
+
+/** 读 URL 查询参数（SSR 时没有 window）。用于搜索结果/「编辑本库」跳转。 */
+function urlParam(key: string): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(key) ?? "";
+}
+
 export default function KnowledgeAdminPage() {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -22,17 +29,50 @@ export default function KnowledgeAdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadFolder, setUploadFolder] = useState("公共");
   const [uploadMsg, setUploadMsg] = useState("");
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(() => !!urlParam("q"));
   const [splitMode, setSplitMode] = useState(false);
-  const [searchKw, setSearchKw] = useState("");
+  const [searchKw] = useState(() => urlParam("q"));
   const [cssContent, setCssContent] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const deepLinkApplied = useRef(false);
 
   const { user } = useCurrentUser();
   const canEdit = isStaff();
 
-  const fetchTree = useCallback(() => { api.get<TreeNode[]>("/api/knowledge/tree").then(setTree); }, []);
+  const openFileAt = useCallback((file: string) => {
+    setExpanded(prev => new Set([...prev, ...ancestorFolders(file)]));
+    api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(file)}`)
+      .then(d => { setContent(d.content); setOriginal(d.content); setSelected(file); setDirty(false); })
+      .catch(() => setNotice("文档加载失败（可能没有权限）"));
+  }, []);
+
+  /**
+   * 拉目录树；首次到位后顺带解析 ?path=。
+   *
+   * 这个 ?path= 可能是**目录**（例如从学习库点「编辑本库」跳过来）。
+   * 旧实现一律按文件去请求 content，目录必然失败、又被 .catch 静默吞掉，
+   * 于是"跳过来了却一片空白、也不报错"。现在目录就展开它并打开里面第一个文档。
+   * 放在 .then 里而不是 effect 体内，避免 effect 里同步 setState。
+   */
+  const fetchTree = useCallback(() => {
+    api.get<TreeNode[]>("/api/knowledge/tree").then(nodes => {
+      setTree(nodes);
+      if (deepLinkApplied.current) return;
+      deepLinkApplied.current = true;
+
+      const target = urlParam("path");
+      if (!target) return;
+      if (isTextFile(target)) { openFileAt(target); return; }
+
+      setExpanded(prev => new Set([...prev, target, ...ancestorFolders(target)]));
+      const first = findFirstFile(nodes, target);
+      if (first) openFileAt(first);
+      else setNotice(`「${target}」下还没有文档，可用右上角「新建文档」创建`);
+    });
+  }, [openFileAt]);
   useEffect(() => { fetchTree(); }, [fetchTree]);
 
   // 跨项目预览时套原文档的 CSS(Wiki 翻译项目把仓库 assets/ 复制到知识库,这里加载套到预览)
@@ -56,17 +96,6 @@ export default function KnowledgeAdminPage() {
       setCssContent("");
     })();
   }, [selected]);
-
-  // 从搜索结果 ?path=&q= 跳转过来时，自动打开文件并定位关键词
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const p = sp.get("path");
-    if (!p) return;
-    const q = sp.get("q");
-    api.get<{ content: string }>(`/api/knowledge/content?path=${encodeURIComponent(p)}`)
-      .then(data => { setContent(data.content); setOriginal(data.content); setSelected(p); setDirty(false); if (q) { setSearchKw(q); setPreview(true); } })
-      .catch(() => {});
-  }, []);
 
   const loadFile = async (path: string) => {
     try {
@@ -149,32 +178,6 @@ export default function KnowledgeAdminPage() {
     return () => clearTimeout(t);
   }, [searchKw, preview, content]);
 
-  const renderTree = (nodes: TreeNode[], level = 0) => (
-    <ul className={level === 0 ? "space-y-0.5" : "ml-4 space-y-0.5"}>
-      {nodes.map(n => (
-        <li key={n.name + (n.path ?? "")}>
-          {n.type === "wiki" ? (
-            <div><span className="text-xs text-sky-600 dark:text-sky-400 font-medium px-1">{n.name}/ <span className="text-faint">(Wiki)</span></span>{n.children && renderTree(n.children, level + 1)}</div>
-          ) : n.type === "folder" ? (
-            <div className="flex items-center gap-1 group">
-              <span className="text-xs text-faint font-medium px-1">{n.name}/</span>
-              {canEdit && <button onClick={() => openRename(n)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary" title="重命名"><Pencil className="h-3 w-3" /></button>}
-              {canEdit && <button onClick={() => handleDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>}
-            </div>
-          ) : (
-            <div role="button" tabIndex={0} onClick={() => { const ext = (n.path ?? "").split(".").pop()?.toLowerCase() ?? ""; if ([".md", ".txt", ".csv", ".json", ".xml"].some(e => (n.path ?? "").toLowerCase().endsWith(e))) loadFile(n.path!); else window.open(`/api/knowledge/download?path=${encodeURIComponent(n.path!)}`, "_blank"); }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
-              className={cn("flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-sm hover:bg-surface-hover group cursor-pointer", selected === n.path && "bg-sky-50 dark:bg-sky-950 text-sky-700")}>
-              <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
-              <span className="truncate">{n.name}</span>
-              {canEdit && <button onClick={(e) => { e.stopPropagation(); openRename(n); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>}
-              {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDelete(n.path ?? n.name); }} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
-            </div>
-          )}
-          {n.type !== "wiki" && n.children && renderTree(n.children, level + 1)}
-        </li>
-      ))}
-    </ul>
-  );
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
@@ -208,11 +211,16 @@ export default function KnowledgeAdminPage() {
 
       <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100vh-12rem)]">
         <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-72 lg:max-h-none">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-xs font-medium text-faint">目录树</span>
-            {user && <span className="text-[10px] text-faint">{user.role}</span>}
-          </div>
-          {renderTree(tree[0]?.children ?? [])}
+          <KnowledgeTree
+            nodes={tree[0]?.children ?? []}
+            selected={selected} canEdit={canEdit} role={user?.role}
+            expanded={expanded} onExpandedChange={setExpanded}
+            onOpenFile={n => {
+              if (isTextFile(n.path!)) loadFile(n.path!);
+              else window.open(`/api/knowledge/download?path=${encodeURIComponent(n.path!)}`, "_blank");
+            }}
+            onRename={openRename}
+            onDelete={handleDelete} />
         </div>
 
         <div className="lg:col-span-3 rounded-xl border border-border bg-surface flex flex-col overflow-hidden">
@@ -247,7 +255,12 @@ export default function KnowledgeAdminPage() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-faint">
-              <div className="text-center"><FileText className="h-10 w-10 mx-auto mb-2 text-zinc-300" />{canEdit ? "选择文件开始编辑" : "选择文件查看内容"}</div>
+              <div className="text-center px-6">
+                <FileText className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
+                {notice
+                  ? <span className="text-amber-500 text-sm">{notice}</span>
+                  : <span>{canEdit ? "选择文件开始编辑" : "选择文件查看内容"}</span>}
+              </div>
             </div>
           )}
         </div>
