@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace api;
@@ -96,8 +97,10 @@ public class RouteSmokeTests : IClassFixture<WebApplicationFactory<Program>>
         try
         {
             var res = await client.GetAsync("/api/study/library");
+            var progress = await client.PostAsJsonAsync("/api/study/progress", new { path = "x", completed = true });
 
             Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, progress.StatusCode);
         }
         finally
         {

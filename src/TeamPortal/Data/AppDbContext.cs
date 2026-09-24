@@ -36,6 +36,7 @@ public class AppDbContext : DbContext
     public DbSet<SkillCertification> SkillCertifications => Set<SkillCertification>();
     public DbSet<DepartmentExam> DepartmentExams => Set<DepartmentExam>();
     public DbSet<DepartmentExamResult> DepartmentExamResults => Set<DepartmentExamResult>();
+    public DbSet<StudyProgress> StudyProgresses => Set<StudyProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -162,6 +163,14 @@ public class AppDbContext : DbContext
             entity.Property(t => t.OriginalTable).IsRequired().HasMaxLength(50);
             entity.Property(t => t.Title).IsRequired().HasMaxLength(200);
             entity.Property(t => t.DeletedByName).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<StudyProgress>(entity =>
+        {
+            // 一个用户对一个课时只有一条记录；完成率统计按 UserId+Path 命中
+            entity.HasIndex(p => new { p.UserId, p.Path }).IsUnique();
+            entity.Property(p => p.Path).IsRequired().HasMaxLength(400);
+            entity.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InviteCode>(entity =>

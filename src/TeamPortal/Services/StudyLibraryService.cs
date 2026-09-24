@@ -152,6 +152,9 @@ public record StudyScope(
     public string? Overview { get; init; }
     public string? Duration { get; init; }
     public string? Goal { get; init; }
+    /// <summary>本人已完成课时数 / 课时总数；由 Endpoint 结合进度补上。</summary>
+    public int CompletedCount { get; init; }
+    public int LessonCount { get; init; }
 }
 
 public record StudyStage(
@@ -162,6 +165,12 @@ public record StudyStage(
     public string? Description { get; init; }
     public string? Duration { get; init; }
     public string? Goal { get; init; }
+    /// <summary>本人已完成课时数；由 Endpoint 结合进度补上。</summary>
+    public int CompletedCount { get; init; }
 }
 
-public record StudyLesson(string Title, string Path, bool CanEdit);
+public record StudyLesson(string Title, string Path, bool CanEdit)
+{
+    /// <summary>本人是否已完成；由 Endpoint 结合进度补上。</summary>
+    public bool Completed { get; init; }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractToc, flattenLessons, lessonOrdinal, slugify, type StudyStage } from "@/lib/studyNav";
+import { applyCompletion, extractToc, flattenLessons, lessonOrdinal, percent, slugify, type StudyScope, type StudyStage } from "@/lib/studyNav";
 
 const stage = (title: string, lessonTitles: string[]): StudyStage => ({
   title, path: `公共/学习库/${title}`, canEdit: false, descriptionPath: null,
@@ -41,5 +41,53 @@ describe("学习库导航（纯逻辑）", () => {
   it("中文标题生成可用的锚点 id（保留汉字）", () => {
     expect(slugify("认识 航模!")).toBe("认识-航模");
     expect(extractToc("## 认识航模").at(0)?.id).toBe("认识航模");
+  });
+});
+
+describe("进度与完成度（纯逻辑）", () => {
+  const scopeWith = (completed: string[]): StudyScope => {
+    const done = new Set(completed);
+    const lessons = [
+      { title: "认识航模", path: "公共/学习库/01/01-认识航模.md", canEdit: false, completed: done.has("公共/学习库/01/01-认识航模.md") },
+      { title: "安全规范", path: "公共/学习库/01/02-安全规范.md", canEdit: false, completed: done.has("公共/学习库/01/02-安全规范.md") },
+    ];
+    return {
+      scope: "公共", label: "公共学习库", libraryPath: "公共/学习库", canEdit: false, overviewPath: null,
+      completedCount: lessons.filter(l => l.completed).length, lessonCount: lessons.length,
+      stages: [{ title: "入门", path: "公共/学习库/01", canEdit: false, descriptionPath: null, completedCount: lessons.filter(l => l.completed).length, lessons }],
+    };
+  };
+
+  it("勾选后就地更新课时与各级计数（进度条不能和勾选状态对不上）", () => {
+    const updated = applyCompletion(scopeWith([]), "公共/学习库/01/01-认识航模.md", true);
+
+    expect(updated.completedCount).toBe(1);
+    expect(updated.lessonCount).toBe(2);
+    expect(updated.stages[0].completedCount).toBe(1);
+    expect(updated.stages[0].lessons[0].completed).toBe(true);
+  });
+
+  it("取消勾选后计数回落", () => {
+    const updated = applyCompletion(scopeWith(["公共/学习库/01/01-认识航模.md"]), "公共/学习库/01/01-认识航模.md", false);
+
+    expect(updated.completedCount).toBe(0);
+    expect(updated.stages[0].lessons[0].completed).toBe(false);
+  });
+
+  it("不改动原对象（避免 React 状态被就地修改）", () => {
+    const original = scopeWith([]);
+
+    applyCompletion(original, "公共/学习库/01/01-认识航模.md", true);
+
+    expect(original.stages[0].lessons[0].completed).toBe(false);
+    expect(original.completedCount).toBe(0);
+  });
+
+  it("百分比取整；没有课时时返回 0 而不是 NaN", () => {
+    expect(percent(1, 3)).toBe(33);
+    expect(percent(3, 3)).toBe(100);
+    expect(percent(0, 2)).toBe(0);
+    expect(percent(0, 0)).toBe(0);
+    expect(percent(undefined, undefined)).toBe(0);
   });
 });

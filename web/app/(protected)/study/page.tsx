@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { useCurrentUser } from "@/lib/hooks";
 import { StudyPath } from "@/components/study/StudyPath";
 import { StudyLessonView } from "@/components/study/StudyLessonView";
-import { flattenLessons, type StudyScope } from "@/lib/studyNav";
-import { GraduationCap, Loader2, Pencil, BookOpen, ChevronRight } from "lucide-react";
+import { StudyStatsPanel } from "@/components/study/StudyStatsPanel";
+import { applyCompletion, flattenLessons, percent, type StudyScope } from "@/lib/studyNav";
+import { GraduationCap, Loader2, Pencil, BookOpen, ChevronRight, Users } from "lucide-react";
 
 /** 学习库：学习路径总览 ⇄ 课时阅读。结构与阶段说明来自 /api/study/library，正文走知识库接口。 */
 export default function StudyPage() {
@@ -16,6 +18,9 @@ export default function StudyPage() {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [docLoading, setDocLoading] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
 
   useEffect(() => {
     api.get<{ scopes: StudyScope[] }>("/api/study/library")
@@ -42,10 +47,21 @@ export default function StudyPage() {
   const activeLesson = idx >= 0 ? lessons[idx] : null;
   const stageTitle = scope?.stages.find(s => s.lessons.some(l => l.path === activePath))?.title ?? "";
 
-  const pickScope = (i: number) => { setScopeIdx(i); setActivePath(null); };
+  const pickScope = (i: number) => { setScopeIdx(i); setActivePath(null); setShowStats(false); };
+
+  /** 勾选完成：先写服务端，再就地更新本地结构（后端是权威）。 */
+  const toggle = async (path: string, completed: boolean) => {
+    try {
+      await api.post("/api/study/progress", { path, completed });
+      setScopes(prev => prev.map(s => (s.scope === scope.scope ? applyCompletion(s, path, completed) : s)));
+    } catch { /* 失败就保持原样，下次刷新以服务端为准 */ }
+  };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>;
   if (scopes.length === 0) return <EmptyState />;
+
+  const total = scope.lessonCount ?? lessons.length;
+  const done = scope.completedCount ?? 0;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -54,14 +70,25 @@ export default function StudyPage() {
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <GraduationCap className="h-6 w-6 text-sky-500" />学习库
           </h1>
-          <p className="text-sm text-muted mt-1">按阶段组织的队内学习资料 · 内容与知识库同源，可搜索、可备份</p>
+          <p className="text-sm text-muted mt-1">
+            按阶段组织的队内学习资料 · 内容与知识库同源，可搜索、可备份
+            {total > 0 && <span className="ml-2 text-sky-600 dark:text-sky-400">已学 {done}/{total}（{percent(done, total)}%）</span>}
+          </p>
         </div>
-        {scope?.canEdit && (
-          <Link href={`/admin/knowledge?path=${encodeURIComponent(scope.libraryPath)}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs text-muted hover:text-sky-500 hover:border-sky-400">
-            <Pencil className="h-3.5 w-3.5" />编辑本库
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {isStaff && (
+            <button onClick={() => setShowStats(v => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${showStats ? "border-sky-400 text-sky-500" : "text-muted hover:text-sky-500 hover:border-sky-400"}`}>
+              <Users className="h-3.5 w-3.5" />完成情况
+            </button>
+          )}
+          {scope?.canEdit && (
+            <Link href={`/admin/knowledge?path=${encodeURIComponent(scope.libraryPath)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs text-muted hover:text-sky-500 hover:border-sky-400">
+              <Pencil className="h-3.5 w-3.5" />编辑本库
+            </Link>
+          )}
+        </div>
       </header>
 
       {scopes.length > 1 && (
@@ -74,6 +101,8 @@ export default function StudyPage() {
           ))}
         </div>
       )}
+
+      {showStats && <StudyStatsPanel scope={scope.scope} onClose={() => setShowStats(false)} />}
 
       {activeLesson ? (
         <div className="grid gap-6 xl:grid-cols-[200px_1fr]">
@@ -89,7 +118,7 @@ export default function StudyPage() {
                       <li key={l.path}>
                         <button onClick={() => setActivePath(l.path)}
                           className={`w-full text-left rounded px-2 py-1 text-xs truncate transition-colors ${l.path === activePath ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium" : "text-faint hover:bg-surface-hover"}`}>
-                          {l.title}
+                          {l.completed ? "✓ " : ""}{l.title}
                         </button>
                       </li>
                     ))}
@@ -104,10 +133,11 @@ export default function StudyPage() {
             prev={idx > 0 ? lessons[idx - 1] : null}
             next={idx < lessons.length - 1 ? lessons[idx + 1] : null}
             total={lessons.length}
-            onOpen={setActivePath} onBackToPath={() => setActivePath(null)} />
+            onOpen={setActivePath} onBackToPath={() => setActivePath(null)}
+            onToggle={completed => toggle(activeLesson.path, completed)} />
         </div>
       ) : (
-        <StudyPath scope={scope} onOpenLesson={setActivePath} />
+        <StudyPath scope={scope} onOpenLesson={setActivePath} onToggle={toggle} />
       )}
     </div>
   );
