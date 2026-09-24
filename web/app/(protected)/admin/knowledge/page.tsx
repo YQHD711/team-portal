@@ -212,7 +212,10 @@ export default function KnowledgeAdminPage() {
       <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100vh-12rem)]">
         <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-72 lg:max-h-none">
           <KnowledgeTree
-            nodes={tree[0]?.children ?? []}
+            // 必须传整棵树的**根数组**：/api/knowledge/tree 返回 [公共知识库, 飞训部, ...]，
+            // 部门与公共是平级的根节点。此前只传 tree[0].children，
+            // 于是部门下的文档在树里完全看不到（右侧能打开、左侧找不到它在哪）。
+            nodes={tree}
             selected={selected} canEdit={canEdit} role={user?.role}
             expanded={expanded} onExpandedChange={setExpanded}
             onOpenFile={n => {

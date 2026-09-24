@@ -18,8 +18,13 @@ const mockedIsStaff = vi.mocked(isStaff);
 
 const LESSON = "公共/学习库/01-入门筑基/01-认识航模.md";
 const OVERVIEW = "公共/学习库/_学习路径.md";
+const DEPT_OVERVIEW = "飞训部/学习库/_飞训路径.md";
 
-/** 与真实扫描一致：目录在前，文件在后。 */
+/**
+ * 真实结构：/api/knowledge/tree 返回的是**根节点数组** ——
+ * `[公共知识库, 飞训部, ...]`，部门是与公共**平级**的根节点。
+ * 与真实扫描一致：目录在前，文件在后。
+ */
 const tree = [
   {
     name: "公共知识库", type: "folder", path: "公共",
@@ -35,6 +40,15 @@ const tree = [
         ],
       },
       { name: "空目录", type: "folder", path: "公共/空目录", children: [] },
+    ],
+  },
+  {
+    name: "飞训部", type: "folder", path: "飞训部",
+    children: [
+      {
+        name: "学习库", type: "folder", path: "飞训部/学习库",
+        children: [{ name: "_飞训路径", type: "file", path: DEPT_OVERVIEW, extra: { ext: ".md" } }],
+      },
     ],
   },
 ];
@@ -65,17 +79,18 @@ afterEach(() => {
 });
 
 describe("知识库管理页 · 目录树折叠", () => {
-  it("默认全部收起：能看到顶层目录，但看不到里面的文档", async () => {
+  it("默认全部收起：只看到根作用域", async () => {
     render(<KnowledgeAdminPage />);
 
-    expect(await screen.findByText("学习库/")).toBeInTheDocument();
-    expect(screen.queryByText("_学习路径")).not.toBeInTheDocument();
+    expect(await screen.findByText("公共知识库/")).toBeInTheDocument();
+    expect(screen.queryByText("学习库/")).not.toBeInTheDocument();
   });
 
-  it("点箭头展开后显示子项，再点收起", async () => {
+  it("逐级展开后显示子项，再点收起", async () => {
     render(<KnowledgeAdminPage />);
-    await screen.findByText("学习库/");
+    await screen.findByText("公共知识库/");
 
+    fireEvent.click(screen.getByRole("button", { name: "展开 公共知识库" }));
     fireEvent.click(screen.getByRole("button", { name: "展开 学习库" }));
 
     expect(screen.getByText("_学习路径")).toBeInTheDocument();
@@ -87,24 +102,33 @@ describe("知识库管理页 · 目录树折叠", () => {
 
   it("「全部展开」一次展开所有层级", async () => {
     render(<KnowledgeAdminPage />);
-    await screen.findByText("学习库/");
+    await screen.findByText("公共知识库/");
 
     fireEvent.click(screen.getByRole("button", { name: "全部展开" }));
 
     expect(screen.getByText("_学习路径")).toBeInTheDocument();
     expect(screen.getByText("01-认识航模")).toBeInTheDocument();
+    expect(screen.getByText("_飞训路径")).toBeInTheDocument();   // 部门那边也展开
   });
 
   it("「全部收起」把展开的都收回去", async () => {
     render(<KnowledgeAdminPage />);
-    await screen.findByText("学习库/");
+    await screen.findByText("公共知识库/");
     fireEvent.click(screen.getByRole("button", { name: "全部展开" }));
     expect(screen.getByText("01-认识航模")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "全部收起" }));
 
     expect(screen.queryByText("01-认识航模")).not.toBeInTheDocument();
-    expect(screen.getByText("学习库/")).toBeInTheDocument();
+    expect(screen.getByText("公共知识库/")).toBeInTheDocument();
+  });
+
+  it("部门根目录也要出现在树里（回归：此前只渲染公共那一支，部门整个看不到）", async () => {
+    render(<KnowledgeAdminPage />);
+
+    // /api/knowledge/tree 返回的是根节点数组，部门与公共**平级**
+    expect(await screen.findByText("公共知识库/")).toBeInTheDocument();
+    expect(screen.getByText("飞训部/")).toBeInTheDocument();
   });
 });
 
@@ -144,5 +168,14 @@ describe("知识库管理页 · ?path= 深链接", () => {
 
     expect(await screen.findByText("01-认识航模")).toBeInTheDocument();
     expect(screen.getByText("01-入门筑基/")).toBeInTheDocument();
+  });
+
+  it("?path= 指向**部门**下的目录同样能展开并打开（部门根没渲染时就完全看不到）", async () => {
+    window.history.pushState({}, "", `/admin/knowledge?path=${encodeURIComponent("飞训部/学习库")}`);
+    render(<KnowledgeAdminPage />);
+
+    expect(await screen.findByText("_飞训路径")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith(`/api/knowledge/content?path=${encodeURIComponent(DEPT_OVERVIEW)}`));
   });
 });
