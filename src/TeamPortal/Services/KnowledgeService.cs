@@ -64,6 +64,9 @@ public partial class KnowledgeService
             {
                 var name = Path.GetFileName(deptDir);
                 if (name == "公共" || name == "公共知识库") continue;
+                // 点开头的目录（.history 备份仓等）是基础设施，不是"部门"，不该出现在树里：
+                // 会误导用户以为是个资料目录，而且能从界面上被删掉/改名（把备份仓毁了）
+                if (name.StartsWith('.')) continue;
                 nodes.Add(new TreeNode { Name = name, Type = "folder", Path = name, Children = ScanDirectory(deptDir, invisible) });
             }
         }
@@ -222,6 +225,7 @@ public partial class KnowledgeService
         {
             var dirName = Path.GetFileName(subDir);
             if (invisibleProjects != null && invisibleProjects.Contains(dirName)) continue;
+            if (dirName.StartsWith('.')) continue;   // .history 等基础设施目录不进树
             var relPath = Path.GetRelativePath(_basePath, subDir).Replace('\\', '/');
 
             // Wiki projects: collapsed entry for regular users, expandable for admins

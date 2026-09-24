@@ -14,6 +14,7 @@ vi.mock("@/lib/hooks", () => ({
 }));
 
 const mockedGet = vi.mocked(api.get as (endpoint: string) => Promise<unknown>);
+const mockedPost = vi.mocked(api.post as (endpoint: string, body: unknown) => Promise<unknown>);
 const mockedIsStaff = vi.mocked(isStaff);
 
 const LESSON = "公共/学习库/01-入门筑基/01-认识航模.md";
@@ -70,12 +71,52 @@ function mockApi() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedIsStaff.mockReturnValue(true);
+  mockedPost.mockResolvedValue({});
   mockApi();
   window.history.pushState({}, "", "/admin/knowledge");
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   window.history.pushState({}, "", "/admin/knowledge");
+});
+
+describe("知识库管理页 · 错误可见性", () => {
+  it("保存失败时显示后端的真实原因（以前一律只说「保存失败」，没法查）", async () => {
+    const alertSpy = vi.fn();
+    vi.stubGlobal("alert", alertSpy);
+    mockedPost.mockRejectedValue(new Error("没有写入权限：Access to the path '/data/knowledge/…/a.md.tmp' is denied."));
+    render(<KnowledgeAdminPage />);
+
+    // 打开一个文件 → 改动 → 保存
+    fireEvent.click(await screen.findByRole("button", { name: "展开 公共知识库" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开 学习库" }));
+    fireEvent.click(screen.getByRole("button", { name: "_学习路径" }));
+    const box = await screen.findByDisplayValue("# 文档内容");
+    fireEvent.change(box, { target: { value: "# 改过了" } });
+    fireEvent.click(screen.getByRole("button", { name: /^保存/ }));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1));
+    expect(alertSpy.mock.calls[0][0]).toContain("没有写入权限");
+    expect(alertSpy.mock.calls[0][0]).toContain("is denied");
+  });
+
+  it("保存成功则不弹错误", async () => {
+    const alertSpy = vi.fn();
+    vi.stubGlobal("alert", alertSpy);
+    render(<KnowledgeAdminPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开 公共知识库" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开 学习库" }));
+    fireEvent.click(screen.getByRole("button", { name: "_学习路径" }));
+    const box = await screen.findByDisplayValue("# 文档内容");
+    fireEvent.change(box, { target: { value: "# 改过了" } });
+    fireEvent.click(screen.getByRole("button", { name: /^保存/ }));
+
+    await waitFor(() => expect(mockedPost).toHaveBeenCalledWith("/api/admin/knowledge/write",
+      expect.objectContaining({ path: OVERVIEW })));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("知识库管理页 · 目录树折叠", () => {

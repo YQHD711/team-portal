@@ -136,7 +136,7 @@ public static class AdminEndpoints
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = true }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}", targetRole: "staff"); return Results.Ok(new { success = true }); }
-            catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
+            catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(WriteErrorHint(e), statusCode: 400); }
         });
 
         admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
@@ -216,6 +216,24 @@ public static class AdminEndpoints
             return Results.Ok(new { role, department = dept });
         });
     }
+
+    /// <summary>
+    /// 把知识库写入失败翻译成**能直接照做**的提示。
+    ///
+    /// 起因：用户保存时报 400，而前端只显示"保存失败"，看不到任何原因。
+    /// 最常见的真实原因是属主对不上 —— 后端容器以非 root 的 app 用户运行，
+    /// 若有人（例如外部 agent）直接在宿主机上往 data/knowledge 里写文件，
+    /// 那些目录会属于 root，app 用户建不了临时文件，于是"能读不能写"。
+    /// </summary>
+    internal static string WriteErrorHint(Exception e) => e switch
+    {
+        UnauthorizedAccessException => $"没有写入权限：{e.Message}\n"
+            + "该文件/目录的属主与本服务不一致（常见于直接用宿主机工具写入 data/knowledge）。"
+            + "在服务器上执行：sudo chown -R $(docker exec teamportal-backend-1 id -u):$(docker exec teamportal-backend-1 id -g) <部署目录>/data/knowledge",
+        IOException io when io.Message.Contains("space", StringComparison.OrdinalIgnoreCase)
+            => $"磁盘空间不足：{io.Message}\n请清理服务器磁盘后重试。",
+        _ => e.Message,
+    };
 }
 
 public record CreateUserReq(string Username, string Password, string? Role, int? DepartmentId);

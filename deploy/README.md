@@ -110,6 +110,17 @@ systemctl list-timers teamportal-autodeploy.timer
 free -m; docker stats --no-stream
 # 强制让 watcher 重新部署当前最新
 rm ~/teamportal/deploy/.deployed_sha         # 下一轮(≤5分钟)会重新执行部署
+
+# 知识库"能读不能写"（保存报 400 / 提示没有写入权限）
+#   后端容器以非 root 的 app 用户运行（src/TeamPortal/Dockerfile 的 USER app），
+#   知识库则是挂载卷 ./data:/data。若有人**直接在宿主机上**往 data/knowledge 写文件
+#   （例如让外部 agent / 脚本生成文档），那些目录会属于 root ——
+#   容器里的 app 用户建不了临时文件，于是"文档打得开、就是存不进去"。
+ls -ln ~/teamportal/data/knowledge | head            # 看属主是不是 root
+docker exec teamportal-backend-1 id -u               # app 用户的 uid
+sudo chown -R "$(docker exec teamportal-backend-1 id -u):$(docker exec teamportal-backend-1 id -g)" \
+  ~/teamportal/data/knowledge
+#   保存失败的具体原因也会写进 管理 → 系统日志（按 knowledge 分类过滤）
 ```
 
 - CI 查询走匿名 API：`https://api.github.com/repos/YQHD711/team-portal/actions/runs`
