@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using TeamPortal.Data;
+using TeamPortal.Endpoints;
 using TeamPortal.Services;
 
 namespace api;
@@ -26,7 +27,8 @@ public class StudyLibraryTreeTests : IDisposable
         // 工程部有目录但没有「学习库」子目录 → 不应出现作用域
         Directory.CreateDirectory(Path.Combine(_kbDir, "工程部", "结构设计"));
         File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "_学习路径.md"), "# 路径");
-        File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "01-入门筑基", "_阶段说明.md"), "# 阶段");
+        File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "01-入门筑基", "_阶段说明.md"),
+            "---\n时长: 2-3 周\n目标: 认识航模与安全规范\n---\n\n## 阶段目标\n\n- 看懂机翼升力\n- 记住安全红线");
         File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "01-入门筑基", "01-认识航模.md"), "# 课时");
         File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "01-入门筑基", "素材.txt"), "x");
         File.WriteAllText(Path.Combine(_kbDir, "飞训部", "学习库", "01-飞训专用", "01-起降训练.md"), "# 课时");
@@ -94,6 +96,36 @@ public class StudyLibraryTreeTests : IDisposable
         // 前端拿的是这个 path 去调 /api/knowledge/content，必须真能读到
         Assert.True(_svc.CanAccess(lesson.Path, "member", "飞训部"));
         Assert.Contains("课时", _svc.GetContent(lesson.Path));
+    }
+
+    [Fact]
+    public void StageDescription_IsReadAndFrontMatterParsed()
+    {
+        // 回归：阶段说明此前只有路径没有正文，前端根本渲染不出来 ——
+        // 用户写了「阶段目标/时长/自检清单」却一个字都看不到。
+        var scope = StudyLibraryService.Build(_svc.GetTree("member", "飞训部"), "member", "飞训部")[0];
+
+        var enriched = StudyEndpoints.Enrich(scope, _svc);
+        var stage = Assert.Single(enriched.Stages);
+
+        Assert.Equal("2-3 周", stage.Duration);
+        Assert.Equal("认识航模与安全规范", stage.Goal);
+        Assert.NotNull(stage.Description);
+        Assert.Contains("看懂机翼升力", stage.Description);
+        Assert.DoesNotContain("时长", stage.Description);   // front matter 不进正文
+    }
+
+    [Fact]
+    public void LooseLessonsAtLibraryRoot_AreGroupedAsUngrouped()
+    {
+        // 没建阶段文件夹、直接把 .md 丢在学习库根：以前会被完全忽略（页面看着像空的）
+        File.WriteAllText(Path.Combine(_kbDir, "公共", "学习库", "随手记.md"), "# 随手记");
+
+        var scope = StudyLibraryService.Build(_svc.GetTree("member", "飞训部"), "member", "飞训部")[0];
+
+        var ungrouped = scope.Stages.Single(s => s.Title == StudyLibraryService.UngroupedTitle);
+        Assert.Equal("随手记", Assert.Single(ungrouped.Lessons).Title);
+        Assert.Equal(2, scope.Stages.Count);   // 入门筑基 + 未分组
     }
 
     public void Dispose()

@@ -9,7 +9,8 @@ namespace TeamPortal.Services;
 /// - 内容仍然是知识库里的 Markdown，没有第二份数据源；读写/搜索/备份/历史版本全部白捡。
 /// - 可见范围直接吃 KnowledgeService.GetTree（已按 KnowledgeAcl 过滤）的结果，
 ///   本类**不自己判可见性**，避免"树上有过滤、学习库没过滤"造成越权读取。
-/// - 纯函数，不碰 IO/DB，便于单测覆盖权限矩阵。
+/// - 本类是纯函数，不碰 IO/DB；阶段说明的**正文**由调用方（Endpoint）读文件后用 <c>with</c> 补上，
+///   便于单测覆盖权限矩阵与结构解析。
 /// </summary>
 public static class StudyLibraryService
 {
@@ -19,6 +20,9 @@ public static class StudyLibraryService
     /// <summary>下划线前缀 = 元信息文件，不当作课时显示。</summary>
     public const string OverviewDocName = "_学习路径";
     public const string StageDocName = "_阶段说明";
+
+    /// <summary>没放进任何阶段目录、直接丢在学习库根的课时，归到这个名字下，避免"写了却看不见"。</summary>
+    public const string UngroupedTitle = "未分组";
 
     /// <summary>公共作用域在知识库树里的根路径（该节点合并了 公共/ 与 公共知识库/）。</summary>
     public const string PublicScope = "公共";
@@ -62,17 +66,29 @@ public static class StudyLibraryService
     }
 
     private static List<StudyStage> BuildStages(TreeNode lib, bool canEdit)
-        => (lib.Children ?? new List<TreeNode>())
+    {
+        var stages = (lib.Children ?? new List<TreeNode>())
             .Where(c => c.Type == "folder" && !string.IsNullOrEmpty(c.Path))
             .Select(stage => new StudyStage(
                 Title: StripOrderPrefix(stage.Name),
                 Path: stage.Path!,
                 CanEdit: canEdit,
                 DescriptionPath: FindChild(stage, StageDocName)?.Path,
-                Lessons: (stage.Children ?? new List<TreeNode>())
-                    .Where(f => f.Type == "file" && IsMarkdown(f) && !IsMeta(f.Name))
-                    .Select(f => new StudyLesson(Title: StripOrderPrefix(f.Name), Path: f.Path!, CanEdit: canEdit))
-                    .ToList()))
+                Lessons: LessonsIn(stage, canEdit)))
+            .ToList();
+
+        // 直接放在学习库根下的课时（没建阶段文件夹）单独成组
+        var loose = LessonsIn(lib, canEdit);
+        if (loose.Count > 0)
+            stages.Add(new StudyStage(UngroupedTitle, lib.Path!, canEdit, DescriptionPath: null, Lessons: loose));
+
+        return stages;
+    }
+
+    private static List<StudyLesson> LessonsIn(TreeNode node, bool canEdit)
+        => (node.Children ?? new List<TreeNode>())
+            .Where(f => f.Type == "file" && IsMarkdown(f) && !IsMeta(f.Name) && !string.IsNullOrEmpty(f.Path))
+            .Select(f => new StudyLesson(Title: StripOrderPrefix(f.Name), Path: f.Path!, CanEdit: canEdit))
             .ToList();
 
     private static TreeNode? FindChild(TreeNode node, string name)
@@ -94,14 +110,58 @@ public static class StudyLibraryService
         var m = Regex.Match(name, @"^\d+\s*[-_.、\s]\s*(.+)$");
         return m.Success ? m.Groups[1].Value : name;
     }
+
+    /// <summary>
+    /// 解析文档开头的可选 front matter（<c>---</c> 包裹的 key: value）与正文。
+    /// 用于在阶段卡片上显示「时长 / 目标」，而作者仍然只在 Markdown 里编辑、不用碰 JSON。
+    /// 没有 front matter 时 meta 为空、body 即原文；没有闭合的 <c>---</c> 按普通正文处理（不吃内容）。
+    /// </summary>
+    public static (Dictionary<string, string> Meta, string Body) ParseDoc(string? raw)
+    {
+        var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(raw)) return (meta, "");
+
+        var text = raw.Replace("\r\n", "\n");
+        if (!text.StartsWith("---\n", StringComparison.Ordinal)) return (meta, text);
+
+        var end = text.IndexOf("\n---", 4, StringComparison.Ordinal);
+        if (end < 0) return (meta, text);
+
+        foreach (var line in text[4..end].Split('\n'))
+        {
+            var i = line.IndexOf(':');
+            if (i <= 0) continue;
+            var key = line[..i].Trim();
+            var value = line[(i + 1)..].Trim().Trim('"', '\'');
+            if (key.Length > 0 && value.Length > 0) meta[key] = value;
+        }
+
+        return (meta, text[(end + 4)..].TrimStart('\n'));
+    }
+
+    /// <summary>按多个候选键名取元信息（中英文都认），返回第一个非空值。</summary>
+    public static string? MetaValue(Dictionary<string, string> meta, params string[] keys)
+        => keys.Select(k => meta.GetValueOrDefault(k)).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 }
 
 public record StudyScope(
     string Scope, string Label, string LibraryPath, bool CanEdit,
-    string? OverviewPath, List<StudyStage> Stages);
+    string? OverviewPath, List<StudyStage> Stages)
+{
+    /// <summary>「_学习路径.md」的正文（已剥离 front matter）；由 Endpoint 读文件后补上。</summary>
+    public string? Overview { get; init; }
+    public string? Duration { get; init; }
+    public string? Goal { get; init; }
+}
 
 public record StudyStage(
     string Title, string Path, bool CanEdit,
-    string? DescriptionPath, List<StudyLesson> Lessons);
+    string? DescriptionPath, List<StudyLesson> Lessons)
+{
+    /// <summary>「_阶段说明.md」的正文（已剥离 front matter）；由 Endpoint 读文件后补上。</summary>
+    public string? Description { get; init; }
+    public string? Duration { get; init; }
+    public string? Goal { get; init; }
+}
 
 public record StudyLesson(string Title, string Path, bool CanEdit);
