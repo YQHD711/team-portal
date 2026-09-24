@@ -6,6 +6,17 @@
  * 都在用浏览器默认样式渲染，于是又挤又生硬。*/
 @plugin "@tailwindcss/typography";
 
+/* 行内代码：typography 默认会在两侧注入反引号（`code::before/::after { content:"`" }`），
+ * 在中文技术文档里观感很脏（页面上会真的显示出一对反引号）。
+ * 这里用显式选择器去掉 —— 刻意不用 `prose-code:before:content-none`：
+ * 那个工具类实际只生成了 `pre code` 的覆盖，管不到行内代码。
+ * 本选择器优先级 (0,2,1) 高于 typography 的 `.prose :where(code)::before` (0,1,1)，不依赖顺序。*/
+.prose code::before,
+.prose code::after {
+  content: none;
+}
+
+
 /* ============================================================================
  * Team Portal 设计系统 · 明暗 × 色调 正交配色
  * ----------------------------------------------------------------------------

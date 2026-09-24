@@ -35,8 +35,13 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 
   if (failed) {
     return (
-      <div className="mermaid my-4 text-sm text-danger p-3 border border-red-200 rounded-lg">
-        图表渲染失败，请检查语法
+      <div className="mermaid my-4 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/30 p-3 text-sm space-y-2">
+        <div className="text-amber-700 dark:text-amber-300">图表渲染失败（Mermaid 语法有误），正文其余部分不受影响。</div>
+        {/* 把源码折叠起来：读者不受干扰，维护的人能直接照着修 */}
+        <details>
+          <summary className="cursor-pointer select-none text-xs text-faint hover:text-amber-600">查看图表源码</summary>
+          <pre className="mt-2 overflow-x-auto rounded bg-surface-subtle p-2 text-xs text-muted">{code}</pre>
+        </details>
       </div>
     );
   }

@@ -73,6 +73,12 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           h1: heading(1),
           h2: heading(2),
           h3: heading(3),
+          /**
+           * 代码块不要再套一层 <pre>：里面已经由 SyntaxHighlighter(oneDark) /
+           * MermaidBlock 自带容器了。两层叠起来会让背景与内边距加倍、对比度变差，
+           * 连 mermaid 的报错框都会被关进那层深色底里。
+           */
+          pre: ({ children }) => <>{children}</>,
           code({ className, children, ...props }) {
             const match = /language-(\w+)/.exec(className ?? "");
             const codeStr = String(children).replace(/\n$/, "");
