@@ -72,6 +72,13 @@ const studyScope = {
   }],
 };
 
+/** Wiki 详情页用的已完成任务（带可见性下拉等管理控件） */
+const wikiTask = {
+  id: "t1", type: "git", projectName: "ardupilot", status: "completed", errorMessage: null,
+  visibility: "public", targetFolder: "公共", userId: 1,
+  createdAt: "2026-09-11T02:00:00Z", completedAt: "2026-09-11T02:20:00Z", catalogJson: null,
+};
+
 const layoutRoom = {
   id: 1, roomCode: "201", roomName: "库房", floor: 1,
   cabinetCount: 2, shelfCount: 4, positionCount: 8, description: "航模器材库房",
@@ -111,6 +118,10 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
     if (path === "/api/study/library") return json({ scopes: [studyScope] });
     if (path === "/api/knowledge/content") return json({ content: studyMarkdown });
+    // Wiki 详情页：任务 + 目录 + 正文
+    if (/^\/api\/wiki\/tasks\/[^/]+$/.test(path)) return json(wikiTask);
+    if (/^\/api\/wiki\/tasks\/[^/]+\/catalog$/.test(path)) return json([{ path: "getting-started", title: "快速开始" }]);
+    if (/^\/api\/wiki\/tasks\/[^/]+\/doc$/.test(path)) return json({ content: "# 文档\n\n正文" });
     if (path === "/api/inventory" && method === "POST") {
       state.itemPost = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
       return json({ id: 99, ...state.itemPost });
@@ -391,6 +402,25 @@ test.describe("冒烟流程", () => {
 
     await expect(article).toContainText("echo hello");
     await expect(article.locator("pre pre")).toHaveCount(0);
+  });
+
+  /**
+   * Wiki 详情页的可见性下拉（"修改所属"）。
+   * 回归：它和「检查修正」「补齐缺失文档」一起被塞进 256px 宽的左侧栏头部，
+   * 总宽超出容器 → 最右边的下拉被挤出/被右侧主面板盖住，**看得见但点不到**。
+   * 这里用 Playwright 的 click（会校验元素真的接收到了指针事件）来复现。
+   */
+  test("Wiki 详情：修改可见性的下拉真的能点到", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/wiki/t1");
+
+    const select = page.locator("select");
+    await expect(select).toBeVisible();
+    await select.click();
+    await select.selectOption("department");
+    await expect(select).toHaveValue("department");
   });
 });
 
