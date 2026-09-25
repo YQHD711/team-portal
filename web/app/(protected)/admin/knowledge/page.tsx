@@ -2,12 +2,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield } from "lucide-react";
+import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Columns, ChevronRight, Shield, ImagePlus } from "lucide-react";
 import { getToken, isStaff } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/hooks";
 import DOMPurify from "dompurify";
 import { ancestorFolders, findFirstFile, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
 import { KnowledgeTree } from "@/components/knowledge/KnowledgeTree";
+import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 
 /** 读 URL 查询参数（SSR 时没有 window）。用于搜索结果/「编辑本库」跳转。 */
 function urlParam(key: string): string {
@@ -46,6 +47,10 @@ export default function KnowledgeAdminPage() {
   const [notice, setNotice] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [imageMsg, setImageMsg] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const deepLinkApplied = useRef(false);
 
   const { user } = useCurrentUser();
@@ -165,6 +170,42 @@ export default function KnowledgeAdminPage() {
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
+  /** 把一段 Markdown 插到光标处（没有光标就追加到末尾），并标记为未保存。 */
+  const insertAtCursor = (snippet: string) => {
+    const el = editorRef.current;
+    const at = el && el.selectionStart !== null ? el.selectionStart : content.length;
+    const end = el && el.selectionEnd !== null ? el.selectionEnd : at;
+    const next = content.slice(0, at) + snippet + content.slice(end);
+    setContent(next);
+    setDirty(next !== original);
+    // 光标落在插入内容之后，方便继续写
+    requestAnimationFrame(() => {
+      const box = editorRef.current;
+      if (box) { box.focus(); box.setSelectionRange(at + snippet.length, at + snippet.length); }
+    });
+  };
+
+  /**
+   * 插入图片：上传到当前文档所在目录，再把 `![文件名](文件名)` 写到光标处。
+   * 路径写成**同目录相对名**，文档整体挪目录也不会失效。
+   */
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selected) return;
+    const dir = selected.split("/").slice(0, -1).join("/");
+    setImageUploading(true); setImageMsg("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await api.post<{ path: string }>(`/api/admin/knowledge/asset?dir=${encodeURIComponent(dir)}`, form);
+      const name = res.path.split("/").pop() ?? res.path;
+      insertAtCursor(`${content.endsWith("\n") || content.length === 0 ? "" : "\n"}![${name}](${name})\n`);
+      setImageMsg(`✅ 已插入 ${name}`);
+      fetchTree();
+    } catch (err) { setImageMsg(`❌ 上传失败：${reason(err)}`); }
+    finally { setImageUploading(false); if (imageRef.current) imageRef.current.value = ""; }
+  };
+
   const previewHtml = useMemo(() => {
     let html = content
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -243,6 +284,12 @@ export default function KnowledgeAdminPage() {
                 {canEdit && (
                   <div className="flex items-center gap-1">
                     {dirty && <span className="text-xs text-amber-500">未保存</span>}
+                    {imageMsg && <span className="text-xs text-muted">{imageMsg}</span>}
+                    <button onClick={() => imageRef.current?.click()} disabled={imageUploading}
+                      className="p-1.5 rounded text-xs text-faint hover:text-sky-600 disabled:opacity-50" title="插入图片">
+                      {imageUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                    </button>
+                    <input ref={imageRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleImageUpload} className="hidden" />
                     <button onClick={() => { setSplitMode(!splitMode); setPreview(false); }} className={`p-1.5 rounded text-xs ${splitMode ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="分栏编辑"><Columns className="h-3.5 w-3.5" /></button>
                     <button onClick={() => { setPreview(!preview); if (preview) setSplitMode(false); }} className={`p-1.5 rounded text-xs ${preview ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="预览"><Eye className="h-3.5 w-3.5" /></button>
                     <button onClick={handleSave} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"><Save className="h-3.5 w-3.5" />{saving ? "保存中..." : "保存"}</button>
@@ -253,16 +300,23 @@ export default function KnowledgeAdminPage() {
               {preview && canEdit ? (
                 <>
                   {cssContent && <style dangerouslySetInnerHTML={{ __html: cssContent }} />}
-                  <div ref={previewRef} className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                  {/*
+                    搜索时仍用正则预览：它会在命中处插 <mark> 并支持跳到关键词。
+                    普通预览改用与学习库/Wiki 同一个渲染器 —— 之前的正则版只认标题/加粗/链接，
+                    表格、代码块、图片都不显示，作者没法确认自己写的东西长什么样。
+                  */}
+                  {searchKw
+                    ? <div ref={previewRef} className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                    : <div className="flex-1 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} /></div>}
                 </>
               ) : splitMode && canEdit ? (
                 <div className="flex-1 flex flex-col sm:flex-row">
                   {cssContent && <style dangerouslySetInnerHTML={{ __html: cssContent }} />}
-                  <textarea value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[40vh] sm:min-h-0 sm:w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-b sm:border-b-0 sm:border-r border-border focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
-                  <div className="flex-1 w-full sm:w-1/2 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                  <textarea ref={editorRef} value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[40vh] sm:min-h-0 sm:w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-b sm:border-b-0 sm:border-r border-border focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
+                  <div className="flex-1 w-full sm:w-1/2 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} /></div>
                 </div>
               ) : (
-                <textarea value={content} readOnly={!canEdit} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[60vh] lg:min-h-0 p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder={canEdit ? "编辑 Markdown 内容..." : "知识库文档（只读）"} spellCheck={false} />
+                <textarea ref={editorRef} value={content} readOnly={!canEdit} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[60vh] lg:min-h-0 p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder={canEdit ? "编辑 Markdown 内容..." : "知识库文档（只读）"} spellCheck={false} />
               )}
             </>
           ) : (

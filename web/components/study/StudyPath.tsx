@@ -33,7 +33,7 @@ export function StudyPath({
           </div>
           {scope.goal && <p className="text-sm text-muted mb-3">🎯 {scope.goal}</p>}
           {total > 0 && <Progress done={done} total={total} className="mb-3" />}
-          {scope.overview && <MarkdownRenderer content={scope.overview} />}
+          {scope.overview && <MarkdownRenderer content={scope.overview} docPath={scope.overviewPath ?? undefined} />}
         </section>
       )}
 
@@ -63,7 +63,7 @@ export function StudyPath({
                   {stage.description && (
                     <details className="text-sm text-muted" open={i === 0}>
                       <summary className="cursor-pointer select-none text-xs text-faint hover:text-sky-500">阶段说明</summary>
-                      <div className="mt-2"><MarkdownRenderer content={stage.description} /></div>
+                      <div className="mt-2"><MarkdownRenderer content={stage.description} docPath={stage.descriptionPath ?? undefined} /></div>
                     </details>
                   )}
                 </div>

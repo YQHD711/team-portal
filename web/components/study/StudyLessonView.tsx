@@ -53,17 +53,23 @@ export function StudyLessonView({
         </span>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_180px]">
-        <article className="rounded-2xl border bg-surface p-6 sm:p-8 min-h-[400px]">
+      {/*
+        min-w-0 不能省：grid 项默认 min-width:auto，正文里一张宽表格/一行长代码
+        就能把 1fr 撑到内容宽度，整页出现横向滚动条（1440 下溢出 118px、
+        1280 下溢出 278px），右侧大纲被挤出屏幕外。min-w-0 让 1fr 能收缩，
+        宽内容交给 prose 自身的 overflow-x-auto。
+      */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <article className="min-w-0 rounded-2xl border bg-surface p-6 sm:p-8 min-h-[400px]">
           {loading
             ? <div className="text-center text-faint py-16 text-sm">加载中…</div>
             : content
-              ? <MarkdownRenderer content={content} />
+              ? <MarkdownRenderer content={content} docPath={lesson.path} />
               : <div className="text-center text-faint py-16 text-sm">这份文档还是空的</div>}
         </article>
 
         {toc.length > 0 && (
-          <nav className="hidden lg:block">
+          <nav className="hidden lg:block min-w-0">
             <div className="sticky top-6 text-xs">
               <div className="flex items-center gap-1.5 font-medium text-muted mb-2">
                 <List className="h-3.5 w-3.5" />本课大纲
@@ -71,7 +77,7 @@ export function StudyLessonView({
               <ul className="space-y-1 border-l border-border pl-3">
                 {toc.map(t => (
                   <li key={t.id} className={t.level === 3 ? "pl-3" : ""}>
-                    <a href={`#${t.id}`} className="text-faint hover:text-sky-500 line-clamp-2">{t.text}</a>
+                    <a href={`#${t.id}`} className="block text-faint hover:text-sky-500 line-clamp-2">{t.text}</a>
                   </li>
                 ))}
               </ul>

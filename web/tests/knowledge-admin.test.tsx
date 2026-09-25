@@ -220,3 +220,41 @@ describe("知识库管理页 · ?path= 深链接", () => {
       expect(mockedGet).toHaveBeenCalledWith(`/api/knowledge/content?path=${encodeURIComponent(DEPT_OVERVIEW)}`));
   });
 });
+
+describe("知识库管理页 · 插入图片", () => {
+  it("上传到当前文档所在目录，并把 `![文件名](文件名)` 插到正文里", async () => {
+    mockedPost.mockResolvedValue({ path: `${LESSON.replace(/\/[^/]+$/, "")}/示意图.png` });
+    window.history.pushState({}, "", `/admin/knowledge?path=${encodeURIComponent(LESSON)}`);
+    render(<KnowledgeAdminPage />);
+
+    const box = await screen.findByDisplayValue<HTMLTextAreaElement>("# 文档内容");
+    // 光标放到正文末尾，插入内容应落在那里
+    box.setSelectionRange(box.value.length, box.value.length);
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][accept*="image/png"]');
+    expect(input, "编辑工具栏应有隐藏的图片选择框").not.toBeNull();
+    const file = new File([new Uint8Array([1, 2, 3])], "示意图.png", { type: "image/png" });
+    fireEvent.change(input!, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockedPost).toHaveBeenCalled());
+    // 目录取文档所在目录 —— 图片与文档同目录，整体挪目录也不会失效
+    expect(mockedPost.mock.calls[0][0]).toBe(
+      `/api/admin/knowledge/asset?dir=${encodeURIComponent("公共/学习库/01-入门筑基")}`);
+    expect((mockedPost.mock.calls[0][1] as FormData).get("file")).toBe(file);
+
+    await waitFor(() => expect(box.value).toContain("![示意图.png](示意图.png)"));
+  });
+
+  it("上传失败时把后端原因显示出来（不是静默什么都不发生）", async () => {
+    mockedPost.mockRejectedValue(new Error("不支持的图片格式 .bmp"));
+    window.history.pushState({}, "", `/admin/knowledge?path=${encodeURIComponent(LESSON)}`);
+    render(<KnowledgeAdminPage />);
+
+    const box = await screen.findByDisplayValue("# 文档内容");
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][accept*="image/png"]');
+    fireEvent.change(input!, { target: { files: [new File([new Uint8Array([1])], "a.bmp", { type: "image/bmp" })] } });
+
+    expect(await screen.findByText(/不支持的图片格式/)).toBeInTheDocument();
+    expect(box).toHaveValue("# 文档内容");   // 失败不该改动正文
+  });
+});
