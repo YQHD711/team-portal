@@ -7,7 +7,7 @@ import { retryMissingDocuments } from "@/lib/wikiRetry";
 import { WikiDocRecovery } from "@/components/wiki/WikiDocRecovery";
 import { useCurrentUser } from "@/lib/hooks";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
-import { ChevronRight, ChevronLeft, BookOpen, ExternalLink, ArrowLeft, Loader2, RefreshCw, Globe, Building2, Lock } from "lucide-react";
+import { ChevronRight, ChevronLeft, BookOpen, ArrowLeft, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CatalogItem { path: string; title: string; children?: CatalogItem[]; }
@@ -164,61 +164,6 @@ export default function WikiViewerPage() {
                 ))}
               </div>
             )}
-            {isStaff && task?.status === "completed" && (
-              <>
-                <button
-                  disabled={updating}
-                  onClick={async () => {
-                    setUpdating(true);
-                    try { await api.post(`/api/wiki/tasks/${taskId}/update`, {}); }
-                    catch { alert("更新失败"); }
-                    finally { setUpdating(false); }
-                  }}
-                  className="ml-auto flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-600 hover:bg-sky-100 transition-colors disabled:opacity-50 shrink-0"
-                  title="AI 审查并修正文档中的问题"
-                >
-                  <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
-                  {updating ? "更新中..." : "检查修正"}
-                </button>
-                <button
-                  disabled={regenerating}
-                  onClick={async () => {
-                    setRegenerating(true);
-                    try {
-                      const msg = await retryMissingDocuments(taskId, task.projectName);
-                      if (msg) alert(msg);
-                    } catch (err) {
-                      alert("补齐失败：" + (err instanceof Error ? err.message : "未知错误"));
-                    } finally { setRegenerating(false); }
-                  }}
-                  className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors disabled:opacity-50 shrink-0"
-                  title="只补齐缺失的文档：不重跑已有文档、不重新生成目录、不重新下载源码"
-                >
-                  <RefreshCw className={cn("h-3 w-3", regenerating && "animate-spin")} />
-                  {regenerating ? "处理中..." : "补齐缺失文档"}
-                </button>
-                <select
-                  value={task.visibility}
-                  onChange={async (e) => {
-                    const v = e.target.value;
-                    // 乐观更新必须校验响应:失败时若不回滚,界面会显示"已收权"而文档实际仍然公开
-                    try {
-                      const res = await fetch(`/api/wiki/tasks/${taskId}/visibility`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` }, body: JSON.stringify({ visibility: v }) });
-                      if (!res.ok) { e.target.value = task.visibility; alert("可见性修改失败，请重试"); return; }
-                      setTask({ ...task, visibility: v });
-                    } catch {
-                      e.target.value = task.visibility;
-                      alert("可见性修改失败，请检查网络后重试");
-                    }
-                  }}
-                  className="ml-1 px-2 py-1 text-xs rounded-lg border border-border dark:border-zinc-700 bg-surface shrink-0"
-                >
-                  <option value="public">🌐 公共</option>
-                  <option value="department">🏢 部门</option>
-                  <option value="personal">🔒 个人</option>
-                </select>
-              </>
-            )}
             {!isStaff && (
               <span className="ml-auto text-xs text-faint shrink-0">
                 {task?.visibility === "department" ? "🏢 部门" : task?.visibility === "personal" ? "🔒 个人" : "🌐 公共"}
@@ -250,6 +195,70 @@ export default function WikiViewerPage() {
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto">
+        {/*
+          任务级操作放在内容区顶部，而不是左侧目录栏里：
+          侧栏只有 16rem 宽，三个控件加起来放不下 → 最右边的「可见性」下拉被挤出容器、
+          被内容面板盖住，"看得见却点不到"。这里宽度充足，且语义上也属于整个任务。
+        */}
+        {isStaff && task?.status === "completed" && (
+          <div className="sticky top-0 z-10 flex flex-wrap items-center justify-end gap-1 border-b border-border bg-surface/95 px-4 py-2 backdrop-blur">
+            <button
+              disabled={updating}
+              onClick={async () => {
+                setUpdating(true);
+                try { await api.post(`/api/wiki/tasks/${taskId}/update`, {}); }
+                catch { alert("更新失败"); }
+                finally { setUpdating(false); }
+              }}
+              className="flex items-center gap-1 rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-600 transition-colors hover:bg-sky-100 disabled:opacity-50 dark:bg-sky-950"
+              title="AI 审查并修正文档中的问题"
+            >
+              <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
+              {updating ? "更新中..." : "检查修正"}
+            </button>
+            <button
+              disabled={regenerating}
+              onClick={async () => {
+                setRegenerating(true);
+                try {
+                  const msg = await retryMissingDocuments(taskId, task.projectName);
+                  if (msg) alert(msg);
+                } catch (err) {
+                  alert("补齐失败：" + (err instanceof Error ? err.message : "未知错误"));
+                } finally { setRegenerating(false); }
+              }}
+              className="flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:bg-amber-950 dark:text-amber-300"
+              title="只补齐缺失的文档：不重跑已有文档、不重新生成目录、不重新下载源码"
+            >
+              <RefreshCw className={cn("h-3 w-3", regenerating && "animate-spin")} />
+              {regenerating ? "处理中..." : "补齐缺失文档"}
+            </button>
+            <label className="flex items-center gap-1 text-xs text-faint">
+              所属
+              <select
+                value={task.visibility}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  // 乐观更新必须校验响应:失败时若不回滚,界面会显示"已收权"而文档实际仍然公开
+                  try {
+                    const res = await fetch(`/api/wiki/tasks/${taskId}/visibility`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` }, body: JSON.stringify({ visibility: v }) });
+                    if (!res.ok) { e.target.value = task.visibility; alert("可见性修改失败，请重试"); return; }
+                    setTask({ ...task, visibility: v });
+                  } catch {
+                    e.target.value = task.visibility;
+                    alert("可见性修改失败，请检查网络后重试");
+                  }
+                }}
+                className="rounded-lg border border-border bg-surface px-2 py-1 text-xs dark:border-zinc-700"
+              >
+                <option value="public">🌐 公共</option>
+                <option value="department">🏢 部门</option>
+                <option value="personal">🔒 个人</option>
+              </select>
+            </label>
+          </div>
+        )}
+
         <div className="flex gap-0 max-w-6xl mx-auto">
           <div className="flex-1 min-w-0 p-6 lg:p-10" onClick={handleContentClick}>
             {loading ? (
