@@ -137,12 +137,13 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
     if (path === "/api/study/library") return json({ scopes: [studyScope] });
     if (path === "/api/knowledge/content") return json({ content: studyMarkdown });
-    // 全局搜索：一条学习库结果 + 一条普通知识库结果（队员点下去要都能打开）
+    // 全局搜索：学习库结果（进学习库那课）、wiki 正文（进 wiki 阅读页那篇）、普通知识库文档（进编辑器）
     if (path === "/api/search") {
       return json({
         knowledge: [
           { type: "study", title: "01-认识航模.md", snippet: "多旋翼靠桨叶…", path: "/study?lesson=" + encodeURIComponent("飞训部/学习库/01-入门筑基/01-认识航模.md") },
-          { type: "knowledge", title: "公共资料.md", snippet: "公共资料摘要…", path: "/knowledge?path=" + encodeURIComponent("公共/资料/公共资料.md") },
+          { type: "wiki", title: "01-概览.md", snippet: "wiki 正文摘要…", path: "/wiki/t1?doc=" + encodeURIComponent("getting-started/intro") },
+          { type: "knowledge", title: "公共资料.md", snippet: "公共资料摘要…", path: "/admin/knowledge?path=" + encodeURIComponent("公共/资料/公共资料.md") },
         ],
         inventory: [], wiki: [], files: [],
       });
@@ -157,7 +158,9 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     }
     // Wiki 详情页：任务 + 目录 + 正文
     if (/^\/api\/wiki\/tasks\/[^/]+$/.test(path)) return json(wikiTask);
-    if (/^\/api\/wiki\/tasks\/[^/]+\/catalog$/.test(path)) return json([{ path: "getting-started", title: "快速开始" }]);
+    if (/^\/api\/wiki\/tasks\/[^/]+\/catalog$/.test(path)) {
+      return json([{ path: "getting-started", title: "快速开始", children: [{ path: "getting-started/intro", title: "介绍" }] }]);
+    }
     if (/^\/api\/wiki\/tasks\/[^/]+\/doc$/.test(path)) return json({ content: "# 文档\n\n正文" });
     if (path === "/api/inventory" && method === "POST") {
       state.itemPost = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
@@ -624,6 +627,31 @@ test.describe("全局搜索", () => {
     const kb = page.getByRole("button", { name: /公共资料\.md/ });
     await expect(kb).toBeVisible();
     await expect(kb).toContainText("知识库");
+  });
+
+  /**
+   * wiki 正文存在知识库目录里，但要能搜到并跳回 wiki 阅读页（而不是知识库编辑器）。
+   * 旧实现只按**项目名**匹配 wiki，正文完全搜不到。
+   */
+  test("搜索能搜到 wiki 正文并直接打开那一篇", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    const docRequests: string[] = [];
+    page.on("request", (r) => { if (r.url().includes("/doc?")) docRequests.push(decodeURIComponent(r.url())); });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /搜索/ }).first().click();
+    await page.getByPlaceholder("搜索知识库、库存、Wiki、文件...").fill("概览");
+
+    const result = page.getByRole("button", { name: /01-概览\.md/ });
+    await expect(result).toBeVisible();
+    await expect(result).toContainText("Wiki");
+    await result.click();
+
+    await expect(page).toHaveURL(/\/wiki\/t1\?doc=getting-started(%2F|\/)intro/);
+    // 打开的是结果里那一篇，而不是默认的第一篇
+    await expect.poll(() => docRequests.some(u => u.includes("path=getting-started/intro"))).toBe(true);
   });
 });
 

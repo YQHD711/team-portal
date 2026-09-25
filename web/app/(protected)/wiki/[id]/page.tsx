@@ -64,9 +64,22 @@ export default function WikiViewerPage() {
     api.get<CatalogItem[]>(`/api/wiki/tasks/${taskId}/catalog`)
       .then(c => {
         setCatalog(c);
-        // Auto-expand first level, auto-select first leaf
+        // Auto-expand first level
         const firstLevels = new Set(c.map(i => i.path));
         setExpanded(firstLevels);
+        // ?doc= 优先：全局搜索点进来的就是这一篇，直接打开它（并展开它的父级）
+        const requested = new URLSearchParams(window.location.search).get("doc") ?? "";
+        if (requested && flattenCatalog(c).some(i => i.path === requested)) {
+          setExpanded(prev => {
+            const next = new Set(prev);
+            for (const f of flattenCatalog(c)) {
+              if (f.children?.length && requested.startsWith(f.path + "/")) next.add(f.path);
+            }
+            return next;
+          });
+          setActivePath(requested);
+          return;
+        }
         const firstLeaf = findFirstLeaf(c);
         if (firstLeaf) setActivePath(firstLeaf);
       })
@@ -95,6 +108,10 @@ export default function WikiViewerPage() {
     }
     return null;
   };
+
+  /** 把目录树摊平：按 ?doc= 定位文档、并把它沿途的父级展开。 */
+  const flattenCatalog = (items: CatalogItem[]): CatalogItem[] =>
+    items.flatMap(item => [item, ...(item.children?.length ? flattenCatalog(item.children) : [])]);
 
   const toggleExpand = (path: string) => {
     const next = new Set(expanded);

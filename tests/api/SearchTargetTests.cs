@@ -99,4 +99,40 @@ public class SearchTargetTests
         Assert.DoesNotContain(" ", other);
         Assert.Contains("%20", study);
     }
+
+    // ── wiki 正文 ───────────────────────────────────────────
+
+    [Fact]
+    public void VisibleWikiDoc_IsIncludedForMembersToo()
+    {
+        // wiki 文档存在知识库目录里，但有独立的 Visibility 规则、也能在 /wiki 页读，
+        // 所以对队员可见的 wiki 正文要出现在搜索结果里（否则"可见的 wiki 内容搜不到"）
+        Assert.True(SearchEndpoints.ShouldIncludeKnowledgeResult("公共/某项目/01-概览.md", staff: false, visibleWikiDoc: true));
+        // 不可见的 wiki 文档与普通知识库文档一样，对队员不返回
+        Assert.False(SearchEndpoints.ShouldIncludeKnowledgeResult("飞训部/他部门项目/01-概览.md", staff: false, visibleWikiDoc: false));
+    }
+
+    [Fact]
+    public void WikiDocPath_StripsProjectPrefixAndExtension()
+    {
+        Assert.Equal("getting-started/intro",
+            SearchEndpoints.WikiDocPath("公共/某项目/getting-started/intro.md", "公共/某项目/"));
+        // 前缀对不上（不该发生）时退化为原路径去掉 .md，至少不会拼出越界路径
+        Assert.Equal("公共/别的/x", SearchEndpoints.WikiDocPath("公共/别的/x.md", "公共/某项目/"));
+    }
+
+    [Fact]
+    public void WikiDocPath_KeepsNestedFolders()
+    {
+        Assert.Equal("a/b/c", SearchEndpoints.WikiDocPath(@"公共\项目\a\b\c.md", "公共/项目/"));
+    }
+
+    [Fact]
+    public void WikiDocTarget_PointsAtTheWikiViewerWithDocParam()
+    {
+        var target = SearchEndpoints.WikiDocTarget("task-1", "getting-started/intro");
+
+        Assert.Equal("/wiki/task-1?doc=getting-started%2Fintro", target);
+        Assert.DoesNotContain("/admin/", target);
+    }
 }
