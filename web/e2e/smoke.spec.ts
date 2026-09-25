@@ -627,6 +627,36 @@ test.describe("全局搜索", () => {
   });
 });
 
+test.describe("布局", () => {
+  /**
+   * 回归：桌面端侧栏原来是 `lg:static` + `h-full`，而 h-full 会撑成**整个文档高度**，
+   * 于是页面一长（学习库课时、Wiki 文档这类长正文）导航栏就跟着滚上去消失了。
+   * 现在桌面端是 sticky + h-screen，钉在视口里。
+   */
+  test("左侧导航不随页面滚动滑走", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto("/study");
+    await page.getByRole("button", { name: "认识航模", exact: true }).click();
+    await expect(page.locator("article .prose")).toBeVisible();
+
+    const aside = page.locator("aside").first();
+    const before = await aside.boundingBox();
+    expect(before).not.toBeNull();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const scrolled = await page.evaluate(() => Math.round(window.scrollY));
+    expect(scrolled, "页面要够长才测得出滚动").toBeGreaterThan(300);
+
+    const after = await aside.boundingBox();
+    expect(Math.abs((after?.y ?? -999) - (before?.y ?? 0)), "导航栏位置不该随滚动改变").toBeLessThan(5);
+    // 导航内容还在视口里（不是滚出屏幕）
+    await expect(page.getByRole("link", { name: "学习库" }).first()).toBeInViewport();
+  });
+});
+
 test.describe("路由完整性守卫", () => {
   // 防止源码被构建遗漏(如被 .gitignore 误伤)导致整页 404
   test("关键路由不存在404", async ({ request }) => {
