@@ -63,7 +63,25 @@ for _ in $(seq 1 20); do
 done
 [ "$frontend_ok" -eq 1 ] && echo "✅ 前端健康" || echo "⚠ 前端 :3000 未就绪(后端已健康,可稍后复查 docker compose logs frontend)"
 
-echo "==> 6/6 清理悬空镜像"
+echo "==> 6/6 清理旧镜像"
+# 悬空镜像
 docker image prune -f >/dev/null
+# 历史版本镜像：CI 每次发版都会推 sha-<commit> 的 backend/frontend 镜像，pull 下来后
+# 只清悬空镜像动不了它们（有 tag，不算 dangling）—— 每版约 0.5GB，攒几十版就把磁盘吃满。
+# 规则：每个仓库保留最新的 2 个 sha-* 版本（够回滚），更旧的删掉；正在运行的镜像永不删。
+# 要回滚到更旧的版本时，用 `bash deploy/deploy.sh sha-<commit>` 重新拉取即可。
+running_images=$(docker ps -q | xargs -r docker inspect --format '{{.Image}}' | sort -u)
+removed=0
+for repo in teamportal-backend teamportal-frontend; do
+  stale=$(docker images --format '{{.ID}} {{.CreatedAt}} {{.Repository}}:{{.Tag}}' \
+    | grep -E "ghcr\.io/[^/]+/${repo}:sha-" \
+    | sort -k2,3 -r \
+    | awk '{print $1}' | awk '!seen[$0]++' | tail -n +3 || true)
+  for id in $stale; do
+    if echo "$running_images" | grep -q "^${id}$"; then continue; fi
+    if docker rmi -f "$id" >/dev/null 2>&1; then removed=$((removed + 1)); fi
+  done
+done
+echo "✅ 清理完成（删除 ${removed} 个历史版本镜像）"
 
 echo "✅ 部署完成: $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"
