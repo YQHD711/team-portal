@@ -15,7 +15,6 @@ public class AppDbContext : DbContext
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<CodeProposal> CodeProposals => Set<CodeProposal>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();

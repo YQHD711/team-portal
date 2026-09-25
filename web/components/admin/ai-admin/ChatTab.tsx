@@ -1,15 +1,17 @@
-import { Brain, Database, Loader2, Send, Sparkles, Trash2 } from "lucide-react";
-import type { MemoryStats } from "./aiAdminTypes";
+import { Brain, Database, Loader2, Send, Trash2 } from "lucide-react";
+import type { ChatEntry, MemoryStats } from "./aiAdminTypes";
 
+/** 预设运维任务：全部是「读数据 + 给结论」，不涉及任何写操作。 */
 const presets = [
-  { label: "系统健康检查", task: "请对系统进行全面健康检查：分析最近的日志、错误率、数据库大小、API响应情况。给出诊断报告和改进建议。" },
-  { label: "团队分析报告", task: "请分析团队的使用情况：活跃成员数、知识库使用频率、库存变化趋势。给出团队发展建议。" },
-  { label: "代码质量审查", task: "请审查项目的主要代码文件，找出潜在问题、性能瓶颈、安全隐患。给出具体的改进建议。" },
-  { label: "功能完善建议", task: "基于当前系统功能和使用数据，分析哪些功能需要完善或新增，按优先级排序。" },
+  { label: "系统健康巡检", task: "请做一次系统健康巡检：数据库连通性、日志写入通道积压、磁盘剩余空间、进程运行情况，并检查最近的错误日志。给出结论和需要注意的地方。" },
+  { label: "排查最近报错", task: "请查看最近 24 小时的错误与警告日志，按分类归纳，指出最值得关注的问题和可能的根因，以及管理员下一步该做什么。" },
+  { label: "备份是否正常", task: "请检查备份情况：最近一次备份是什么时间、备份数量与大小是否正常、有没有需要管理员注意的风险。" },
+  { label: "知识库现状", task: "请统计知识库各目录的文档数量和最近更新时间，指出哪些目录还是空的，并给出维护建议。" },
+  { label: "团队与库存概览", task: "请给出团队与业务概览：各部门人数与角色分布、低于库存阈值的零件、Wiki 任务状态分布与最近的失败任务。" },
 ];
 
 interface Props {
-  history: { role: string; content: string }[];
+  history: ChatEntry[];
   loading: boolean;
   memory: MemoryStats | null;
   task: string;
@@ -19,13 +21,13 @@ interface Props {
   chatEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/** 分析对话 Tab（预设任务 + 聊天区 + 自定义输入） */
+/** 运维对话 Tab（预设任务 + 聊天区 + 自定义输入） */
 export default function ChatTab({ history, loading, memory, task, onTask, onRun, onClearMemory, chatEndRef }: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {/* Presets */}
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">分析任务</h3>
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">常用巡检</h3>
         {presets.map(p => (
           <button key={p.label} onClick={() => onRun(p.task)}
             disabled={loading}
@@ -74,14 +76,14 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
             </div>
           )}
           {loading && (
-            <div className="flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" />AI 正在分析系统数据...</div>
+            <div className="flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" />AI 正在读取系统数据...</div>
           )}
           {history.length === 0 && !loading && (
             <div className="flex items-center justify-center h-full text-muted text-sm">
               <div className="text-center">
                 <Brain className="h-10 w-10 mx-auto mb-2 text-purple-300" />
-                选择左侧分析任务或输入自定义指令<br />
-                <span className="text-xs text-muted mt-1">所有对话在一个记忆体中，超过45条自动压缩</span>
+                选择左侧巡检任务，或用下方输入框提问<br />
+                <span className="text-xs text-muted mt-1">助手只读取数据做诊断与答疑，不会修改任何内容</span>
               </div>
             </div>
           )}
@@ -91,10 +93,11 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
         {/* Custom input */}
         <div className="p-3 border-t border-border">
           <form onSubmit={e => { e.preventDefault(); if (task.trim()) { onRun(task); onTask(""); } }} className="flex gap-2">
-            <input value={task} onChange={e => onTask(e.target.value)} placeholder="输入自定义分析指令..."
+            <input value={task} onChange={e => onTask(e.target.value)} placeholder="提问，例如「最近为什么有人登录失败」..."
               className="flex-1 rounded-xl border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
             <button type="submit" disabled={loading || !task.trim()} className="rounded-xl bg-primary px-4 py-2 text-white hover:bg-accent-hover disabled:opacity-50"><Send className="h-4 w-4" /></button>
           </form>
+          <p className="text-xs text-muted mt-2">只读助手：不修改数据、不改代码、不编译、不重启服务。</p>
         </div>
       </div>
     </div>

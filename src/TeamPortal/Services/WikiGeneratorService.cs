@@ -418,21 +418,6 @@ public partial class WikiGeneratorService
     private int LeafCount() => FlattenCatalog(ParseCatalog()).Count(i => i.Children is null or { Count: 0 });
 }
 
-public class ToolDef
-{
-    public string Name { get; set; }
-    public string Description { get; set; }
-    public object Parameters { get; set; }
-    public ToolDef(string name, string desc, object properties)
-    {
-        Name = name; Description = desc;
-        var props = JsonSerializer.SerializeToElement(properties);
-        var required = new List<string>();
-        foreach (var p in props.EnumerateObject()) required.Add(p.Name);
-        Parameters = new { type = "object", properties, required };
-    }
-}
-
 public class CatalogItem
 {
     public string Path { get; set; } = "";
