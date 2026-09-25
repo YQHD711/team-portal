@@ -95,8 +95,17 @@ export default function Home() {
     setDonut(arr.map(d => ({ name: d.name, value: d.count })));
   }, [data?.categoryCounts]);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
+  /**
+   * 问候语只在客户端算。
+   * 服务器在容器里跑的是 UTC，浏览器是本地时区（UTC+8）——直接在 render 里
+   * `new Date().getHours()` 会让 SSR 文本与 hydration 后的文本不一致，
+   * 触发 React #418（内容不匹配），而且容器时间下的问候语本身就是错的。
+   */
+  const [greeting, setGreeting] = useState("");
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好");
+  }, []);
 
   // 统计卡配置：staff 展示财务卡，普通成员展示物料类卡（后端只给可见字段）
   const stats = [
@@ -131,7 +140,7 @@ export default function Home() {
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{greeting}，{teamName}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{greeting ? `${greeting}，${teamName}` : teamName}</h1>
         <p className="text-sm text-muted mt-1">航模队运行总览 · 数据实时同步</p>
       </div>
 
