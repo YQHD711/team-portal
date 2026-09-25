@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { StudyPath } from "@/components/study/StudyPath";
@@ -21,6 +22,8 @@ export default function StudyPage() {
   const [showStats, setShowStats] = useState(false);
   const { user } = useCurrentUser();
   const isStaff = user?.role === "admin" || user?.role === "部长";
+  const router = useRouter();
+  const deepLinkApplied = useRef(false);
 
   useEffect(() => {
     api.get<{ scopes: StudyScope[] }>("/api/study/library")
@@ -28,6 +31,22 @@ export default function StudyPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  /**
+   * 深链接 ?lesson=<知识库路径>：全局搜索里点一份学习库文档落到这里。
+   * 找到所属 scope 并打开那一课；找不到（比如它其实不在任何学习库里）就转去只读阅读页，
+   * 免得停在路径总览页让人以为"点了没反应"。
+   */
+  useEffect(() => {
+    if (loading || deepLinkApplied.current) return;
+    const want = new URLSearchParams(window.location.search).get("lesson") ?? "";
+    if (!want) return;
+    deepLinkApplied.current = true;
+    const idx = scopes.findIndex(s => flattenLessons(s.stages).some(l => l.path === want));
+    if (idx < 0) { router.replace(`/knowledge?path=${encodeURIComponent(want)}`); return; }
+    setScopeIdx(idx);
+    setActivePath(want);
+  }, [loading, scopes, router]);
 
   // 课时正文（正文接口与知识库同一个，权限同一套）
   useEffect(() => {

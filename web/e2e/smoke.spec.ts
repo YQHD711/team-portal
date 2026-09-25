@@ -137,6 +137,16 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
     if (path === "/api/study/library") return json({ scopes: [studyScope] });
     if (path === "/api/knowledge/content") return json({ content: studyMarkdown });
+    // 全局搜索：一条学习库结果 + 一条普通知识库结果（队员点下去要都能打开）
+    if (path === "/api/search") {
+      return json({
+        knowledge: [
+          { type: "study", title: "01-认识航模.md", snippet: "多旋翼靠桨叶…", path: "/study?lesson=" + encodeURIComponent("飞训部/学习库/01-入门筑基/01-认识航模.md") },
+          { type: "knowledge", title: "公共资料.md", snippet: "公共资料摘要…", path: "/knowledge?path=" + encodeURIComponent("公共/资料/公共资料.md") },
+        ],
+        inventory: [], wiki: [], files: [],
+      });
+    }
     // 知识库图片：正文里的 ![](接线示意.png) 会带鉴权取这张图（1x1 PNG）
     if (path === "/api/knowledge/download") {
       const png = Buffer.from(
@@ -574,6 +584,45 @@ test.describe("AI 系统管理员（只读运维助手）", () => {
     await page.getByRole("button", { name: "能力与手册" }).click();
     await expect(page.getByText("get_system_health").first()).toBeVisible();
     await expect(page.getByText("发布与上线").first()).toBeVisible();
+  });
+});
+
+test.describe("全局搜索", () => {
+  /**
+   * 回归：搜索结果一律指向 /admin/knowledge，而 AuthGuard 会把非 staff 从 /admin/*
+   * 踢回首页 —— 队员搜到资料、点一下就被弹回首页，等于搜到了也打不开。
+   * 现在：学习库文档进学习库阅读页，普通文档进只读阅读页。
+   */
+  test("队员点学习库结果直接进学习库那一课（不再被踢回首页）", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /搜索/ }).first().click();
+    await page.getByPlaceholder("搜索知识库、库存、Wiki、文件...").fill("航模");
+
+    const result = page.getByRole("button", { name: /01-认识航模\.md/ });
+    await expect(result).toBeVisible();
+    await expect(result).toContainText("学习库");   // 标签要看出这是学习库内容
+    await result.click();
+
+    await expect(page).toHaveURL(/\/study\?lesson=/);
+    await expect(page.getByText("第 1 / 2 课")).toBeVisible();   // 直接落在那一课
+  });
+
+  test("队员点普通知识库结果能读到正文（不是跳回首页）", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /搜索/ }).first().click();
+    await page.getByPlaceholder("搜索知识库、库存、Wiki、文件...").fill("公共");
+
+    await page.getByRole("button", { name: /公共资料\.md/ }).click();
+
+    await expect(page).toHaveURL(/\/knowledge\?path=/);
+    await expect(page.locator("article")).toContainText("认识航模");   // 正文真的渲染出来了
+    await expect(page.getByRole("link", { name: /编辑/ })).toHaveCount(0);   // 队员没有编辑入口
   });
 });
 
