@@ -50,7 +50,12 @@ const layoutItems = [
   { id: 12, name: "M3螺丝", category: "耗材", quantity: 2, locationCode: "201-A-3-05", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
-/** 学习库：一个阶段 + 一课，正文里刻意同时放「行内代码」和「围栏代码块」 */
+/**
+ * 学习库：一个阶段 + 一课，正文里刻意同时放「行内代码」「围栏代码块」
+ * 以及一张很宽的表格与一张图片。
+ * 代码块里那行超长命令是关键：`white-space: pre` 且不可断行，正是它把阅读区
+ * 顶宽（1440 下整页溢出 118px、1280 下 278px），把右侧「本课大纲」挤出屏幕。
+ */
 const studyMarkdown = [
   "# 认识航模",
   "",
@@ -58,7 +63,17 @@ const studyMarkdown = [
   "",
   "```bash",
   "echo hello",
+  "sudo apt install --no-install-recommends build-essential cmake gdb git python3-pip libopencv-dev libeigen3-dev",
   "```",
+  "",
+  "| 部件 | 作用说明（这一列故意写得很长，用来把表格撑宽） | 参考型号 | 预计单价（元） | 备注 |",
+  "| --- | --- | --- | --- | --- |",
+  "| 飞控 | 负责姿态解算与航点导航，是整机核心计算单元，选型要考虑接口与固件生态 | Pixhawk 6X | 1280 | 队内统一 |",
+  "| 电调 | 把飞控输出的 PWM/DShot 信号变成三相驱动电流，需与电机和电池匹配 | T-Motor F45A | 380 | 备件常备 |",
+  "",
+  "## 选型要点",
+  "",
+  "![接线示意](接线示意.png)",
   "",
 ].join("\n");
 
@@ -118,6 +133,14 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     if (path === "/api/inventory/meta") return json({ lowStockThreshold: 8, lowStockGrade: "C" });
     if (path === "/api/study/library") return json({ scopes: [studyScope] });
     if (path === "/api/knowledge/content") return json({ content: studyMarkdown });
+    // 知识库图片：正文里的 ![](接线示意.png) 会带鉴权取这张图（1x1 PNG）
+    if (path === "/api/knowledge/download") {
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      );
+      return route.fulfill({ status: 200, contentType: "image/png", body: png });
+    }
     // Wiki 详情页：任务 + 目录 + 正文
     if (/^\/api\/wiki\/tasks\/[^/]+$/.test(path)) return json(wikiTask);
     if (/^\/api\/wiki\/tasks\/[^/]+\/catalog$/.test(path)) return json([{ path: "getting-started", title: "快速开始" }]);
@@ -415,6 +438,48 @@ test.describe("冒烟流程", () => {
 
     await expect(article).toContainText("echo hello");
     await expect(article.locator("pre pre")).toHaveCount(0);
+  });
+
+  /**
+   * 学习库课时页的布局宽度。
+   *
+   * 回归：阅读区是 `grid-cols-[1fr_180px]`，而 grid 项默认 `min-width:auto`，
+   * 正文里一张宽表格就能把 1fr 撑到内容宽度 —— 1440 下整页溢出 118px、
+   * 1280 下溢出 278px，右侧「本课大纲」被挤出屏幕外（看起来像被裁掉了）。
+   * 这里直接量文档宽度，不看截图。
+   */
+  for (const width of [1280, 1440]) {
+    test(`学习库课时页在 ${width}px 下没有横向溢出`, async ({ page }) => {
+      await mockApi(page, "member");
+      await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+      await page.setViewportSize({ width, height: 900 });
+
+      await page.goto("/study");
+      await page.getByRole("button", { name: "认识航模", exact: true }).click();
+      await expect(page.locator("article .prose")).toBeVisible();
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${width}px 下不该出现横向滚动条（右侧大纲会被挤出屏幕）`).toBeLessThanOrEqual(0);
+
+      // 大纲确实在视口内（而不是被推到屏幕外）
+      const toc = await page.getByText("本课大纲").boundingBox();
+      expect(toc, "大纲应可见").not.toBeNull();
+      expect(toc!.x + toc!.width).toBeLessThanOrEqual(width);
+    });
+  }
+
+  test("学习库课时页能显示文档里的图片（带鉴权取回）", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+
+    await page.goto("/study");
+    await page.getByRole("button", { name: "认识航模", exact: true }).click();
+
+    const img = page.locator("article figure img");
+    await expect(img).toBeVisible();
+    await expect(img).toHaveAttribute("src", /^blob:/);
   });
 
   /**
