@@ -22,7 +22,17 @@ public class MaintenanceWorker : BackgroundService
         _logger.LogInformation("Maintenance worker started (DB backup 6h + daily cloud backup + log archive)");
 
         var lastDbBackup = DateTime.MinValue;
-        var lastDailyRun = DateTime.MinValue;
+        // 每日任务「今天(北京时间)是否已经做过」。判据必须是日期而不是「距上次运行 23 小时」：
+        // 后者在每次容器重启时(每次部署都会重启)都会立刻重跑一遍每日任务，而每日备份文件
+        // 此前不参与轮转 —— 线上因此攒出 177 份备份(约 1.8GB)、磁盘用到 85%。
+        // 启动时先读磁盘上最新一份每日备份的日期，重启就不再重复生成。
+        string? lastDailyDate = null;
+        try
+        {
+            using var probeScope = _scopeFactory.CreateScope();
+            lastDailyDate = probeScope.ServiceProvider.GetRequiredService<BackupService>().LastBackupDate("daily");
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "Maintenance: 读取上次每日备份日期失败，本轮按未做过处理"); }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,12 +61,12 @@ public class MaintenanceWorker : BackgroundService
                     }
                 }
 
-                // ── Daily: cloud backup + log archive at ~3:00 AM ──
-                var nextDaily = GetNextDailyRun();
-                var timeToDaily = nextDaily - DateTime.UtcNow;
+                // ── Daily: cloud backup + log archive, 每天凌晨 3 点(北京时间)后第一次检查时执行 ──
+                var todayBeijing = DateTime.UtcNow.AddHours(8).ToString("yyyyMMdd");
 
-                if (timeToDaily <= TimeSpan.Zero || (DateTime.UtcNow - lastDailyRun >= TimeSpan.FromHours(23)))
+                if (ShouldRunDaily(DateTime.UtcNow, lastDailyDate))
                 {
+                    lastDailyDate = todayBeijing;
                     using var scope = _scopeFactory.CreateScope();
                     var baidu = scope.ServiceProvider.GetRequiredService<BaiduNetdiskService>();
                     var logSvc = scope.ServiceProvider.GetRequiredService<LogService>();
@@ -109,8 +119,6 @@ public class MaintenanceWorker : BackgroundService
                     {
                         _logger.LogError(ex, "Maintenance: log archive failed — cleanup skipped for this run");
                     }
-
-                    lastDailyRun = DateTime.UtcNow;
                 }
 
                 // Sleep until next check (re-check every 5 minutes)
@@ -128,12 +136,18 @@ public class MaintenanceWorker : BackgroundService
         }
     }
 
-    /// <summary>Calculate the next 3:00 AM UTC.</summary>
-    private static DateTime GetNextDailyRun()
+    /// <summary>
+    /// 每日任务(云端备份 + 日志归档)是否该跑：北京时间 3 点之后，且今天还没跑过。
+    ///
+    /// 判据必须是「日期」而不是「距上次运行满 23 小时」：容器每次部署都会重启，
+    /// 重启后内存里的计时归零，后者会让每日任务立刻重跑一遍 —— 每日备份文件又从不轮转，
+    /// 线上因此攒出 177 份备份(约 1.8GB)把磁盘顶到 85%。
+    /// </summary>
+    /// <param name="utcNow">当前 UTC 时间</param>
+    /// <param name="lastDailyDate">磁盘上最新一份每日备份的日期(yyyyMMdd,北京时间)；null = 没做过</param>
+    internal static bool ShouldRunDaily(DateTime utcNow, string? lastDailyDate)
     {
-        var now = DateTime.UtcNow;
-        var next = now.Date.AddHours(3);
-        if (next <= now) next = next.AddDays(1);
-        return next.AddMinutes(Random.Shared.Next(-15, 16));
+        var beijing = utcNow.AddHours(8);
+        return beijing.Hour >= 3 && lastDailyDate != beijing.ToString("yyyyMMdd");
     }
 }

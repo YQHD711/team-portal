@@ -83,8 +83,8 @@ public class BackupService
         var latestFile = Path.Combine(_backupDir, "latest.txt");
         await File.WriteAllTextAsync(latestFile, Path.GetFileName(backupPath));
 
-        // Rotate old auto backups (keep last 24)
-        await RotateBackups();
+        // Rotate old backups (auto 24 / daily 14)
+        RotateBackups();
 
         _log.Info("backup", $"Backup verified OK: {Path.GetFileName(backupPath)}");
         return backupPath;
@@ -422,23 +422,97 @@ public class BackupService
         source.BackupDatabase(dest);
     }
 
-    /// <summary>Keep only the last 24 auto backups. Manual backups are kept indefinitely.</summary>
-    private async Task RotateBackups()
+    /// <summary>
+    /// 轮转备份：auto 保留最近 24 份（每 6 小时一次 ≈ 6 天），daily 保留最近 14 份，
+    /// 手动备份(manual)不清理。
+    ///
+    /// daily 此前从不参与轮转，而每日任务在容器每次重启时都会重跑一遍
+    /// （lastDailyRun 的初值是 MinValue），线上因此攒出 177 份备份、约 1.8GB，
+    /// 把磁盘顶到 85%。两处都改了：这里补上 daily 轮转，MaintenanceWorker 改成按日期判重。
+    /// </summary>
+    /// <summary>轮转入口（internal：单测要直接验证「哪些 tag、各保留几份」这条接线）。</summary>
+    internal void RotateBackups()
     {
-        var autoBackups = Directory.GetFiles(_backupDir, "*_auto.db")
-            .OrderByDescending(f => f)
-            .Skip(24)
-            .ToList();
+        var removed = PruneTag("auto", 24) + PruneTag("daily", 14);
+        if (removed > 0)
+            _log.Info("backup", $"Rotated {removed} old backup(s)");
+        SweepOrphanSidecars();
+    }
 
-        foreach (var f in autoBackups)
+    /// <summary>保留某个 tag 最新的 keep 份，删除更旧的；返回删除数量。</summary>
+    private int PruneTag(string tag, int keep)
+    {
+        var removed = 0;
+        foreach (var f in SelectStaleBackups(_backupDir, tag, keep))
         {
-            try { File.Delete(f); }
-            catch { /* can't delete — skip */ }
+            try
+            {
+                File.Delete(f);
+                DeleteSidecars(f);
+                removed++;
+            }
+            catch { /* 删不掉就留着，下次再试 */ }
         }
+        return removed;
+    }
 
-        if (autoBackups.Count > 0)
-            _log.Info("backup", $"Rotated {autoBackups.Count} old auto backup(s)");
-        await Task.CompletedTask;
+    /// <summary>
+    /// 挑出超期备份（纯函数，便于单测）。文件名前缀是备份时间戳，字典序即时间序，
+    /// 所以按文件名倒序 Skip(keep) 就是「更旧的那些」。
+    /// </summary>
+    internal static List<string> SelectStaleBackups(string dir, string tag, int keep)
+    {
+        if (!Directory.Exists(dir)) return new List<string>();
+        return Directory.GetFiles(dir, $"*_{tag}.db")
+            .OrderByDescending(f => f, StringComparer.Ordinal)
+            .Skip(keep)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 删掉备份的 SQLite 边车文件。-wal/-shm 是校验(VerifyBackup 会打开备份库)时留下的，
+    /// 体积不大但会一直堆积：备份被删掉后它们就成了孤儿。
+    /// </summary>
+    private static void DeleteSidecars(string dbPath)
+    {
+        foreach (var suffix in new[] { "-wal", "-shm" })
+        {
+            try { File.Delete(dbPath + suffix); } catch { /* 尽力而为 */ }
+        }
+    }
+
+    /// <summary>清掉 base 文件已经不存在的 -wal/-shm 孤儿；返回清理数量。</summary>
+    private int SweepOrphanSidecars()
+    {
+        var removed = 0;
+        try
+        {
+            foreach (var sidecar in Directory.GetFiles(_backupDir, "*.db-*"))
+            {
+                var basePath = sidecar[..sidecar.LastIndexOf(".db-", StringComparison.Ordinal)] + ".db";
+                if (!File.Exists(basePath)) { File.Delete(sidecar); removed++; }
+            }
+        }
+        catch { /* 扫描失败不影响备份主流程 */ }
+        return removed;
+    }
+
+    /// <summary>
+    /// 最近一份指定 tag 备份的日期（北京时间的 yyyyMMdd，与备份文件名前缀一致）。
+    /// 每日任务据此判断「今天是否已经备份过」——比「距上次运行 23 小时」稳：
+    /// 后者在容器每次重启时都会立刻重跑一遍。
+    /// </summary>
+    public string? LastBackupDate(string tag) => LatestBackupDateIn(_backupDir, tag);
+
+    /// <summary>从备份文件名解析最新日期（纯函数，便于单测）。</summary>
+    internal static string? LatestBackupDateIn(string dir, string tag)
+    {
+        if (!Directory.Exists(dir)) return null;
+        var dates = Directory.GetFiles(dir, $"*_{tag}.db")
+            .Select(f => Path.GetFileName(f).Split('-')[0])
+            .Where(d => d.Length == 8 && d.All(char.IsAsciiDigit))
+            .ToList();
+        return dates.Count == 0 ? null : dates.Max(StringComparer.Ordinal);
     }
 }
 

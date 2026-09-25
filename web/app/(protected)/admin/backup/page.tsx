@@ -141,7 +141,7 @@ export default function BackupPage() {
       <div className="text-xs text-muted space-y-1 bg-warning/10 rounded-xl p-4 border border-warning/30">
         <p className="font-medium text-warning">⏱️ 自动备份策略</p>
         <p>• 每 6 小时自动备份一次（保留最近 24 个）</p>
-        <p>• 每日凌晨 3 点备份并同步至百度网盘</p>
+        <p>• 每日凌晨 3 点后备份一次并同步至百度网盘（保留最近 14 个）</p>
         <p>• 启动时自动检测数据库完整性，异常则从最新备份恢复</p>
         <p>• 手动备份不会被自动清理</p>
       </div>
