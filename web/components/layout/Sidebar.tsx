@@ -128,7 +128,10 @@ export function Sidebar() {
       <aside className={cn(
         "fixed top-0 left-0 z-50 h-full w-72 sm:w-64 max-w-[calc(100vw-3rem)] flex flex-col transition-transform duration-300 shadow-xl",
         "bg-surface border-r border-border-subtle",
-        "lg:translate-x-0 lg:static lg:z-0",
+        // 桌面端：sticky + h-screen 让导航栏钉在视口里。
+        // 原来是 lg:static + h-full —— h-full 会撑成**整个文档高度**，页面一长，
+        // 导航就跟着滚上去消失了（长文档/学习库课时页尤其明显）。
+        "lg:sticky lg:top-0 lg:z-0 lg:h-screen lg:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Brand — 品牌渐变小方块 + 队名/副标题 */}
