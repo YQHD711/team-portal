@@ -43,6 +43,22 @@ beforeEach(() => {
 });
 
 describe("仪表盘", () => {
+  /**
+   * 问候语必须只在客户端算。
+   * 服务器在容器里跑 UTC、浏览器是本地时区：一旦在 render 里直接读
+   * `new Date().getHours()`，SSR 出的文本与 hydration 后的文本就不一致
+   * —— React #418（线上实测到过），而且容器时间下的问候语本身就是错的。
+   * 首屏（effect 未跑）的 HTML 里不该出现任何问候语。
+   */
+  it("首屏不按服务器时间渲染问候语（避免 hydration 不匹配）", async () => {
+    const { renderToString } = await import("react-dom/server");
+    mockedIsStaff.mockReturnValue(false);
+
+    const html = renderToString(<Home />);
+
+    expect(html).not.toMatch(/夜深了|早上好|下午好|晚上好/);
+  });
+
   it("渲染基础统计卡片", async () => {
     mockedIsStaff.mockReturnValue(false);
     render(<Home />);
