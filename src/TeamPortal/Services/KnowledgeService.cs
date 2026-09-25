@@ -110,10 +110,20 @@ public partial class KnowledgeService
             File.Copy(fullPath, backupPath, overwrite: true);
         }
 
-        // Atomic write: write to temp file, then rename
-        var tmpPath = fullPath + ".tmp";
-        File.WriteAllText(tmpPath, content);
-        File.Move(tmpPath, fullPath, overwrite: true);
+        // Atomic write: 用**唯一**临时名写入,再 rename 覆盖目标。
+        // 不用固定的 X.md.tmp:宿主机上遗留的旧 .tmp(例如早期以 root 运行的进程写下的)
+        // 会让 WriteAllText 直接报无权限,而 rename 只需要**目录**写权限 —— 换唯一名即可绕开,
+        // 不会再出现"某篇文档永远存不进去"的卡死。
+        var tmpPath = $"{fullPath}.tmp-{Guid.NewGuid():N}";
+        try
+        {
+            File.WriteAllText(tmpPath, content);
+            File.Move(tmpPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            DeleteTempQuietly(tmpPath);
+        }
         _log.Info("knowledge", $"File written: {relativePath}");
     }
 
@@ -123,11 +133,25 @@ public partial class KnowledgeService
         if (fullPath is null) throw new InvalidOperationException("Invalid path");
         var dir = Path.GetDirectoryName(fullPath);
         if (dir is not null) Directory.CreateDirectory(dir);
-        // Atomic write: write to temp file, then rename
-        var tmpPath = fullPath + ".tmp";
-        File.WriteAllBytes(tmpPath, data);
-        File.Move(tmpPath, fullPath, overwrite: true);
+        // Atomic write (同上：唯一临时名，失败不留垃圾)
+        var tmpPath = $"{fullPath}.tmp-{Guid.NewGuid():N}";
+        try
+        {
+            File.WriteAllBytes(tmpPath, data);
+            File.Move(tmpPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            DeleteTempQuietly(tmpPath);
+        }
         _log.Info("knowledge", $"Binary file written: {relativePath}");
+    }
+
+    /// <summary>写入失败时清掉临时文件，避免宿主机上攒下覆盖不了的垃圾（正是本次故障的成因）。</summary>
+    private static void DeleteTempQuietly(string tmpPath)
+    {
+        try { if (File.Exists(tmpPath)) File.Delete(tmpPath); }
+        catch { /* 清理尽力而为，不能盖住真正的写入异常 */ }
     }
 
     public byte[]? GetBinaryContent(string relativePath)
