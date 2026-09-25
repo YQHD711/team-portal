@@ -22,13 +22,18 @@ public static class SearchEndpoints
 
             // Knowledge base — 索引覆盖全部部门目录,必须带上调用者身份做范围过滤
             // （过滤在 KnowledgeSearchService 计分前完成，见那里的注释）
-            var kbResults = ks.Search(keyword, 5, role, dept, uid).Select(r => new
-            {
-                type = IsStudyDoc(r.Path) ? "study" : "knowledge",
-                title = System.IO.Path.GetFileName(r.Path),
-                snippet = r.Snippet,
-                path = KnowledgeTarget(r.Path, staff, keyword)
-            });
+            // 知识库是管理端内容：队员只应搜到**学习库**（公共/本部门），其余一律不返回；
+            // 因此队员多取一些再筛，免得筛完只剩一两条。
+            var kbResults = ks.Search(keyword, staff ? 5 : 20, role, dept, uid)
+                .Where(r => ShouldIncludeKnowledgeResult(r.Path, staff))
+                .Take(5)
+                .Select(r => new
+                {
+                    type = IsStudyDoc(r.Path) ? "study" : "knowledge",
+                    title = System.IO.Path.GetFileName(r.Path),
+                    snippet = r.Snippet,
+                    path = KnowledgeTarget(r.Path, keyword)
+                });
 
             // Inventory
             var items = await db.InventoryItems
@@ -69,18 +74,35 @@ public static class SearchEndpoints
         path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Contains("学习库");
 
     /// <summary>
-    /// 搜索结果该跳到哪。
-    /// - 学习库文档 → 学习库阅读页（队员/部长都能进，也是唯一能"按学习路径读"的地方）
-    /// - 其它知识库文档：部长/管理员 → 管理端编辑器（能直接改）；队员 → 只读阅读页
-    ///
-    /// 以前一律指向 /admin/knowledge，而 AuthGuard 会把非 staff 从 /admin/* 踢回首页，
-    /// 队员点搜索结果等于"跳回首页"——搜到了也打不开。
+    /// 学习库里的「说明类」文档（`_学习路径.md` / `_阶段说明.md`）：它们不是课时，
+    /// 正文由学习库总览页直接展示，所以跳总览页而不是 `?lesson=`。
     /// </summary>
-    internal static string KnowledgeTarget(string path, bool staff, string? keyword = null)
+    internal static bool IsStudyOverviewDoc(string path) =>
+        Path.GetFileName(path.Replace('\\', '/')).StartsWith('_');
+
+    /// <summary>
+    /// 这条知识库结果该不该给这位用户看。
+    ///
+    /// 知识库本体是管理端内容（编辑器在 /admin 下，非 staff 会被 AuthGuard 踢回首页），
+    /// 所以队员的搜索结果里**不出现**知识库文档，只保留学习库（公共 + 本部门，ACL 已在
+    /// KnowledgeSearchService 里过滤过）。
+    /// </summary>
+    internal static bool ShouldIncludeKnowledgeResult(string path, bool staff) =>
+        staff || IsStudyDoc(path);
+
+    /// <summary>
+    /// 搜索结果该跳到哪。
+    /// - 学习库课时 → `/study?lesson=`；说明类 → 学习库总览页
+    /// - 其它文档 → 管理端编辑器（只会是 staff：队员的非学习库结果已被过滤掉）
+    ///
+    /// 以前一律指向 /admin/knowledge，队员点一下就被 AuthGuard 弹回首页 ——
+    /// 现在队员根本不会拿到这类结果。
+    /// </summary>
+    internal static string KnowledgeTarget(string path, string? keyword = null)
     {
         var encoded = Uri.EscapeDataString(path);
-        if (IsStudyDoc(path)) return $"/study?lesson={encoded}";
-        if (staff) return $"/admin/knowledge?path={encoded}&q={Uri.EscapeDataString(keyword ?? "")}";
-        return $"/knowledge?path={encoded}";
+        if (!IsStudyDoc(path))
+            return $"/admin/knowledge?path={encoded}&q={Uri.EscapeDataString(keyword ?? "")}";
+        return IsStudyOverviewDoc(path) ? "/study" : $"/study?lesson={encoded}";
     }
 }

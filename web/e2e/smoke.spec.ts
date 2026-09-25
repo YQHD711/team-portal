@@ -589,11 +589,11 @@ test.describe("AI 系统管理员（只读运维助手）", () => {
 
 test.describe("全局搜索", () => {
   /**
-   * 回归：搜索结果一律指向 /admin/knowledge，而 AuthGuard 会把非 staff 从 /admin/*
-   * 踢回首页 —— 队员搜到资料、点一下就被弹回首页，等于搜到了也打不开。
-   * 现在：学习库文档进学习库阅读页，普通文档进只读阅读页。
+   * 知识库本体是管理端内容：编辑器在 /admin 下，非 staff 会被 AuthGuard 踢回首页。
+   * 所以队员的搜索结果里**不出现**知识库文档，只保留学习库；点学习库结果直接进那一课。
+   * （旧实现把知识库结果也发给队员，还指向 /admin/knowledge —— 点一下就被弹回首页。）
    */
-  test("队员点学习库结果直接进学习库那一课（不再被踢回首页）", async ({ page }) => {
+  test("队员搜索：只有学习库结果，点进去落到那一课", async ({ page }) => {
     await mockApi(page, "member");
     await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
 
@@ -604,25 +604,26 @@ test.describe("全局搜索", () => {
     const result = page.getByRole("button", { name: /01-认识航模\.md/ });
     await expect(result).toBeVisible();
     await expect(result).toContainText("学习库");   // 标签要看出这是学习库内容
+    // 注：「队员拿不到非学习库结果」是后端过滤（SearchEndpoints.ShouldIncludeKnowledgeResult），
+    // 由 tests/api/SearchTargetTests.cs 覆盖；这里的 mock 不模拟角色差异。
+
     await result.click();
 
     await expect(page).toHaveURL(/\/study\?lesson=/);
     await expect(page.getByText("第 1 / 2 课")).toBeVisible();   // 直接落在那一课
   });
 
-  test("队员点普通知识库结果能读到正文（不是跳回首页）", async ({ page }) => {
-    await mockApi(page, "member");
-    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
+  test("部长搜索：知识库结果照旧进编辑器", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
 
     await page.goto("/");
     await page.getByRole("button", { name: /搜索/ }).first().click();
     await page.getByPlaceholder("搜索知识库、库存、Wiki、文件...").fill("公共");
 
-    await page.getByRole("button", { name: /公共资料\.md/ }).click();
-
-    await expect(page).toHaveURL(/\/knowledge\?path=/);
-    await expect(page.locator("article")).toContainText("认识航模");   // 正文真的渲染出来了
-    await expect(page.getByRole("link", { name: /编辑/ })).toHaveCount(0);   // 队员没有编辑入口
+    const kb = page.getByRole("button", { name: /公共资料\.md/ });
+    await expect(kb).toBeVisible();
+    await expect(kb).toContainText("知识库");
   });
 });
 

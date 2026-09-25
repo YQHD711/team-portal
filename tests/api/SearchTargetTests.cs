@@ -3,11 +3,13 @@ using TeamPortal.Endpoints;
 namespace api;
 
 /// <summary>
-/// 全局搜索结果的跳转目标。
+/// 全局搜索里知识库结果的「给谁看 / 点去哪」。
 ///
-/// 线上缺陷：知识库结果**一律**指向 <c>/admin/knowledge</c>，而 AuthGuard 会把非
-/// staff 从 <c>/admin/*</c> 踢回首页 —— 队员搜到资料、点一下就被弹回首页，等于打不开。
-/// 规则：学习库文档进学习库阅读页；其它文档部长/管理员进编辑器，队员进只读阅读页。
+/// 线上缺陷：知识库结果**一律**指向 <c>/admin/knowledge</c>，而 AuthGuard 会把非 staff
+/// 从 <c>/admin/*</c> 踢回首页 —— 队员搜到资料、点一下就被弹回首页。
+/// 规则（本次与用户确认）：知识库本体是管理端内容，**队员的搜索结果里不出现知识库文档**，
+/// 只保留学习库（公共 + 本部门，ACL 已在 KnowledgeSearchService 过滤）；学习库课时进
+/// 学习库阅读页，说明类文档进学习库总览页，其余（只可能是 staff 看到的）进管理端编辑器。
 /// </summary>
 public class SearchTargetTests
 {
@@ -30,45 +32,71 @@ public class SearchTargetTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void StudyDoc_AlwaysGoesToTheStudyLibrary(bool staff)
+    [InlineData("公共/学习库/_学习路径.md", true)]
+    [InlineData("飞训部/学习库/01-入门筑基/_阶段说明.md", true)]
+    [InlineData("公共/学习库/01-入门筑基/01-认识航模.md", false)]
+    public void IsStudyOverviewDoc_RecognizesUnderscoreDocs(string path, bool expected)
     {
-        var target = SearchEndpoints.KnowledgeTarget("飞训部/学习库/01-入门筑基/01-认识航模.md", staff);
+        Assert.Equal(expected, SearchEndpoints.IsStudyOverviewDoc(path));
+    }
+
+    // ── 队员能看到什么 ──────────────────────────────────────
+
+    [Fact]
+    public void Member_SeesOnlyStudyLibraryDocs()
+    {
+        Assert.True(SearchEndpoints.ShouldIncludeKnowledgeResult("飞训部/学习库/01-入门筑基/01-认识航模.md", staff: false));
+        Assert.False(SearchEndpoints.ShouldIncludeKnowledgeResult("公共/资料/航模入门.md", staff: false));
+        Assert.False(SearchEndpoints.ShouldIncludeKnowledgeResult("飞训部/会议记录/2026-09.md", staff: false));
+    }
+
+    [Fact]
+    public void Staff_SeesTheWholeKnowledgeBase()
+    {
+        Assert.True(SearchEndpoints.ShouldIncludeKnowledgeResult("公共/资料/航模入门.md", staff: true));
+        Assert.True(SearchEndpoints.ShouldIncludeKnowledgeResult("飞训部/学习库/01-入门筑基/01-认识航模.md", staff: true));
+    }
+
+    // ── 点去哪 ──────────────────────────────────────────────
+
+    [Fact]
+    public void StudyLesson_GoesToTheStudyLibraryLesson()
+    {
+        var target = SearchEndpoints.KnowledgeTarget("飞训部/学习库/01-入门筑基/01-认识航模.md");
 
         Assert.StartsWith("/study?lesson=", target);
-        // 不能落到 /admin/* —— 那正是队员被踢回首页的原因
+        // 绝不能落到 /admin/* —— 那正是队员被踢回首页的原因
         Assert.DoesNotContain("/admin/", target);
         Assert.Equal("飞训部/学习库/01-入门筑基/01-认识航模.md",
             Uri.UnescapeDataString(target["/study?lesson=".Length..]));
     }
 
-    [Fact]
-    public void OtherDoc_MemberGetsTheReadOnlyReader()
+    [Theory]
+    [InlineData("公共/学习库/_学习路径.md")]
+    [InlineData("飞训部/学习库/01-入门筑基/_阶段说明.md")]
+    public void StudyOverview_GoesToTheLibraryOverview(string path)
     {
-        var target = SearchEndpoints.KnowledgeTarget("公共/资料/航模入门.md", staff: false);
-
-        Assert.StartsWith("/knowledge?path=", target);
-        Assert.DoesNotContain("/admin/", target);
+        // 说明类文档不是课时，正文在学习库总览页直接展示
+        Assert.Equal("/study", SearchEndpoints.KnowledgeTarget(path));
     }
 
     [Fact]
-    public void OtherDoc_StaffGoesStraightToTheEditor()
+    public void OtherDoc_GoesToTheEditorAndKeepsTheKeyword()
     {
-        var target = SearchEndpoints.KnowledgeTarget("公共/资料/航模入门.md", staff: true, keyword: "航模");
+        var target = SearchEndpoints.KnowledgeTarget("公共/资料/航模入门.md", keyword: "航模");
 
         Assert.StartsWith("/admin/knowledge?path=", target);
-        Assert.Contains("q=", target);   // 保留搜索词，编辑器里继续高亮
+        Assert.Contains("q=", target);
     }
 
     [Fact]
     public void Targets_AreUrlEncoded()
     {
-        var study = SearchEndpoints.KnowledgeTarget("公共/学习库/01 入门/认识 航模.md", staff: false);
-        var read = SearchEndpoints.KnowledgeTarget("公共/资料/航模 入门.md", staff: false);
+        var study = SearchEndpoints.KnowledgeTarget("公共/学习库/01 入门/认识 航模.md");
+        var other = SearchEndpoints.KnowledgeTarget("公共/资料/航模 入门.md");
 
         Assert.DoesNotContain(" ", study);
-        Assert.DoesNotContain(" ", read);
+        Assert.DoesNotContain(" ", other);
         Assert.Contains("%20", study);
     }
 }
