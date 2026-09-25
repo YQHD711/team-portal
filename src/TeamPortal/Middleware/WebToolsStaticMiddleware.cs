@@ -11,6 +11,8 @@ namespace TeamPortal.Middleware;
 ///    改为直接读该目录的 index.html 返回（200），iframe 保持 :3000 同源。
 ///  - HTML 响应把相对资源路径（src/href）改写为 /webtools/... 绝对路径：
 ///    不依赖 URL 尾斜杠（iframe 内点 ./LogFinder 生成无尾斜杠 URL 时，相对路径会解析到宿主根）。
+///  - HTML 响应注入只读目录选择兜底脚本（WebToolsDirPickerShim）：
+///    showDirectoryPicker 是 SecureContext 特性，按 IP + http 访问时不存在，LogFinder 会直接报错。
 /// </summary>
 public static class WebToolsStaticMiddleware
 {
@@ -109,6 +111,9 @@ public static class WebToolsStaticMiddleware
                 }
                 var baseDir = dir.EndsWith("/") ? dir : dir + "/";
                 body = AttrRegex.Replace(body, m => RewriteAttr(m, baseDir));
+                // 兜底目录选择器：http + IP 下没有 showDirectoryPicker，LogFinder 会直接罢工
+                // （详见 WebToolsDirPickerShim）。注入放在属性改写之后，避免脚本内容被误改写。
+                body = WebToolsDirPickerShim.Inject(body);
                 bytes = System.Text.Encoding.UTF8.GetBytes(body);
                 context.Response.ContentLength = bytes.Length;
                 await context.Response.Body.WriteAsync(bytes, context.RequestAborted);
