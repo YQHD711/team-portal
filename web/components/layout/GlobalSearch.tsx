@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, FileText, Package, GitBranch, Upload, Loader2 } from "lucide-react";
+import { Search, FileText, Package, GitBranch, Upload, Loader2, GraduationCap } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface SearchResult {
@@ -12,10 +12,10 @@ interface SearchResult {
 }
 
 const typeIcons: Record<string, typeof FileText> = {
-  knowledge: FileText, inventory: Package, wiki: GitBranch, file: Upload,
+  knowledge: FileText, study: GraduationCap, inventory: Package, wiki: GitBranch, file: Upload,
 };
 const typeLabels: Record<string, string> = {
-  knowledge: "知识库", inventory: "库存", wiki: "Wiki", file: "文件",
+  knowledge: "知识库", study: "学习库", inventory: "库存", wiki: "Wiki", file: "文件",
 };
 
 export function GlobalSearch() {
