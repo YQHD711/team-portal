@@ -79,7 +79,13 @@ public class MaintenanceWorker : BackgroundService
                             var backupPath = await baidu.BackupSystem();
                             _logger.LogInformation("Maintenance: cloud backup → {Path}", backupPath);
                         }
-                        catch (Exception ex) { _logger.LogError(ex, "Maintenance: cloud backup failed"); }
+                        catch (Exception ex)
+                        {
+                            // 自动云端备份的失败原本只进 ILogger(控制台)，系统日志页看不到，
+                            // 管理员只能看到手动备份那条「Backup upload failed」——补一条可查的留痕。
+                            _logger.LogError(ex, "Maintenance: cloud backup failed");
+                            logSvc.Warn("backup", $"云端备份失败（本地备份已生成，不受影响）：{ex.Message}");
+                        }
                     }
 
                     // 3. 日志归档 + 清理：先落本地 CSV（无网盘也执行），再只清理已归档的行。
