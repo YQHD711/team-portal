@@ -51,6 +51,8 @@ function scope(canEdit: boolean, completed: string[] = []) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom 没实现 scrollIntoView（切换课时时会把正文滚回开头）
+  Element.prototype.scrollIntoView = vi.fn();
   mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
   mockedPost.mockResolvedValue({});
   mockedGet.mockImplementation(async (endpoint: string) => {

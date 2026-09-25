@@ -62,6 +62,14 @@ export default function StudyPage() {
 
   const total = scope.lessonCount ?? lessons.length;
   const done = scope.completedCount ?? 0;
+  /**
+   * 「编辑本库 / 编辑本课」的目标。
+   * 以前无论在哪个课时页，这个按钮都固定指向**学习库根目录**，点进去总是落在
+   * `_学习路径.md` 上——从 ROS 教程第 7 章点过去也一样，等于"无论在哪都跳回根目录"。
+   * 打开着课时时应该编辑那一课，只有路径总览页才该指向库根。
+   */
+  const editTargetPath = activeLesson ? activeLesson.path : scope.libraryPath;
+  const canEditTarget = activeLesson ? activeLesson.canEdit : scope.canEdit;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -82,10 +90,10 @@ export default function StudyPage() {
               <Users className="h-3.5 w-3.5" />完成情况
             </button>
           )}
-          {scope?.canEdit && (
-            <Link href={`/admin/knowledge?path=${encodeURIComponent(scope.libraryPath)}`}
+          {canEditTarget && (
+            <Link href={`/admin/knowledge?path=${encodeURIComponent(editTargetPath)}`}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs text-muted hover:text-sky-500 hover:border-sky-400">
-              <Pencil className="h-3.5 w-3.5" />编辑本库
+              <Pencil className="h-3.5 w-3.5" />{activeLesson ? "编辑本课" : "编辑本库"}
             </Link>
           )}
         </div>

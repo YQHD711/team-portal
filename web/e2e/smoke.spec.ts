@@ -75,15 +75,19 @@ const studyMarkdown = [
   "",
   "![接线示意](接线示意.png)",
   "",
+  ...Array.from({ length: 25 }, (_, i) => `第 ${i + 1} 段：把课时正文撑长，用来验证翻页时滚动位置会回到开头。`).flatMap((p) => [p, ""]),
 ].join("\n");
 
 const studyScope = {
-  scope: "飞训部", label: "飞训部学习库", libraryPath: "飞训部/学习库", canEdit: false,
-  overviewPath: null, overview: null, completedCount: 0, lessonCount: 1,
+  scope: "飞训部", label: "飞训部学习库", libraryPath: "飞训部/学习库", canEdit: true,
+  overviewPath: null, overview: null, completedCount: 0, lessonCount: 2,
   stages: [{
-    title: "入门筑基", path: "飞训部/学习库/01-入门筑基", canEdit: false, descriptionPath: null,
+    title: "入门筑基", path: "飞训部/学习库/01-入门筑基", canEdit: true, descriptionPath: null,
     completedCount: 0,
-    lessons: [{ title: "认识航模", path: "飞训部/学习库/01-入门筑基/01-认识航模.md", canEdit: false, completed: false }],
+    lessons: [
+      { title: "认识航模", path: "飞训部/学习库/01-入门筑基/01-认识航模.md", canEdit: true, completed: false },
+      { title: "安全规范", path: "飞训部/学习库/01-入门筑基/02-安全规范.md", canEdit: true, completed: false },
+    ],
   }],
 };
 
@@ -480,6 +484,52 @@ test.describe("冒烟流程", () => {
     const img = page.locator("article figure img");
     await expect(img).toBeVisible();
     await expect(img).toHaveAttribute("src", /^blob:/);
+  });
+
+  /**
+   * 回归：在课时页点「编辑本库」，无论当前在第几章都固定跳到**学习库根目录**
+   * （知识库页再把目录解析成第一份文档 `_学习路径.md`），等于"从哪点都回到根"。
+   * 打开着课时时应该直接编辑那一课。
+   */
+  test("课时页的编辑按钮指向当前课时（而不是学习库根目录）", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/study");
+    // 路径总览页：这时才指向库根
+    await expect(page.getByRole("link", { name: "编辑本库" }))
+      .toHaveAttribute("href", "/admin/knowledge?path=" + encodeURIComponent("飞训部/学习库"));
+
+    await page.getByRole("button", { name: "安全规范", exact: true }).click();
+
+    const edit = page.getByRole("link", { name: "编辑本课" });
+    await expect(edit).toBeVisible();
+    await expect(edit).toHaveAttribute(
+      "href", "/admin/knowledge?path=" + encodeURIComponent("飞训部/学习库/01-入门筑基/02-安全规范.md"));
+  });
+
+  /**
+   * 回归：上一课读到末尾再点「下一课」，浏览器沿用同一个 scrollY，
+   * 新课时更短时会被夹到它的文末 —— 读起来就像"跳到下一篇的结尾"。
+   */
+  test("翻到下一课时回到正文开头", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/study");
+    await page.getByRole("button", { name: "认识航模", exact: true }).click();
+    await expect(page.locator("article .prose")).toBeVisible();
+    await expect(page.getByText("第 1 / 2 课")).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const bottom = await page.evaluate(() => Math.round(window.scrollY));
+    expect(bottom, "页面要足够长才测得出翻页滚动").toBeGreaterThan(300);
+
+    await page.locator("button", { hasText: /下一课/ }).first().click();
+    await expect(page.getByText("第 2 / 2 课")).toBeVisible();   // 确实翻到了下一课
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)), { timeout: 5000 })
+      .toBeLessThan(150);
   });
 
   /**
