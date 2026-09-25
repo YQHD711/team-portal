@@ -560,7 +560,9 @@ test.describe("AI 系统管理员（只读运维助手）", () => {
     await page.goto("/admin/ai-admin");
 
     await expect(page.getByRole("heading", { name: "AI 系统管理员" })).toBeVisible();
-    await expect(page.getByText(/只读运维助手/)).toBeVisible();
+    // 用 .first()：同一个 <p> 偶尔会被文本引擎匹配两次（strict mode 冲突会让这条
+    // 断言随机变红，并连带把 main 上的 CD 卡住 —— 2026-09-25 就因此漏了一次部署）
+    await expect(page.getByText(/只读运维助手/).first()).toBeVisible();
 
     // 被下线的能力不得留任何入口（按钮/文案都不行）
     await expect(page.getByText("代码提案")).toHaveCount(0);
@@ -570,8 +572,8 @@ test.describe("AI 系统管理员（只读运维助手）", () => {
 
     // 能力与手册 Tab：工具清单与手册从后端取
     await page.getByRole("button", { name: "能力与手册" }).click();
-    await expect(page.getByText("get_system_health")).toBeVisible();
-    await expect(page.getByText("发布与上线")).toBeVisible();
+    await expect(page.getByText("get_system_health").first()).toBeVisible();
+    await expect(page.getByText("发布与上线").first()).toBeVisible();
   });
 });
 
