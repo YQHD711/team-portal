@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
-import { ChevronLeft, ChevronRight, Pencil, List, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
 import { extractToc, lessonOrdinal, type StudyLesson, type StudyScope } from "@/lib/studyNav";
 
 /** 课时阅读页：面包屑 + 正文 + 右侧大纲 + 上一课/下一课 + 完成勾选。 */
@@ -22,6 +22,16 @@ export function StudyLessonView({
   onToggle: (completed: boolean) => void;
 }) {
   const toc = extractToc(content);
+  const articleRef = useRef<HTMLElement>(null);
+
+  /**
+   * 换课时（含上一篇/下一篇）要回到正文开头。
+   * 以前只换内容不动滚动位置：上一篇读到末尾再点「下一课」，浏览器沿用同一个 scrollY，
+   * 新课时更短时会被夹到它的文末 —— 表现就是"点下一课跳到了下一篇的结尾"。
+   */
+  useEffect(() => {
+    articleRef.current?.scrollIntoView({ block: "start" });
+  }, [lesson.path]);
 
   return (
     <div className="space-y-5">
@@ -44,12 +54,6 @@ export function StudyLessonView({
               ? <><CheckCircle2 className="h-3.5 w-3.5" />已完成</>
               : <><Circle className="h-3.5 w-3.5" />标记完成</>}
           </button>
-          {lesson.canEdit && (
-            <Link href={`/admin/knowledge?path=${encodeURIComponent(lesson.path)}`}
-              className="inline-flex items-center gap-1 text-faint hover:text-sky-500">
-              <Pencil className="h-3.5 w-3.5" />编辑
-            </Link>
-          )}
         </span>
       </div>
 
@@ -60,7 +64,7 @@ export function StudyLessonView({
         宽内容交给 prose 自身的 overflow-x-auto。
       */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_180px]">
-        <article className="min-w-0 rounded-2xl border bg-surface p-6 sm:p-8 min-h-[400px]">
+        <article ref={articleRef} className="min-w-0 scroll-mt-16 rounded-2xl border bg-surface p-6 sm:p-8 min-h-[400px]">
           {loading
             ? <div className="text-center text-faint py-16 text-sm">加载中…</div>
             : content
