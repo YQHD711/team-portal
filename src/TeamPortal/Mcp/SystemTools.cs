@@ -5,10 +5,11 @@ namespace TeamPortal.Mcp;
 
 /// <summary>
 /// 系统运维工具,全部限管理员。
-/// 对应 HTTP 侧 /api/admin/settings、/api/admin/backup、/api/admin/logs、
-/// /api/admin/maintenance 都是 AdminOnly;而且这里 system_settings_get 能读到
+/// 对应 HTTP 侧 /api/admin/settings、/api/admin/backup、/api/admin/logs
+/// 都是 AdminOnly;而且这里 system_settings_get 能读到
 /// AI:DeepSeekKey 等明文密钥、system_settings_set 能改 AI:DeepSeekBaseUrl
 /// 把 Bearer 密钥外带到攻击者地址,因此不能只靠"已登录"。
+/// （原 system_maintenance_* 三个工具随「代码提案 + 编译重启」功能一并下线。）
 /// </summary>
 [McpServerToolType]
 public class SystemTools
@@ -16,12 +17,10 @@ public class SystemTools
     private readonly BackupService _backup;
     private readonly LogService _log;
     private readonly SettingsService _settings;
-    private readonly MaintenanceService _maintenance;
     private readonly IHttpContextAccessor _http;
 
-    public SystemTools(BackupService backup, LogService log, SettingsService settings,
-        MaintenanceService maintenance, IHttpContextAccessor http)
-    { _backup = backup; _log = log; _settings = settings; _maintenance = maintenance; _http = http; }
+    public SystemTools(BackupService backup, LogService log, SettingsService settings, IHttpContextAccessor http)
+    { _backup = backup; _log = log; _settings = settings; _http = http; }
 
     [McpServerTool(Name = "system_health")]
     public async Task<object> Health() => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _log.GetHealth();
@@ -54,10 +53,4 @@ public class SystemTools
     }
     [McpServerTool(Name = "system_settings_list")]
     public async Task<object> SettingsList() => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _settings.GetAllGrouped();
-    [McpServerTool(Name = "system_maintenance_history")]
-    public async Task<object> MaintenanceHistory() => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _maintenance.GetHistory();
-    [McpServerTool(Name = "system_maintenance_apply")]
-    public async Task<object> MaintenanceApply() => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _maintenance.ApplyChanges();
-    [McpServerTool(Name = "system_maintenance_rollback")]
-    public async Task<object> MaintenanceRollback() => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _maintenance.Rollback();
 }

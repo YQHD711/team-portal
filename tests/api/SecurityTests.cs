@@ -10,7 +10,7 @@ using TeamPortal.Services;
 namespace api;
 
 /// <summary>
-/// 路径遍历与安全加固测试。验证 ../ 逃逸被 ResolveInside 拦截,
+/// 路径遍历与安全加固测试。验证 ../ 逃逸被各服务的路径校验拦截,
 /// 以及 AuthService 密码策略与 JWT secret 长度校验。
 /// 串行执行由 tests/api/xunit.runner.json (parallelizeTestCollections: false) 全局保证,
 /// 避免 SQLite 内存共享模式与并行不兼容。
@@ -18,59 +18,6 @@ namespace api;
 public class SecurityTests
 {
     // ── 路径遍历防护 ────────────────────────────────────────
-
-    [Theory]
-    [InlineData("../../../etc/passwd")]
-    [InlineData("..\\..\\windows\\system32\\config\\sam")]
-    [InlineData("src/../../../escape.txt")]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void MaintenanceService_ResolveInside_RejectsTraversal(string malicious)
-    {
-        var method = typeof(MaintenanceService).GetMethod("ResolveInside",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        Assert.NotNull(method);
-        // 用 Path.GetTempPath() 下的真实子目录作 root(Windows 盘符字符串在 Linux 容器上会引发
-        // Path.GetFullPath 行为异常,导致 root 解析成 cwd 路径,越界检测失效)。
-        // 另外 Linux 上反斜杠不是路径 separator — 测试输入如果是 Windows 风格路径需手动
-        // 转换为正斜杠,确保跨平台一致。
-        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "tp-traversal-" + Guid.NewGuid().ToString("N")[..8]));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var input = malicious.Replace('\\', '/');
-            var result = method!.Invoke(null, new object?[] { root, input });
-            Assert.Null(result);
-        }
-        finally { try { Directory.Delete(root, true); } catch { } }
-    }
-
-    [Fact]
-    public void MaintenanceService_ResolveInside_AllowsLegitimatePath()
-    {
-        var method = typeof(MaintenanceService).GetMethod("ResolveInside",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "tp-test-" + Guid.NewGuid().ToString("N")[..8]));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var result = method!.Invoke(null, new object?[] { root, "src/TeamPortal/Services/AuthService.cs" });
-            Assert.NotNull(result);
-            var s = (string)result!;
-            Assert.StartsWith(root, s, StringComparison.OrdinalIgnoreCase);
-        }
-        finally { try { Directory.Delete(root, true); } catch { } }
-    }
-
-    [Fact]
-    public void SystemAgentService_ResolveInside_RejectsTraversal()
-    {
-        var method = typeof(TeamPortal.Services.SystemAgentService).GetMethod("ResolveInside",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        Assert.NotNull(method);
-        var result = method!.Invoke(null, new object?[] { "C:\\fake\\root", "../../../etc/passwd" });
-        Assert.Null(result);
-    }
 
     [Fact]
     public void BackupService_DeleteBackup_RejectsTraversal()

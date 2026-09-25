@@ -128,6 +128,19 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     }
     if (path.startsWith("/api/inventory")) return json(inventory);
     if (path === "/api/admin/departments") return json([]);
+    // AI 系统管理员（只读运维助手）
+    if (path === "/api/admin/agent/memory") return json({ total: 0, summaries: 0, byRole: [] });
+    if (path === "/api/admin/agent/status") return json({ busy: false });
+    if (path === "/api/admin/agent/tools") {
+      return json([
+        { name: "get_system_health", description: "系统健康总览：数据库连通性、日志写入通道积压。" },
+        { name: "read_logs", description: "读取系统日志（默认最近 24 小时）。" },
+      ]);
+    }
+    if (path === "/api/admin/agent/guide") {
+      return json([{ topic: "发布与上线", content: "代码变更不走本系统：AI 运维助手不能改代码、不能编译、不能重启服务。" }]);
+    }
+    if (path.startsWith("/api/chat/sessions/")) return json([]);
     if (path === "/api/storage/layouts") return json(layouts);
     if (path === "/api/flightlogs") {
       return json({ logs: [{ filename: "flight-01.tlog", size: 204800, modified: 1780000000 }] });
@@ -421,6 +434,29 @@ test.describe("冒烟流程", () => {
     await select.click();
     await select.selectOption("department");
     await expect(select).toHaveValue("department");
+  });
+});
+
+test.describe("AI 系统管理员（只读运维助手）", () => {
+  test("页面不提供代码提案与维护模式入口，且能展示工具清单与手册", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/admin/ai-admin");
+
+    await expect(page.getByRole("heading", { name: "AI 系统管理员" })).toBeVisible();
+    await expect(page.getByText(/只读运维助手/)).toBeVisible();
+
+    // 被下线的能力不得留任何入口（按钮/文案都不行）
+    await expect(page.getByText("代码提案")).toHaveCount(0);
+    await expect(page.getByText("维护模式")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /应用（需手动重启）/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /变更历史/ })).toHaveCount(0);
+
+    // 能力与手册 Tab：工具清单与手册从后端取
+    await page.getByRole("button", { name: "能力与手册" }).click();
+    await expect(page.getByText("get_system_health")).toBeVisible();
+    await expect(page.getByText("发布与上线")).toBeVisible();
   });
 });
 

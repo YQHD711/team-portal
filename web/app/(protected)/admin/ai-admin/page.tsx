@@ -2,41 +2,33 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { Brain, FileText, Sparkles } from "lucide-react";
+import { Brain, BookOpen, Sparkles } from "lucide-react";
 import ChatTab from "@/components/admin/ai-admin/ChatTab";
-import ProposalsTab from "@/components/admin/ai-admin/ProposalsTab";
-import MaintenancePanel from "@/components/admin/ai-admin/MaintenancePanel";
-import type { MemoryStats, Proposal } from "@/components/admin/ai-admin/aiAdminTypes";
+import AssistantInfoTab from "@/components/admin/ai-admin/AssistantInfoTab";
+import type { AgentTool, ChatEntry, GuideSection, MemoryStats } from "@/components/admin/ai-admin/aiAdminTypes";
 
 export default function AIAdminPage() {
   const [task, setTask] = useState("");
-  const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [tab, setTab] = useState<"chat" | "proposals">("chat");
-  const [history, setHistory] = useState<{role: string; content: string}[]>([]);
+  const [tab, setTab] = useState<"chat" | "guide">("chat");
+  const [history, setHistory] = useState<ChatEntry[]>([]);
   const [memory, setMemory] = useState<MemoryStats | null>(null);
+  const [tools, setTools] = useState<AgentTool[]>([]);
+  const [guide, setGuide] = useState<GuideSection[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to latest message
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [history, loading, result]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [history, loading]);
 
   // Load existing conversation from memory
   useEffect(() => {
-    api.get<MemoryStats>("/api/admin/agent/memory").then(m => {
-      setMemory(m);
-      // Also load recent messages for display
-      fetch("/api/chat/sessions/admin-agent", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      }).then(r => r.json()).then(msgs => {
-        if (Array.isArray(msgs)) setHistory(msgs.map((m: any) => ({ role: m.role, content: m.content })));
-      }).catch(() => {});
+    api.get<MemoryStats>("/api/admin/agent/memory").then(setMemory).catch(() => {});
+    api.get<ChatEntry[]>("/api/chat/sessions/admin-agent").then(msgs => {
+      if (Array.isArray(msgs)) setHistory(msgs.map(m => ({ role: m.role, content: m.content })));
     }).catch(() => {});
+    api.get<AgentTool[]>("/api/admin/agent/tools").then(t => { if (Array.isArray(t)) setTools(t); }).catch(() => {});
+    api.get<GuideSection[]>("/api/admin/agent/guide").then(g => { if (Array.isArray(g)) setGuide(g); }).catch(() => {});
   }, []);
-
-  const fetchProposals = () => {
-    api.get<Proposal[]>("/api/admin/agent/proposals").then(setProposals).catch(() => {});
-  };
 
   const clearMemory = async () => {
     if (!confirm("清除所有AI管理员记忆？此操作不可恢复。")) return;
@@ -46,7 +38,8 @@ export default function AIAdminPage() {
   };
 
   const runAnalysis = async (t: string) => {
-    setTask(t); setLoading(true); setResult("");
+    setTask(t);
+    setLoading(true);
     // Show user message immediately
     setHistory(prev => [...prev, { role: "user", content: t }]);
 
@@ -54,33 +47,22 @@ export default function AIAdminPage() {
       const status = await api.get<{ busy: boolean }>("/api/admin/agent/status");
       if (status.busy) {
         setHistory(prev => [...prev, { role: "assistant", content: "⏳ AI 管理员正忙，请稍后再试" }]);
-        setLoading(false);
         return;
       }
-    } catch { }
+    } catch { /* 状态查询失败不阻塞主流程 */ }
 
     try {
       const res = await api.post<{ result: string; stats: MemoryStats }>("/api/admin/agent/analyze", { task: t }, 900000); // 15 min timeout for AI analysis
-      // Show AI response immediately — no need to refresh
       setHistory(prev => [...prev, { role: "assistant", content: res.result }]);
       setMemory(res.stats);
-      fetchProposals();
-    } catch (e: any) {
-      const msg = e?.message || (e instanceof Error ? e.message : "未知错误");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "未知错误";
       const errMsg = msg.includes("429") ? "⏳ AI 管理员正在处理上一个任务，请等待完成后重试"
-        : msg.includes("超时") ? "⏱️ AI 分析超时（15分钟），请简化任务或调大超时设置"
+        : msg.includes("超时") ? "⏱️ AI 分析超时（15分钟），请简化问题或调大超时设置"
         : "❌ 分析失败: " + msg;
       setHistory(prev => [...prev, { role: "assistant", content: errMsg }]);
     }
     finally { setLoading(false); }
-  };
-
-  const handleAction = async (id: string, action: "approve" | "reject" | "retry" | "revert") => {
-    const labels = { approve: "批准并应用", reject: "拒绝", retry: "重试", revert: "回滚" };
-    if (!confirm(`确认${labels[action]}此提案？`)) return;
-    const res = await api.post<{ status: string; errorMessage?: string }>(`/api/admin/agent/proposals/${id}/${action}`, {});
-    if (res.errorMessage) alert(`操作失败: ${res.errorMessage}`);
-    fetchProposals();
   };
 
   return (
@@ -90,13 +72,15 @@ export default function AIAdminPage() {
           <Brain className="h-6 w-6 text-purple-500" />
           AI 系统管理员
         </h1>
-        <p className="text-sm text-muted mt-1">自诊断 · 团队分析 · 代码提案 — 所有操作需管理员审批</p>
+        <p className="text-sm text-muted mt-1">
+          只读运维助手 · 系统诊断 · 排障答疑 — 不修改数据、不改代码、不编译、不重启服务
+        </p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl bg-surface-hover p-1 w-fit">
-        {[{ k: "chat", l: "分析对话", i: Sparkles }, { k: "proposals", l: "代码提案", i: FileText }].map(t => (
-          <button key={t.k} onClick={() => { setTab(t.k as "chat" | "proposals"); if (t.k === "proposals") fetchProposals(); }}
+        {[{ k: "chat", l: "运维对话", i: Sparkles }, { k: "guide", l: "能力与手册", i: BookOpen }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k as "chat" | "guide")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.k ? "bg-white dark:bg-slate-700 shadow-sm" : "text-muted hover:text-foreground"}`}>
             <t.i className="h-4 w-4" />{t.l}
           </button>
@@ -107,11 +91,8 @@ export default function AIAdminPage() {
         <ChatTab history={history} loading={loading} memory={memory} task={task}
           onTask={setTask} onRun={runAnalysis} onClearMemory={clearMemory} chatEndRef={chatEndRef} />
       ) : (
-        <ProposalsTab proposals={proposals} onAction={handleAction} onRefresh={fetchProposals} />
+        <AssistantInfoTab tools={tools} guide={guide} />
       )}
-
-      {/* Maintenance Panel */}
-      <MaintenancePanel result={result} setResult={setResult} onProposalsChanged={fetchProposals} />
     </div>
   );
 }
