@@ -20,20 +20,51 @@ public static class SearchEndpoints
             var uid = int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
             var staff = role is "admin" or "部长";
 
+            // 可见的已完成 wiki 项目（与 /api/wiki 列表、CanViewTask 同一套 Visibility 规则）。
+            // 一次取回后派两个用场：① 按项目名匹配；② 把 wiki **正文**的搜索结果落回 wiki 阅读页 ——
+            // wiki 文档就存在知识库目录下（{TargetFolder}/{ProjectName}/...），不映射的话
+            // 搜到正文只能给个 /admin/knowledge，等于把 wiki 内容排除在搜索之外。
+            var visibleWikiTasks = await db.WikiTasks
+                .Where(w => w.Status == "completed")
+                .Where(w => w.Visibility == "public" ||
+                            (w.Visibility == "department" && (role == "admin" || dept == w.TargetFolder)) ||
+                            (w.Visibility == "personal" && (role == "admin" || w.UserId == uid)))
+                .Select(w => new { w.Id, w.ProjectName, w.TargetFolder, w.Type, w.Visibility })
+                .Take(500)
+                .ToListAsync();
+
+            // 长前缀优先：项目名互为前缀时（如 "docs" 与 "docs-advanced"）要落到更精确的那个
+            var wikiPrefixes = visibleWikiTasks
+                .Select(w => (Prefix: $"{w.TargetFolder.Trim('/')}/{w.ProjectName}/", w.Id))
+                .OrderByDescending(p => p.Prefix.Length)
+                .ToList();
+
+            (string Prefix, string Id)? WikiOwner(string path)
+            {
+                var normalized = path.Replace('\\', '/');
+                foreach (var candidate in wikiPrefixes)
+                    if (normalized.StartsWith(candidate.Prefix, StringComparison.Ordinal)) return candidate;
+                return null;
+            }
+
             // Knowledge base — 索引覆盖全部部门目录,必须带上调用者身份做范围过滤
             // （过滤在 KnowledgeSearchService 计分前完成，见那里的注释）
-            // 知识库是管理端内容：队员只应搜到**学习库**（公共/本部门），其余一律不返回；
-            // 因此队员多取一些再筛，免得筛完只剩一两条。
+            // 队员不返回知识库文档，只保留学习库与「对他可见的 wiki 正文」；
+            // 因此队员多取一些候选再筛，免得筛完只剩一两条。
             var kbResults = ks.Search(keyword, staff ? 5 : 20, role, dept, uid)
-                .Where(r => ShouldIncludeKnowledgeResult(r.Path, staff))
+                .Select(r => new { Hit = r, Wiki = WikiOwner(r.Path) })
+                .Where(x => ShouldIncludeKnowledgeResult(x.Hit.Path, staff, x.Wiki is not null))
                 .Take(5)
-                .Select(r => new
+                .Select(x => new
                 {
-                    type = IsStudyDoc(r.Path) ? "study" : "knowledge",
-                    title = System.IO.Path.GetFileName(r.Path),
-                    snippet = r.Snippet,
-                    path = KnowledgeTarget(r.Path, keyword)
-                });
+                    type = x.Wiki is not null ? "wiki" : IsStudyDoc(x.Hit.Path) ? "study" : "knowledge",
+                    title = System.IO.Path.GetFileName(x.Hit.Path),
+                    snippet = x.Hit.Snippet,
+                    path = x.Wiki is not null
+                        ? WikiDocTarget(x.Wiki.Value.Id, WikiDocPath(x.Hit.Path, x.Wiki.Value.Prefix))
+                        : KnowledgeTarget(x.Hit.Path, keyword)
+                })
+                .ToList();
 
             // Inventory
             var items = await db.InventoryItems
@@ -41,14 +72,12 @@ public static class SearchEndpoints
                 .Take(5).Select(i => new { type = "inventory", title = i.Name, snippet = $"库存: {i.Quantity} · {i.Category} · {i.LocationCode ?? ""}", path = $"/inventory?id={i.Id}" })
                 .ToListAsync();
 
-            // Wiki tasks — 与 /api/wiki 列表同一套可见性规则(旧实现忽略 Visibility,会搜出他人私人项目)
-            var wikis = await db.WikiTasks
-                .Where(w => w.Status == "completed" && w.ProjectName.ToLower().Contains(keyword))
-                .Where(w => w.Visibility == "public" ||
-                            (w.Visibility == "department" && (role == "admin" || dept == w.TargetFolder)) ||
-                            (w.Visibility == "personal" && (role == "admin" || w.UserId == uid)))
-                .Take(5).Select(w => new { type = "wiki", title = w.ProjectName, snippet = $"类型: {w.Type} · {w.Visibility}", path = $"/wiki/{w.Id}" })
-                .ToListAsync();
+            // Wiki tasks — 按项目名匹配（可见性已在上面的 visibleWikiTasks 里过滤）
+            var wikis = visibleWikiTasks
+                .Where(w => w.ProjectName.ToLower().Contains(keyword))
+                .Take(5)
+                .Select(w => new { type = "wiki", title = w.ProjectName, snippet = $"类型: {w.Type} · {w.Visibility}", path = $"/wiki/{w.Id}" })
+                .ToList();
 
             // Shared files — 部门可见文件对其它部门不可见(与 /api/files 列表一致)
             var files = await db.SharedFiles
@@ -84,11 +113,29 @@ public static class SearchEndpoints
     /// 这条知识库结果该不该给这位用户看。
     ///
     /// 知识库本体是管理端内容（编辑器在 /admin 下，非 staff 会被 AuthGuard 踢回首页），
-    /// 所以队员的搜索结果里**不出现**知识库文档，只保留学习库（公共 + 本部门，ACL 已在
-    /// KnowledgeSearchService 里过滤过）。
+    /// 所以队员的搜索结果里**不出现**知识库文档；学习库和「对他可见的 wiki 正文」例外 ——
+    /// 前者本来就是给队员看的，后者有独立的 Visibility 规则且能在 /wiki 页读。
     /// </summary>
-    internal static bool ShouldIncludeKnowledgeResult(string path, bool staff) =>
-        staff || IsStudyDoc(path);
+    internal static bool ShouldIncludeKnowledgeResult(string path, bool staff, bool visibleWikiDoc = false) =>
+        staff || IsStudyDoc(path) || visibleWikiDoc;
+
+    /// <summary>
+    /// 知识库路径 → wiki 阅读页的 ?doc= 参数。
+    /// 约定见 /api/wiki/tasks/{id}/doc：kbPath = {TargetFolder}/{ProjectName}/{docPath}.md，
+    /// 因此去掉项目前缀与 .md 后缀就是 docPath。
+    /// </summary>
+    internal static string WikiDocPath(string kbPath, string projectPrefix)
+    {
+        var normalized = kbPath.Replace('\\', '/');
+        var rel = normalized.StartsWith(projectPrefix, StringComparison.Ordinal)
+            ? normalized[projectPrefix.Length..]
+            : normalized;
+        return rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? rel[..^3] : rel;
+    }
+
+    /// <summary>wiki 正文结果 → `/wiki/{任务}?doc={项目内路径}`（前端会直接打开这一篇）。</summary>
+    internal static string WikiDocTarget(string taskId, string docPath) =>
+        $"/wiki/{taskId}?doc={Uri.EscapeDataString(docPath)}";
 
     /// <summary>
     /// 搜索结果该跳到哪。
