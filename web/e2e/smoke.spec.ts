@@ -724,6 +724,37 @@ test.describe("删除按钮可见性", () => {
   });
 });
 
+test.describe("登录页全屏背景与缩放", () => {
+  /**
+   * 回归：auth 布局是 flex 居中但没给子节点 w-full，子节点作为 flex item 只缩到
+   * 卡片宽度（~384px）。登录页里那些 `absolute inset-0` 的渐变/光斑铺的是这个节点的范围，
+   * 于是大屏上只铺成中间一条竖带，两边留大片纯色 —— 看着像半成品。
+   */
+  test("大屏下背景铺满视口", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.setViewportSize({ width: 1600, height: 900 });
+
+    // 登录页与注册页是同一套结构，一起守
+    for (const route of ["/auth/login", "/auth/register"]) {
+      await page.goto(route);
+
+      const box = await page.getByTestId("auth-page").boundingBox();
+      expect(box, `${route}: 找不到根容器`).not.toBeNull();
+      expect(box!.width, `${route}: 背景容器宽度应铺满视口`).toBeGreaterThanOrEqual(1599);
+      expect(box!.height, `${route}: 背景容器高度应铺满视口`).toBeGreaterThanOrEqual(899);
+    }
+  });
+
+  test("没禁用双指缩放", async ({ page }) => {
+    await mockApi(page, "member");
+    await page.goto("/auth/login");
+
+    const content = (await page.locator('meta[name="viewport"]').getAttribute("content")) ?? "";
+    expect(content, "maximum-scale 会禁掉缩放，对视力不佳的用户不友好").not.toMatch(/maximum-scale/i);
+    expect(content).not.toMatch(/user-scalable\s*=\s*no/i);
+  });
+});
+
 test.describe("路由完整性守卫", () => {
   // 防止源码被构建遗漏(如被 .gitignore 误伤)导致整页 404
   test("关键路由不存在404", async ({ request }) => {

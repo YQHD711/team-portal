@@ -33,7 +33,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-[80vh] items-center justify-center overflow-hidden px-4 py-12">
+    <div data-testid="auth-page" className="relative flex min-h-svh w-full items-center justify-center overflow-hidden px-4 py-12">
       {/* ───────── 背景装饰层 ───────── */}
       {/* 点阵网格（中心渐隐） */}
       <div

@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // 刻意不设 maximumScale / userScalable：那会禁掉双指缩放，
+  // 对视力和手部精细度不佳的队员不友好（WCAG 1.4.4 要求允许放大到 200%）。
 };
 
 export default function RootLayout({

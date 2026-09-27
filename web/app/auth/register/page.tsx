@@ -29,7 +29,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="relative flex min-h-[80vh] items-center justify-center px-4 overflow-hidden">
+    <div data-testid="auth-page" className="relative flex min-h-svh w-full items-center justify-center px-4 py-12 overflow-hidden">
       {/* 背景径向光晕（品牌色，跟随主题） */}
       <div
         aria-hidden
