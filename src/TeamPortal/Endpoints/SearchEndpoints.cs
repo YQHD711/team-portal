@@ -15,9 +15,8 @@ public static class SearchEndpoints
                 return Results.Ok(new { knowledge = Array.Empty<object>(), inventory = Array.Empty<object>(), wiki = Array.Empty<object>(), files = Array.Empty<object>() });
 
             var keyword = q.ToLower().Trim();
-            var role = user.FindFirstValue(ClaimTypes.Role);
-            var dept = user.FindFirstValue("Department");
-            var uid = int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+            // 身份必须查库取当前值，不能读 token 声明（token 活 7 天且无失效机制）
+            var (role, dept, uid) = await CurrentUser.FromDbAsync(user, db);
             var staff = role is "admin" or "部长";
 
             // 可见的已完成 wiki 项目（与 /api/wiki 列表、CanViewTask 同一套 Visibility 规则）。
