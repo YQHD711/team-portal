@@ -94,16 +94,36 @@ public static class WikiEndpoints
         });
 
         // Delete a wiki task
-        wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge, HttpContext ctx) =>
+        wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge, TrashService trash, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
+            var uid = GetUserId(user);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
-            var ok = await generator.DeleteTask(id, knowledge);
             var log = app.Services.GetRequiredService<LogService>();
-            if (ok) log.Info("wiki", $"Wiki task {id} deleted by {user.Identity?.Name}");
-            else log.Warn("wiki", $"Wiki task {id} delete failed (not found) by {user.Identity?.Name}");
-            log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
-                data: new { success = ok }, ipAddress: LogService.ClientIp(ctx));
+            var actor = user.Identity?.Name ?? "unknown";
+
+            var task = await generator.GetTask(id);
+            if (task is null)
+            {
+                log.Warn("wiki", $"Wiki task {id} delete failed (not found) by {actor}");
+                return Results.Problem("任务不存在", statusCode: 404);
+            }
+
+            // 删除会连知识库里的项目目录一起清掉 —— 先把目录整体搬进回收站（可恢复），再删任务行
+            var kbRoot = knowledge.BasePath;
+            var folders = new[]
+            {
+                Path.Combine(kbRoot, task.TargetFolder, task.ProjectName),
+                Path.Combine(kbRoot, task.TargetFolder, $"{task.ProjectName}_EN"),
+            };
+            db.TrashItems.Add(trash.StashPaths(folders, $"Wiki 项目：{task.ProjectName}", "WikiTask", uid, actor, row: task));
+            await db.SaveChangesAsync();
+
+            var ok = await generator.DeleteTask(id, knowledge);
+            if (ok) log.Info("wiki", $"Wiki task {id} moved to trash by {actor}");
+            else log.Warn("wiki", $"Wiki task {id} delete failed after stash by {actor}");
+            log.Audit("delete", actor, targetType: "wiki-task", targetId: id,
+                data: new { success = ok, trash = true }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
         });
 

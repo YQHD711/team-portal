@@ -5,7 +5,7 @@ using TeamPortal.Data.Models;
 
 namespace TeamPortal.Services;
 
-public class TrashService
+public partial class TrashService
 {
     private readonly AppDbContext _db;
     private readonly LogService _log;
@@ -45,6 +45,10 @@ public class TrashService
     {
         var item = await _db.TrashItems.FindAsync(id);
         if (item is null) return false;
+
+        // 文件/目录类删除：先把保管的文件搬回原位（搬不回去就不能删回收站记录）
+        var stashed = ParseStashed(item.DataJson);
+        if (stashed is not null && !RestoreStashedPaths(stashed)) return false;
 
         // Restore based on table type
         try
@@ -94,6 +98,28 @@ public class TrashService
                     pur.Id = 0; pur.Requester = null; pur.Approver = null;
                     _db.PurchaseRequests.Add(pur);
                     break;
+                // ── 带文件的删除：文件已在上面的 RestoreStashedPaths 搬回，这里只补数据库行 ──
+                case "WikiTask":
+                    var wt = stashed?.RowJson is null ? null : JsonSerializer.Deserialize<WikiTask>(stashed.RowJson);
+                    if (wt is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "缺少 WikiTask 行数据，已保留回收站记录");
+                        return false;
+                    }
+                    _db.WikiTasks.Add(wt);   // 主键是字符串 GUID，原样保留（已有链接不失效）
+                    break;
+                case "SharedFile":
+                    var sf = stashed?.RowJson is null ? null : JsonSerializer.Deserialize<SharedFile>(stashed.RowJson);
+                    if (sf is null)
+                    {
+                        _log.Error("trash", $"Restore failed: {item.Title}", "缺少 SharedFile 行数据，已保留回收站记录");
+                        return false;
+                    }
+                    sf.Id = 0;
+                    _db.SharedFiles.Add(sf);
+                    break;
+                case "KnowledgePath":
+                    break;   // 只有文件，没有数据库行
                 default:
                     return false;
             }
