@@ -147,7 +147,7 @@ export default function ResultsPanel({ examId, users, onChanged }: Props) {
                   {r.score !== null && r.score !== undefined && <span className="text-muted">{r.score}分</span>}
                   {r.notes && <span className="text-xs text-faint truncate">{r.notes}</span>}
                 </div>
-                <button onClick={() => { if (confirm("确定删除此成绩记录？")) { api.delete(`/api/admin/exams/${examId}/results/${r.id}`).then(() => { load(); onChanged(); }); } }} className="p-1 rounded hover:bg-red-50 text-faint hover:text-danger shrink-0"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => { if (confirm("确定删除此成绩记录？")) { api.delete(`/api/admin/exams/${examId}/results/${r.id}`).then(() => { load(); onChanged(); }); } }} className="p-1 rounded hover:bg-red-50 text-danger/70 hover:text-danger shrink-0"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>

@@ -683,6 +683,45 @@ test.describe("布局", () => {
     // 导航内容还在视口里（不是滚出屏幕）
     await expect(page.getByRole("link", { name: "学习库" }).first()).toBeInViewport();
   });
+
+});
+
+test.describe("删除按钮可见性", () => {
+  /**
+   * 回归：wiki 列表卡片上那个是 `text-zinc-300 + opacity-0`，不 hover **完全看不见**；
+   * 任务队列里那个是 `text-faint`（浅到几乎看不见）。
+   * 注意 Playwright 的 toBeVisible 会把 opacity:0 当成可见，所以必须读计算样式。
+   */
+  test("删除按钮默认可见、且是危险色", async ({ page }) => {
+    await mockApi(page, "admin");
+    await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
+
+    await page.goto("/wiki/import");
+
+    const del = page.locator('button[title="删除任务"]').first();
+    await expect(del).toBeVisible();
+    // 危险色 token 真的挂在按钮上
+    await expect(del).toHaveClass(/text-danger/);
+    const style = await del.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { opacity: s.opacity, color: s.color };
+    });
+
+    expect(style.opacity, "删除按钮不该默认透明").toBe("1");
+
+    // 关键断言：不能再用 text-faint 那个浅灰。
+    // 注意 Tailwind 4 对带透明度的主题色会算成 oklab()，所以这里不解析具体色值，
+    // 而是拿一个探针元素取 text-faint 的实际颜色来对比 —— 与颜色空间无关。
+    const faint = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.className = "text-faint";
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    });
+    expect(style.color, "删除按钮不该用 text-faint 那种浅灰").not.toBe(faint);
+  });
 });
 
 test.describe("路由完整性守卫", () => {

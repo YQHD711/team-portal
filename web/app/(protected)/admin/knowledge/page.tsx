@@ -293,7 +293,7 @@ export default function KnowledgeAdminPage() {
                     <button onClick={() => { setSplitMode(!splitMode); setPreview(false); }} className={`p-1.5 rounded text-xs ${splitMode ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="分栏编辑"><Columns className="h-3.5 w-3.5" /></button>
                     <button onClick={() => { setPreview(!preview); if (preview) setSplitMode(false); }} className={`p-1.5 rounded text-xs ${preview ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="预览"><Eye className="h-3.5 w-3.5" /></button>
                     <button onClick={handleSave} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"><Save className="h-3.5 w-3.5" />{saving ? "保存中..." : "保存"}</button>
-                    <button onClick={() => handleDelete(selected)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => handleDelete(selected)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 )}
               </div>

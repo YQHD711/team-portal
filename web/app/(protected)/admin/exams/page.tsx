@@ -154,7 +154,7 @@ export default function ExamsPage() {
                           {openResults === e.id ? <><ChevronUp className="h-3.5 w-3.5" />收起</> : <><ChevronDown className="h-3.5 w-3.5" />成绩 ({e.resultCount})</>}
                         </button>
                         <button onClick={() => openEdit(e)} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => remove(e)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => remove(e)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                     {openResults === e.id && <ResultsPanel examId={e.id} users={users} onChanged={refresh} />}

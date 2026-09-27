@@ -120,7 +120,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${u.role==="admin"?"bg-purple-100 text-purple-700":u.role==="部长"?"bg-sky-100 text-sky-700":"bg-zinc-100 text-zinc-600"}`}>{u.role==="admin"?<><Shield className="h-3 w-3 mr-1 inline"/>管理员</>:u.role==="部长"?<><UserCog className="h-3 w-3 mr-1 inline"/>部长</>:"成员"}</span></td>
                     <td className="px-4 py-3 text-muted hidden sm:table-cell">{u.department||"—"}</td>
                     <td className="px-4 py-3 text-faint hidden md:table-cell">{new Date(u.createdAt).toLocaleDateString("zh-CN")}</td>
-                    <td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>openEdit(u)} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4"/></button>{u.role!=="admin"&&u.role!=="部长"&&<button onClick={()=>handleDelete(u)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4"/></button>}</div></td>
+                    <td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-1"><button onClick={()=>openEdit(u)} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4"/></button>{u.role!=="admin"&&u.role!=="部长"&&<button onClick={()=>handleDelete(u)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4"/></button>}</div></td>
                   </tr>
                 ))}
               </tbody>

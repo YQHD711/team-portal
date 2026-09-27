@@ -78,7 +78,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
                     <button onClick={() => onHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
                     {isStaff && <>
                       <button onClick={() => onEdit(item)} className="p-1 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => onDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => onDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                     </>}
                   </div>
                 </td>

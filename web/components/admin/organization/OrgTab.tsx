@@ -72,7 +72,7 @@ export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, ex
                 {isAdmin && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 )}
               </div>
@@ -173,7 +173,7 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
                     <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
                   )}
                   {canDelete && (
-                    <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </div>
               </div>
