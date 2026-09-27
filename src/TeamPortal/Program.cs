@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -65,6 +66,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        };
+
+        // Token 失效：JWT 默认活 7 天且声明不可撤销，被免职的部长 / 被换部门的人 / 被改密码的账号，
+        // 旧 token 会带着旧身份继续通过鉴权与授权策略校验。这里比对库里的 TokenVersion，
+        // 改角色 / 改部门 / 改密码时自增 → 旧 token 当场作废（而不是等 7 天自然过期）。
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async ctx =>
+            {
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var principal = ctx.Principal;
+
+                var idClaim = principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (idClaim is null || !int.TryParse(idClaim, out var uid))
+                {
+                    ctx.Fail("token 缺少有效的主体标识");
+                    return;
+                }
+
+                // 本次上线前签发的 token 没有这个声明 —— 按 0 处理，
+                // 于是老会话不会因为本次改动被强制登出，但一旦版本被自增就立即失效。
+                var tokenVersion = int.TryParse(principal?.FindFirstValue(AuthService.TokenVersionClaim), out var v) ? v : 0;
+
+                var current = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == uid)
+                    .Select(u => (int?)u.TokenVersion)
+                    .FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
+
+                // 用户已被删除（current 为 null）或版本对不上 → 拒绝
+                if (current is null || current.Value != tokenVersion)
+                    ctx.Fail("登录状态已失效，请重新登录");
+            },
         };
     });
 builder.Services.AddAuthorization(options =>

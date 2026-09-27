@@ -12,7 +12,7 @@ export function UserMenu() {
   const { user, loading } = useCurrentUser();
   const [open, setOpen] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
-  const [pwd, setPwd] = useState({ current: "", newPwd: "" });
+  const [pwd, setPwd] = useState({ currentPassword: "", newPassword: "" });
   const [pwdMsg, setPwdMsg] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
@@ -38,8 +38,23 @@ export function UserMenu() {
 
   const handleChangePwd = async (e: React.FormEvent) => {
     e.preventDefault();
-    try { await api.put("/api/auth/change-password", pwd); setPwdMsg("✅ 修改成功"); setShowPwd(false); }
-    catch { setPwdMsg("❌ 当前密码错误"); }
+    try {
+      // 字段名必须与服务端 ChangePasswordRequest(CurrentPassword, NewPassword) 对齐。
+      // 这里曾经发的是 {current, newPwd}，两边对不上 → 服务端永远 400，
+      // 而 UI 只会显示"当前密码错误"，把接口契约问题伪装成用户输错密码。
+      await api.put("/api/auth/change-password", pwd);
+      // 服务端改密码会让已签发的 token 立即失效（User.TokenVersion++），
+      // 所以这里必须**主动登出并说明原因**；否则用户会在"✅ 修改成功"之后
+      // 被下一个请求的 401 弹到登录页，还显示成莫名其妙的"登录已过期"。
+      setPwdMsg("✅ 修改成功，请用新密码重新登录");
+      setShowPwd(false);
+      try {
+        localStorage.removeItem("chatSessionId");
+        localStorage.removeItem("baidu_authed");
+      } catch { /* 隐私模式下 localStorage 可能不可用 */ }
+      removeToken();
+      router.push("/auth/login");
+    } catch { setPwdMsg("❌ 修改失败：当前密码错误，或新密码不符合要求"); }
   };
 
   if (!user) {
@@ -82,8 +97,8 @@ export function UserMenu() {
                 <h4 className="text-sm font-medium">修改密码</h4>
                 <button type="button" onClick={() => setShowPwd(false)} className="p-0.5 rounded hover:bg-slate-100"><X className="h-4 w-4" /></button>
               </div>
-              <input type="password" placeholder="当前密码" value={pwd.current} onChange={e => setPwd({ ...pwd, current: e.target.value })} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/50" />
-              <input type="password" placeholder="新密码(至少6位)" value={pwd.newPwd} onChange={e => setPwd({ ...pwd, newPwd: e.target.value })} required minLength={6} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/50" />
+              <input type="password" placeholder="当前密码" value={pwd.currentPassword} onChange={e => setPwd({ ...pwd, currentPassword: e.target.value })} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/50" />
+              <input type="password" placeholder="新密码(至少6位)" value={pwd.newPassword} onChange={e => setPwd({ ...pwd, newPassword: e.target.value })} required minLength={6} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/50" />
               <button type="submit" className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary">确认修改</button>
               {pwdMsg && <div className={`text-xs ${pwdMsg.startsWith("✅") ? "text-success" : "text-danger"}`}>{pwdMsg}</div>}
             </form>
