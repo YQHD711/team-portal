@@ -36,6 +36,10 @@ public static class NotificationEndpoints
         n.MapPost("/read-all", async (ClaimsPrincipal user, NotificationService svc) =>
             { await svc.MarkAllRead(GetUserId(user), GetUserRole(user)); return Results.Ok(new { success = true }); });
 
+        // 清除：只清「我」的列表 —— 按用户打清除标记，不删共享的通知行（见 NotificationService.ClearAll）
+        n.MapPost("/clear", async (ClaimsPrincipal user, NotificationService svc) =>
+            Results.Ok(new { cleared = await svc.ClearAll(GetUserId(user), GetUserRole(user)) }));
+
         // SSE 实时推送:浏览器 fetch + ReadableStream 消费,不能用 EventSource(无法自定义 Authorization 头)
         n.MapGet("/stream", async (HttpContext ctx, NotificationService svc, ClaimsPrincipal user) =>
         {

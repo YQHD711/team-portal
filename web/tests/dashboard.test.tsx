@@ -110,10 +110,13 @@ describe("仪表盘", () => {
     expect(screen.queryByText("库存充足")).not.toBeInTheDocument();
   });
 
-  it("无团队动态时显示空状态", async () => {
-    mockedIsStaff.mockReturnValue(false);
+  /** 「团队动态」面板已按需求下线（动态本身就是通知，铃铛里已有）——这里钉住它不会回来 */
+  it("不再渲染团队动态面板", async () => {
+    mockedIsStaff.mockReturnValue(true);
     render(<Home />);
 
-    expect(await screen.findByText("暂无团队动态")).toBeInTheDocument();
+    await screen.findByText("团队成员");
+    expect(screen.queryByText("团队动态")).not.toBeInTheDocument();
+    expect(screen.queryByText("暂无团队动态")).not.toBeInTheDocument();
   });
 });

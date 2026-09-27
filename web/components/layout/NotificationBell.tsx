@@ -56,6 +56,12 @@ export function NotificationBell() {
 
   const markRead = async (id: number) => { await api.post(`/api/notifications/${id}/read`, {}); refresh(); };
   const markAll = async () => { await api.post("/api/notifications/read-all", {}); refresh(); };
+  /** 清除：只清自己的列表（后端按用户打标记，共享的通知行不动，别人照旧看得见） */
+  const clearAll = async () => {
+    if (!confirm("清除通知列表？\n\n只影响你自己的列表，其他人的通知不受影响。")) return;
+    await api.post("/api/notifications/clear", {});
+    refresh();
+  };
 
   // 徽标按最高未读级别着色(critical > warning > info)
   const topLevel = notifs.reduce<string>((acc, n) => {
@@ -82,8 +88,9 @@ export function NotificationBell() {
           <div className="fixed left-4 right-4 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-96 max-w-sm mx-auto sm:mx-0 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="font-semibold text-sm">通知</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {unread > 0 && <button onClick={markAll} className="text-xs text-primary hover:underline">全部已读</button>}
+                {notifs.length > 0 && <button onClick={clearAll} className="text-xs text-muted hover:text-danger hover:underline">清除</button>}
                 <button onClick={() => setOpen(false)} className="lg:hidden p-1 rounded hover:bg-surface-hover text-faint">✕</button>
               </div>
             </div>
