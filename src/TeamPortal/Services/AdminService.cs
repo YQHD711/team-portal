@@ -73,6 +73,18 @@ public class AdminService
         if (userRole is not null && user.Role != userRole) { changes.Add($"role:{user.Role}→{userRole}"); user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member"; }
         if (deptId.HasValue) { var newDept = deptId == 0 ? null : deptId; if (user.DepartmentId != newDept) { changes.Add($"dept:{user.DepartmentId}→{newDept}"); user.DepartmentId = newDept; } }
         if (!string.IsNullOrWhiteSpace(password)) { changes.Add("password:reset"); user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); }
+
+        // 角色 / 部门 / 密码变了 → 让已签发的 token 立即失效。
+        // 否则被免职的部长、被换部门的人、被改密码的账号，旧 token 还会带着旧身份
+        // 继续通过鉴权与授权策略校验，直到最长 7 天后自然过期。
+        if (changes.Any(c => c.StartsWith("role:", StringComparison.Ordinal)
+                          || c.StartsWith("dept:", StringComparison.Ordinal)
+                          || c.StartsWith("password:", StringComparison.Ordinal)))
+        {
+            user.TokenVersion++;
+            changes.Add("token:revoked");
+        }
+
         await _db.SaveChangesAsync();
 
         if (changes.Count > 0)

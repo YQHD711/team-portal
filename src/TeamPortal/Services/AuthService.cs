@@ -11,6 +11,12 @@ namespace TeamPortal.Services;
 
 public class AuthService
 {
+    /// <summary>
+    /// JWT 里承载 token 版本号的 claim 名。
+    /// 签发侧（GenerateToken）与校验侧（Program.cs 的 OnTokenValidated）必须用同一个字符串。
+    /// </summary>
+    public const string TokenVersionClaim = "TokenVersion";
+
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly LogService _log;
@@ -245,6 +251,8 @@ public class AuthService
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Role, user.Role),
+            // 版本号随 token 一起签发；改角色/部门/密码时库里自增 → 旧 token 立即作废
+            new Claim(TokenVersionClaim, user.TokenVersion.ToString()),
         };
 
         // MCP 工具(知识库/账号管理)依赖部门声明做范围校验,而 HTTP 端点是自己查库取部门的。
@@ -272,6 +280,8 @@ public class AuthService
             return false;
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        // 改密码 → 让本人其它已签发 token 立即失效（改密码本就该把别处的登录踢下线）
+        user.TokenVersion++;
         await _db.SaveChangesAsync();
         _log.Info("auth", $"Password changed: {user.Username}", null, user.Username);
         return true;
