@@ -6,7 +6,6 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
 import { isStaff as checkIsStaff } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
-import { useNotifications } from "@/lib/hooks";
 import { useLowStock } from "@/components/inventory/LowStockProvider";
 import { Users, Package, DollarSign, Receipt, Sparkles, ShieldAlert, AlertTriangle } from "lucide-react";
 
@@ -51,18 +50,6 @@ function formatMoney(v: number | undefined) {
   return `¥${v.toLocaleString("zh-CN")}`;
 }
 
-function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "刚刚";
-  if (m < 60) return `${m}分钟前`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}小时前`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}天前`;
-  return new Date(iso).toLocaleDateString("zh-CN");
-}
-
 const Skeleton = ({ w = "w-16", h = "h-6" }: { w?: string; h?: string }) =>
   <span className={`inline-block ${w} ${h} bg-surface-hover rounded animate-pulse`} />;
 
@@ -74,7 +61,6 @@ export default function Home() {
   const [donut, setDonut] = useState<{ name: string; value: number }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
-  const { notifications: notifs } = useNotifications();
 
   useEffect(() => { setIsStaff(checkIsStaff()); }, []);
 
@@ -220,30 +206,8 @@ export default function Home() {
         )}
       </div>
 
-      {/* 团队动态 + 最近事故 */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4">
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold tracking-tight">团队动态</h3>
-            <Link href="/admin/logs" className="text-xs text-primary font-medium">全部 →</Link>
-          </div>
-          <div>
-            {notifs.length === 0 && <div className="text-sm text-faint text-center py-6">{loaded ? "暂无团队动态" : <Skeleton />}</div>}
-            {notifs.slice(0, 6).map((n) => (
-              <div key={n.id} className="flex items-start gap-3 px-2 py-2.5 rounded-lg hover:bg-surface-hover transition-colors">
-                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-subtle border border-border-subtle text-sm shrink-0">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-foreground truncate">{n.title}</div>
-                  <div className="text-[11px] text-faint mt-0.5 line-clamp-1">{n.message}</div>
-                </div>
-                <span className="text-[11px] text-faint shrink-0">{relativeTime(n.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      {/* 最近事故（原「团队动态」面板已按需求下线：动态本身就是通知，铃铛里已有） */}
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold tracking-tight">最近事故</h3>

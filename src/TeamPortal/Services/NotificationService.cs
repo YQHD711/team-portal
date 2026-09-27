@@ -154,15 +154,22 @@ public class NotificationService
     /// <summary>
     /// Get notifications visible to a given user (public + their own personal ones), respecting role filters.
     /// </summary>
+    /// <summary>
+    /// 可见性表达式（EF 可翻译成 SQL）。
+    /// 规则必须与内存版 <see cref="IsVisibleTo"/> 保持一致 —— 两处都在本文件，改一处要改另一处。
+    /// </summary>
+    private static System.Linq.Expressions.Expression<Func<Notification, bool>> VisibleTo(int userId, string? role) =>
+        n => n.UserId == userId ||
+             (n.UserId == null && (n.TargetRole == null ||
+                 (n.TargetRole == "staff" && (role == "admin" || role == "部长")) ||
+                 (n.TargetRole == "admin" && role == "admin")));
+
     public async Task<List<Notification>> GetNotifications(int userId, string? role, bool unreadOnly = false)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var query = db.Notifications.Where(n =>
-            n.UserId == userId ||
-            (n.UserId == null && (n.TargetRole == null ||
-                (n.TargetRole == "staff" && (role == "admin" || role == "部长")) ||
-                (n.TargetRole == "admin" && role == "admin"))));
+        var dismissed = db.NotificationDismissals.Where(d => d.UserId == userId).Select(d => d.NotificationId);
+        var query = db.Notifications.Where(VisibleTo(userId, role)).Where(n => !dismissed.Contains(n.Id));
         if (unreadOnly) query = query.Where(n => !n.IsRead);
         return await query.OrderByDescending(n => n.Id).Take(50).ToListAsync();
     }
@@ -171,11 +178,38 @@ public class NotificationService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        return await db.Notifications.CountAsync(n => !n.IsRead && (
+        var dismissed = db.NotificationDismissals.Where(d => d.UserId == userId).Select(d => d.NotificationId);
+        return await db.Notifications.CountAsync(n => !n.IsRead && !dismissed.Contains(n.Id) && (
             n.UserId == userId ||
             (n.UserId == null && (n.TargetRole == null ||
                 (n.TargetRole == "staff" && (role == "admin" || role == "部长")) ||
                 (n.TargetRole == "admin" && role == "admin")))));
+    }
+
+    /// <summary>
+    /// 清除「我」的通知列表：只给当前用户写清除标记，**不删通知行**。
+    ///
+    /// 通知行是共享的（UserId=null 时按 TargetRole 或全员可见），直接删会让别人的铃铛
+    /// 也一起空掉。幂等：重复调用不会产生重复标记。
+    /// </summary>
+    /// <returns>本次新标记（清除）的条数</returns>
+    public async Task<int> ClearAll(int userId, string? role)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var visibleIds = await db.Notifications.Where(VisibleTo(userId, role)).Select(n => n.Id).ToListAsync();
+        var already = await db.NotificationDismissals
+            .Where(d => d.UserId == userId).Select(d => d.NotificationId).ToListAsync();
+        var fresh = visibleIds.Except(already).ToList();
+
+        if (fresh.Count > 0)
+        {
+            db.NotificationDismissals.AddRange(fresh.Select(id => new NotificationDismissal { UserId = userId, NotificationId = id }));
+            await db.SaveChangesAsync();
+        }
+        _log.Info("notification", $"Cleared {fresh.Count} notification(s) for user {userId}");
+        return fresh.Count;
     }
 
     /// <summary>
@@ -197,12 +231,7 @@ public class NotificationService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        // 内联表达式(EFCore 无法把 IsVisibleTo 翻译到 SQL;直接展开)
-        await db.Notifications.Where(n => !n.IsRead && (
-            n.UserId == userId ||
-            (n.UserId == null && (n.TargetRole == null ||
-                (n.TargetRole == "staff" && (role == "admin" || role == "部长")) ||
-                (n.TargetRole == "admin" && role == "admin")))))
+        await db.Notifications.Where(n => !n.IsRead).Where(VisibleTo(userId, role))
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
     }
 }

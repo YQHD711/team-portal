@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationDismissal> NotificationDismissals => Set<NotificationDismissal>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
@@ -170,6 +171,13 @@ public class AppDbContext : DbContext
             entity.HasIndex(p => new { p.UserId, p.Path }).IsUnique();
             entity.Property(p => p.Path).IsRequired().HasMaxLength(400);
             entity.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationDismissal>(entity =>
+        {
+            // 一个用户对一条通知只留一条清除标记；查询按 UserId + NotificationId 命中
+            entity.HasIndex(d => new { d.UserId, d.NotificationId }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InviteCode>(entity =>

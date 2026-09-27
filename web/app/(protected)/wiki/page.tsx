@@ -49,11 +49,18 @@ export default function WikiBrowsePage() {
                     <p className="text-xs text-faint mt-0.5">{p.type === "git" ? "GitHub 仓库" : "ZIP 上传"} · {new Date(p.createdAt).toLocaleDateString("zh-CN")}</p>
                   </div>
                 </div>
-                <ExternalLink className="h-4 w-4 text-zinc-300 group-hover:text-sky-500 transition-colors shrink-0" />
+                {/* 打开/分享 与 删除 放在同一组里并留出间距：
+                    以前删除按钮是 absolute top-3 right-3，正好压在链接图标上，
+                    鼠标一移到卡片上两个图标几乎重叠（误点风险高）。 */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <ExternalLink className="h-4 w-4 text-zinc-300 group-hover:text-sky-500 transition-colors" />
+                  {isStaff && (
+                    <button onClick={(e) => deleteProject(p.id, e)}
+                      className="p-1 rounded text-zinc-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950 hover:text-danger transition-all"
+                      title="删除"><Trash2 className="h-3.5 w-3.5" /></button>
+                  )}
+                </div>
               </div>
-              {isStaff && (
-                <button onClick={(e) => deleteProject(p.id, e)} className="absolute top-3 right-3 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger transition-all" title="删除"><Trash2 className="h-3.5 w-3.5" /></button>
-              )}
             </Link>
           ))}
         </div>
