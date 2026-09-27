@@ -179,13 +179,27 @@ public static class AdminEndpoints
             catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(WriteErrorHint(e), statusCode: 400); }
         });
 
-        admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
+        admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, TrashService trash, HttpContext ctx) =>
         {
             path = Uri.UnescapeDataString(path);
-            var (role, dept, _) = await GetUserCtx(user, db);
+            var (role, dept, uid) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
-            try { svc.DeleteFile(path); log.Warn("knowledge", $"File deleted: {path} by {actor}"); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = true }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}", targetRole: "staff"); return Results.Ok(new { success = true }); }
+            try
+            {
+                // 先把文件/目录整体搬进回收站（可恢复），再走原来的删除逻辑收尾
+                var abs = svc.AbsolutePath(path);
+                if (abs is not null && (File.Exists(abs) || Directory.Exists(abs)))
+                {
+                    db.TrashItems.Add(trash.StashPaths(new[] { abs }, $"知识库：{path}", "KnowledgePath", uid, actor));
+                    await db.SaveChangesAsync();
+                }
+                svc.DeleteFile(path);
+                log.Warn("knowledge", $"File deleted (moved to trash): {path} by {actor}");
+                log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = true, trash = true }, ipAddress: LogService.ClientIp(ctx));
+                notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}（可在回收站恢复）", targetRole: "staff");
+                return Results.Ok(new { success = true });
+            }
             catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
         });
 

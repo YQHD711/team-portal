@@ -289,6 +289,12 @@ public partial class KnowledgeService
         if (!fullPath.StartsWith(normalizedBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && !string.Equals(fullPath, normalizedBase, StringComparison.OrdinalIgnoreCase)) return null;
         return fullPath;
     }
+
+    /// <summary>
+    /// 知识库相对路径 → 绝对路径（越界返回 null）。
+    /// 删除时要先把文件整体搬进回收站，所以外部需要拿到真实路径。
+    /// </summary>
+    public string? AbsolutePath(string relativePath) => ResolvePath(relativePath);
 }
 
 public class TreeNode
