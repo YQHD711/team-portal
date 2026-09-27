@@ -1,24 +1,26 @@
 using System.Security.Claims;
 using System.Text;
+using TeamPortal.Data;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
 public static class AiEndpoints
 {
-    /// <summary>把调用者身份传给 AI 检索层:知识库检索必须限定在其有权查看的范围内。</summary>
-    private static AiProxyService.SearchScope GetScope(ClaimsPrincipal user)
-        => new(
-            user.FindFirstValue(ClaimTypes.Role),
-            user.FindFirstValue("Department"),
-            int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0);
+    /// <summary>把调用者身份传给 AI 检索层:知识库检索必须限定在其有权查看的范围内。
+    /// 身份**查库取当前值** —— token 活 7 天且没有失效机制，读声明会把旧部门/旧角色带进检索范围。</summary>
+    private static async Task<AiProxyService.SearchScope> GetScopeAsync(ClaimsPrincipal user, AppDbContext db)
+    {
+        var (role, dept, uid) = await CurrentUser.FromDbAsync(user, db);
+        return new(role, dept, uid);
+    }
 
     public static void MapAiEndpoints(this WebApplication app)
     {
         // 限流:AI 调用直接产生 DeepSeek 费用,必须挡住单账号刷量
         var group = app.MapGroup("/api/ai").RequireAuthorization().RequireRateLimiting("default");
 
-        group.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, AiProxyService proxy, ConversationService conv, LogService log) =>
+        group.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, AiProxyService proxy, ConversationService conv, LogService log, AppDbContext db) =>
         {
             if (string.IsNullOrWhiteSpace(req.Question))
                 return Results.Problem("question 不能为空", statusCode: 400);
@@ -37,7 +39,7 @@ public static class AiEndpoints
             await conv.AddMessage(sessionId, userName, "user", req.Question);
 
             // Stream AI response
-            var stream = await proxy.ChatStream(req.Question, GetScope(user), historyTuples);
+            var stream = await proxy.ChatStream(req.Question, await GetScopeAsync(user, db), historyTuples);
             if (stream is null)
             {
                 log.Warn("ai", $"Chat failed: AI service unavailable, user={userName}");
@@ -58,10 +60,10 @@ public static class AiEndpoints
             return Results.Stream(captureStream, "text/event-stream");
         });
 
-        group.MapPost("/search", async (SearchRequest req, ClaimsPrincipal user, AiProxyService proxy, LogService log) =>
+        group.MapPost("/search", async (SearchRequest req, ClaimsPrincipal user, AiProxyService proxy, LogService log, AppDbContext db) =>
         {
             var userName = user.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
-            var result = await proxy.Search(req.Query, GetScope(user));
+            var result = await proxy.Search(req.Query, await GetScopeAsync(user, db));
             if (result is null)
             {
                 log.Warn("ai", $"Search failed: AI service unavailable, user={userName}");
