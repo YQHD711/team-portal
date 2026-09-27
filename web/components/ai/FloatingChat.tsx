@@ -147,7 +147,7 @@ export function FloatingChat() {
                   className={`flex items-center gap-2 px-4 py-2 cursor-pointer text-sm hover:bg-surface-hover ${s.sessionId === sessionId ? "bg-purple-50 dark:bg-purple-950" : ""}`}>
                   <span className="flex-1 truncate">{s.title}</span>
                   <span className="text-xs text-faint">{s.messageCount}条</span>
-                  <button onClick={(e) => { e.stopPropagation(); deleteChat(s.sessionId); }} className="p-0.5 rounded hover:bg-red-50 text-faint hover:text-danger"><Trash2 className="h-3 w-3" /></button>
+                  <button onClick={(e) => { e.stopPropagation(); deleteChat(s.sessionId); }} className="p-0.5 rounded hover:bg-red-50 text-danger/70 hover:text-danger"><Trash2 className="h-3 w-3" /></button>
                 </div>
               ))}
             </div>

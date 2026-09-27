@@ -56,7 +56,7 @@ export default function WikiBrowsePage() {
                   <ExternalLink className="h-4 w-4 text-zinc-300 group-hover:text-sky-500 transition-colors" />
                   {isStaff && (
                     <button onClick={(e) => deleteProject(p.id, e)}
-                      className="p-1 rounded text-zinc-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950 hover:text-danger transition-all"
+                      className="p-1 rounded-lg text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors"
                       title="删除"><Trash2 className="h-3.5 w-3.5" /></button>
                   )}
                 </div>

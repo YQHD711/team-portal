@@ -185,7 +185,7 @@ export function TaskQueue({
                 {isStaff && (
                   <button
                     onClick={() => onDelete(t.id)}
-                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-faint hover:text-danger shrink-0"
+                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger shrink-0"
                     title="删除任务"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

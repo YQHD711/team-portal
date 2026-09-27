@@ -64,7 +64,7 @@ export function KnowledgeTree({
                   {canEdit && (
                     <>
                       <button onClick={() => onRename(n)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>
-                      <button onClick={() => onDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger shrink-0" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>
+                      <button onClick={() => onDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-danger/70 hover:text-danger shrink-0" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>
                     </>
                   )}
                 </>
@@ -75,7 +75,7 @@ export function KnowledgeTree({
                   <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
                   <span className="truncate">{n.name}</span>
                   {canEdit && <button onClick={(e) => { e.stopPropagation(); onRename(n); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>}
-                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onDelete(n.path ?? n.name); }} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
+                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onDelete(n.path ?? n.name); }} className="opacity-0 group-hover:opacity-100 p-0.5 text-danger/70 hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
                 </div>
               )}
             </div>
