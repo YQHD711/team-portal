@@ -84,6 +84,14 @@ public static class MaterialEndpoints
             return Results.Ok(list);
         });
 
+        // 借出中：已批准未归还（含借用人/物料/数量/借出时间），部长与管理员用于催办
+        group.MapGet("/checkout/outstanding", async (string? search, ClaimsPrincipal user, AppDbContext db, MaterialService svc) =>
+        {
+            var (role, _, _, _) = await GetCtx(user, db);
+            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
+            return Results.Ok(await svc.GetOutstandingCheckouts(search));
+        });
+
         // 部长审批
         group.MapPost("/checkout/{id:int}/approve-dept", async (int id, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>
         {

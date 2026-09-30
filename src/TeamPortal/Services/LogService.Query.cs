@@ -22,8 +22,12 @@ public partial class LogService
         return await query.OrderByDescending(l => l.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
     }
 
-    /// <summary>分页查询操作日志。可按 操作人/动作/目标类型+ID/data 关键词/时间 过滤;返回前低频惰性删超期行。</summary>
-    public async Task<(List<OperationLog> Items, int Total)> GetOperations(string? user = null, string? action = null,
+    /// <summary>
+    /// 分页查询操作日志。可按 操作人/操作人ID/动作/目标类型+ID/data 关键词/时间 过滤;返回前低频惰性删超期行。
+    /// userId 优先于 user:用户名可以被改,用户 id 不会,查"某人的历史"必须认 id。
+    /// </summary>
+    public async Task<(List<OperationLog> Items, int Total)> GetOperations(string? user = null, int? userId = null,
+        string? action = null,
         string? targetType = null, string? targetId = null, string? keyword = null,
         DateTime? from = null, DateTime? to = null, int page = 1, int pageSize = 50)
     {
@@ -31,7 +35,8 @@ public partial class LogService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var query = db.OperationLogs.AsQueryable();
-        if (!string.IsNullOrEmpty(user)) query = query.Where(o => o.UserName == user);
+        if (userId.HasValue) query = query.Where(o => o.UserId == userId.Value);
+        else if (!string.IsNullOrEmpty(user)) query = query.Where(o => o.UserName == user);
         if (!string.IsNullOrEmpty(action)) query = query.Where(o => o.Action == action);
         if (!string.IsNullOrEmpty(targetType)) query = query.Where(o => o.TargetType == targetType);
         if (!string.IsNullOrEmpty(targetId)) query = query.Where(o => o.TargetId != null && o.TargetId.Contains(targetId));

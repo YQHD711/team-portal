@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { ArrowLeft, User, GraduationCap, Trophy, Loader2, BadgeCheck } from "lucide-react";
+import { ArrowLeft, User, GraduationCap, Trophy, Loader2, BadgeCheck, History } from "lucide-react";
 import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import ProfileInfoTab from "@/components/profile/ProfileInfoTab";
 import ProfileTrainingsTab from "@/components/profile/ProfileTrainingsTab";
 import ProfileCompetitionsTab from "@/components/profile/ProfileCompetitionsTab";
+import ProfileLogsTab from "@/components/profile/ProfileLogsTab";
 import { type CompetitionRecord, type FullProfile, type TrainingRecord } from "@/components/profile/profileTypes";
 
 export default function AdminProfileDetailPage() {
@@ -19,7 +20,7 @@ export default function AdminProfileDetailPage() {
 
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"info" | "training" | "competitions" | "certifications">("info");
+  const [tab, setTab] = useState<"info" | "training" | "competitions" | "certifications" | "logs">("info");
   const [editInfo, setEditInfo] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -201,6 +202,9 @@ export default function AdminProfileDetailPage() {
           { key: "training", label: `培训 (${profile.trainingRecords.length})`, icon: GraduationCap },
           { key: "competitions", label: `参赛 (${profile.competitionRecords.length})`, icon: Trophy },
           { key: "certifications", label: "技能认证", icon: BadgeCheck },
+          // 操作日志只有管理员能看：后端 /api/admin/logs/operations 是 AdminOnly，
+          // 部长放进来只会看到一个空 tab + 403
+          ...(me?.role === "admin" ? [{ key: "logs", label: "操作日志", icon: History }] : []),
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
@@ -250,6 +254,11 @@ export default function AdminProfileDetailPage() {
       {/* Tab: Certifications */}
       {tab === "certifications" && (
         <CertificationPanel items={certItems} loading={certsLoading} />
+      )}
+
+      {/* Tab: Operation logs (admin only) */}
+      {tab === "logs" && me?.role === "admin" && (
+        <ProfileLogsTab userId={userId} username={profile.username} />
       )}
     </div>
   );
