@@ -57,15 +57,16 @@ public class InventoryService
     }
 
     public async Task<InventoryItem> Create(string name, string category, int quantity,
-        string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? projectTag = null, string? locationCode = null)
+        string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? code = null, string? locationCode = null)
     {
+        var normalized = await NormalizeCodeAsync(code, null);
         var item = new InventoryItem
         {
             Name = name, Category = category, Quantity = quantity,
             Status = "available",
             Grade = unitPrice > 0 ? CalcGrade(unitPrice) : grade,
             UnitPrice = unitPrice, DepartmentId = departmentId,
-            ProjectTag = projectTag, LocationCode = locationCode,
+            Code = normalized, LocationCode = LocationOrNull(locationCode),
             UpdatedAt = DateTime.UtcNow,
         };
         _db.InventoryItems.Add(item);
@@ -86,7 +87,8 @@ public class InventoryService
 
     public async Task<InventoryItem?> Update(int id,
         string? name = null, int? quantity = null, string? status = null,
-        string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? projectTag = null, string? locationCode = null)
+        string? grade = null, decimal? unitPrice = null, int? departmentId = null,
+        string? code = null, string? locationCode = null, bool clearCode = false)
     {
         var item = await _db.InventoryItems.FindAsync(id);
         if (item is null) return null;
@@ -99,13 +101,84 @@ public class InventoryService
         else if (grade is not null)
             item.Grade = grade;
         if (departmentId.HasValue) item.DepartmentId = departmentId.Value;
-        if (projectTag is not null) item.ProjectTag = projectTag;
-        if (locationCode is not null) item.LocationCode = locationCode;
+        if (clearCode) item.Code = null;
+        else if (code is not null) item.Code = await NormalizeCodeAsync(code, id);
+        // 库位：null = 本次不改；空串 = 明确清空（物料可以先不归位）
+        if (locationCode is not null) item.LocationCode = LocationOrNull(locationCode);
         item.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
         return item;
     }
+
+    /// <summary>空串/纯空白一律归一成 null：库里不存 ""，避免"有库位但显示为空"的歧义</summary>
+    private static string? LocationOrNull(string? locationCode)
+        => string.IsNullOrWhiteSpace(locationCode) ? null : locationCode.Trim();
+
+    /// <summary>
+    /// 编码归一化：去空白 + 全大写（规范要求全串大写，否则短链大小写不一致查不到），并查重。
+    /// excludeId 用于编辑时排除自己。空串返回 null。
+    /// </summary>
+    private async Task<string?> NormalizeCodeAsync(string? code, int? excludeId)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var normalized = code.Trim().ToUpperInvariant();
+        var dup = await _db.InventoryItems.AnyAsync(i => i.Code == normalized && (excludeId == null || i.Id != excludeId));
+        if (dup) throw new InvalidOperationException($"物料编码 {normalized} 已被占用，请换一个");
+        return normalized;
+    }
+
+    /// <summary>
+    /// 按规范 §6.2 拼装下一个可用编码：前缀由分类决定，年份取采购年，序号按
+    /// 「前缀-物品号-型号-年份」这个池子取下一个。物品号与型号必须由人给
+    /// （系统无法从名称可靠地推出），所以这是"半自动"。
+    /// </summary>
+    public async Task<string> NextCodeAsync(string category, string itemNo, string model, int? year = null)
+    {
+        var prefix = CategoryPrefix(category);
+        var item = (itemNo ?? "").Trim().ToUpperInvariant();
+        var mdl = (model ?? "").Trim().ToUpperInvariant();
+        var yr = year ?? DateTime.UtcNow.Year;
+        var head = $"{prefix}-{item}-{mdl}-{yr}-";
+
+        var existing = await _db.InventoryItems.AsNoTracking()
+            .Where(i => i.Code != null && i.Code.StartsWith(head))
+            .Select(i => i.Code!)
+            .ToListAsync();
+
+        var max = 0;
+        foreach (var c in existing)
+        {
+            var tail = c[head.Length..];
+            if (tail.Length == 4 && int.TryParse(tail, out var n) && n > max) max = n;
+        }
+        return head + (max + 1).ToString("D4");
+    }
+
+    /// <summary>分类 → 编码前缀（与《物料管理规范》附录 A/D 保持一致）</summary>
+    public static string CategoryPrefix(string? category) => category switch
+    {
+        "电子元器件" => "EL",
+        "结构材料" => "ST",
+        "工具设备" => "TL",
+        "耗材" => "CS",
+        "动力系统" => "PW",
+        "飞控系统" => "FC",
+        "通信设备" => "RF",
+        "电池电源" => "BAT",
+        _ => "XX",
+    };
+
+    /// <summary>按编码查物料（供 /i/&lt;编码&gt; 扫码与手输兜底使用，大小写不敏感）</summary>
+    public async Task<InventoryItem?> GetByCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var normalized = code.Trim().ToUpperInvariant();
+        return await _db.InventoryItems.AsNoTracking()
+            .Include(i => i.Department)
+            .FirstOrDefaultAsync(i => i.Code == normalized);
+    }
+
 
     public async Task SetPhoto(int id, string photoUrl)
     {
@@ -144,6 +217,7 @@ public class InventoryService
             if (string.IsNullOrEmpty(name)) name = Get("name");
             if (string.IsNullOrWhiteSpace(name)) continue;
             var category = FirstNonEmpty(Get("分类"), Get("Category"), Get("category"), "未分类");
+            var code = FirstNonEmpty(Get("编码"), Get("Code"), Get("code"), Get("物料编码"), Get("物料编码Code"), "");
             var quantityStr = Get("数量"); if (string.IsNullOrEmpty(quantityStr)) quantityStr = Get("Qty");
             if (string.IsNullOrEmpty(quantityStr)) quantityStr = Get("qty");
             int.TryParse(quantityStr, out var quantity);
@@ -162,6 +236,7 @@ public class InventoryService
                 Name = name,
                 Category = category,
                 Quantity = quantity,
+                Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim().ToUpperInvariant(),
                 LocationCode = string.IsNullOrEmpty(locationCode) ? null : locationCode,
                 Status = status,
                 Grade = grade,

@@ -68,10 +68,13 @@ public class AppDbContext : DbContext
         {
             entity.Property(i => i.Name).IsRequired().HasMaxLength(100);
             entity.Property(i => i.Category).HasMaxLength(50);
+            entity.Property(i => i.Code).HasMaxLength(60);
             entity.Property(i => i.LocationCode).HasMaxLength(50);
             entity.Property(i => i.Status).HasMaxLength(20);
             entity.Property(i => i.Grade).HasMaxLength(1);
-            entity.Property(i => i.ProjectTag).HasMaxLength(100);
+            // 编码全队唯一。SQLite 的唯一索引允许多个 NULL，所以"未贴标"的
+            // 物料可以有很多条，但一旦填了编码就不能重复。
+            entity.HasIndex(i => i.Code).IsUnique();
             entity.HasOne(i => i.Department)
                 .WithMany()
                 .HasForeignKey(i => i.DepartmentId)

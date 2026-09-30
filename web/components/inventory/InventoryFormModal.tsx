@@ -15,10 +15,16 @@ interface Props {
   calcGrade: (price: number) => string;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
+  /** 改物料编码（会自动转大写） */
+  onCode: (code: string) => void;
+  /** 按 分类+物品号+型号+年份 调后端取下一个序号 */
+  onGenerateCode: () => void;
+  genCodeLoading: boolean;
+  codeError: string;
 }
 
 /** 添加/编辑零件弹窗（表单 + 库位编码联动选择） */
-export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit }: Props) {
+export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
@@ -81,11 +87,42 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
           )}
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-sm font-medium mb-1">归属部门</label><select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"><option value={0}>— 无 —</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-            <div><label className="block text-sm font-medium mb-1">项目标签</label><input value={form.projectTag} onChange={e => setForm({ ...form, projectTag: e.target.value })} placeholder="如: CADC2026" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                物料编码 <span className="text-xs text-faint">（可留空，之后再贴标）</span>
+              </label>
+              <input value={form.code} onChange={e => onCode(e.target.value.toUpperCase())}
+                placeholder="如 BAT-LIPO-6S3300MAH-2026-0007"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
           </div>
+
+          {/* 自动生号：系统只能确定前缀（按分类）、年份、序号，物品号与型号必须由人给 */}
+          <div className="rounded-lg border border-border bg-surface-subtle p-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted">不会填？让系统拼一个：</span>
+              <button type="button" onClick={onGenerateCode} disabled={genCodeLoading}
+                className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs hover:bg-surface-hover disabled:opacity-50">
+                {genCodeLoading ? "生成中..." : "自动生成编码"}
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <input aria-label="物品号" value={form.codeItemNo} placeholder="物品号 如 LIPO"
+                onChange={e => setForm({ ...form, codeItemNo: e.target.value.toUpperCase() })}
+                className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              <input aria-label="型号" value={form.codeModel} placeholder="型号 如 6S3300MAH"
+                onChange={e => setForm({ ...form, codeModel: e.target.value.toUpperCase() })}
+                className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              <input aria-label="采购年份" value={form.codeYear} placeholder="年份"
+                onChange={e => setForm({ ...form, codeYear: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            {codeError && <p className="text-xs text-danger">{codeError}</p>}
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium">
-              库位编码 <span className="text-xs text-faint">（选房间与货架/柜子/工作台后自动生成，与平面图一致）</span>
+              库位编码 <span className="text-xs text-faint">（<strong>可以留空</strong>：新到的物料可以先不归位，之后再补）</span>
             </label>
             <LocationPicker rooms={rooms} fallbackRooms={fallbackRooms}
               value={form.locationCode} onChange={onLocationCode} />
