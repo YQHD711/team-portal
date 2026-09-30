@@ -261,6 +261,40 @@ public class MaterialServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => RequestAsync(db, 1, 1, 10));
     }
 
+    // 回归：报损只把状态改成 broken、数量一个都不减，而领用此前只校验数量不校验状态，
+    // 于是"已报损"的件照样能被正常领走——报损形同虚设。
+    [Theory]
+    [InlineData("C")]  // 自助领用（消耗）
+    [InlineData("B")]  // 走审批
+    [InlineData("A")]  // 管理员终审
+    public async Task CreateCheckout_BrokenItem_IsRejected(string grade)
+    {
+        var db = CreateContext();
+        db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "损坏的电机", Grade = grade, Quantity = 10, UnitPrice = 1500, Status = "broken" });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => RequestAsync(db, 1, 1, 1));
+
+        Assert.Contains("已报损", ex.Message);
+        // 不能只是抛错——库存和申请单都必须原封不动
+        db.ChangeTracker.Clear();
+        Assert.Equal(10, (await db.InventoryItems.FindAsync(1))!.Quantity);
+        Assert.Empty(db.CheckoutRequests);
+    }
+
+    [Fact]
+    public async Task CreateCheckout_AvailableItem_StillWorks()
+    {
+        // 与上一条配对：确认拦住的是 broken，不是把正常领用也误伤
+        var db = CreateContext();
+        db.InventoryItems.Add(new InventoryItem { Id = 1, Name = "好电机", Grade = "B", Quantity = 10, UnitPrice = 500, Status = "available" });
+        await db.SaveChangesAsync();
+
+        var req = await RequestAsync(db, 1, 1, 1);
+
+        Assert.Equal("pending_dept", req.Status);
+    }
+
     [Fact]
     public async Task Checkin_GradeA_RequiresPhoto()
     {

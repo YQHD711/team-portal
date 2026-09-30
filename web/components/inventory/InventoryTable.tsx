@@ -32,9 +32,9 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
                 <div className="text-xs text-muted">{item.category} · {item.locationCode || "—"}</div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => onTake(item)}
-                  className={`p-1 rounded-lg ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
-                  title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
+                <button onClick={() => onTake(item)} disabled={item.status === "broken"}
+                  className={`p-1 rounded ${item.status === "broken" ? "text-faint cursor-not-allowed opacity-40" : item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
+                  title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
                 <button onClick={() => onReturn(item)} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
                 <button onClick={() => onHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
                 {isStaff && <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
@@ -71,9 +71,9 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => onTake(item)}
-                      className={`p-1 rounded ${item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
-                      title={item.grade === "C" ? "消耗" : "领用"}><Minus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => onTake(item)} disabled={item.status === "broken"}
+                      className={`p-1 rounded ${item.status === "broken" ? "text-faint cursor-not-allowed opacity-40" : item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
+                      title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onReturn(item)} className={`p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
                     {isStaff && <>

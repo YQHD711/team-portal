@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import InventoryPage from "@/app/(protected)/inventory/page";
 import { api } from "@/lib/api";
@@ -93,5 +93,41 @@ describe("零件库存页", () => {
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith("/api/inventory?search=%E6%A1%A8%E5%8F%B6")
     );
+  });
+
+  // 《物料管理规范》第 3 节的警告内嵌到出错现场：新建表单默认 grade=C、单价为空，
+  // 这个组合意味着"无需审批、谁都能自助领走"，必须在填单时就把它说清楚。
+  it("单价留空且等级为 C 时，表单内嵌「会被自助领走」警告", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+
+    fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
+
+    const warn = await screen.findByTestId("unit-price-warning");
+    expect(warn).toHaveTextContent(/自助领走/);
+
+    // 填上真实单价 → 警告消失
+    fireEvent.change(screen.getByPlaceholderText("填写后自动判定等级"), { target: { value: "1500" } });
+    await waitFor(() => expect(screen.queryByTestId("unit-price-warning")).not.toBeInTheDocument());
+  });
+
+  it("已报损(broken)的物料不能领用", async () => {
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory")) return [
+        { id: 9, name: "烧了的电调", category: "电子元器件", quantity: 3, locationCode: "201-A-1-01", status: "broken", grade: "B", unitPrice: 300, updatedAt: "2026-09-01T10:00:00Z" },
+      ];
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("烧了的电调");
+    // 桌面表格与移动卡片各一个，必须全部禁用（报损只改状态不减数量，拦不住就等于没报损）
+    const btns = screen.getAllByTitle("已报损，不能领用");
+    expect(btns.length).toBeGreaterThan(0);
+    for (const b of btns) expect(b).toBeDisabled();
   });
 });
