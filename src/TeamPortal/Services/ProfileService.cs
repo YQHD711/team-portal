@@ -254,10 +254,22 @@ public class ProfileService
             .Select(p => new
             {
                 p.Id, p.UserId, Username = p.User!.Username,
+                // slug 是公开 URL 标识：前端据此生成 /admin/profiles/{slug}
+                p.User.Slug,
                 Department = p.User.Department != null ? p.User.Department.Name : null,
                 p.Level, p.TotalFlightHours, p.FirstFlightDate, p.Skills, p.UpdatedAt
             })
             .ToListAsync<object>();
+    }
+
+    /// <summary>按公开 slug 找用户 id；找不到返回 null</summary>
+    public async Task<int?> GetUserIdBySlug(string slug)
+    {
+        if (string.IsNullOrWhiteSpace(slug)) return null;
+        return await _db.Users.AsNoTracking()
+            .Where(u => u.Slug == slug)
+            .Select(u => (int?)u.Id)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<object?> GetFullProfile(int userId)
@@ -278,6 +290,7 @@ public class ProfileService
         return new
         {
             profile.Id, profile.UserId, Username = profile.User!.Username,
+            profile.User.Slug,
             Role = profile.User.Role,
             Department = profile.User.Department?.Name,
             DepartmentId = profile.User!.DepartmentId,

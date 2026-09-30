@@ -16,6 +16,8 @@ interface Props {
   passedCertsByUser: Map<number, Certification[]>;
   examPassesByUser: Map<number, ExamPass[]>;
   skillsByUser: Map<number, string | null>;
+  /** 档案页链接用公开 slug（不是自增 ID） */
+  slugByUser: Map<number, string | null>;
   examsByDept: Map<number, ExamBrief[]>;
   onChanged: () => void;
 }
@@ -26,7 +28,7 @@ const ROLE_BADGE: Record<string, string> = {
   member: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
 };
 
-export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, examPassesByUser, skillsByUser, examsByDept, onChanged }: Props) {
+export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, examPassesByUser, skillsByUser, slugByUser, examsByDept, onChanged }: Props) {
   const [deptModal, setDeptModal] = useState<{ open: boolean; edit: Dept | null }>({ open: false, edit: null });
   const [userModal, setUserModal] = useState<{ open: boolean; edit: OrgUser | null }>({ open: false, edit: null });
 
@@ -104,12 +106,12 @@ export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, ex
 
         {groups.map(({ dept, members }) => (
           <MemberGroup key={dept.id} title={dept.name} members={members} isAdmin={isAdmin}
-            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser}
+            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser}
             onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
         ))}
         {unassigned.length > 0 && (
           <MemberGroup title="未分配" members={unassigned} isAdmin={isAdmin}
-            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser}
+            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser}
             onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
         )}
         {users.length === 0 && (
@@ -132,11 +134,12 @@ export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, ex
 }
 
 // ── 部门分组内的队员卡片 ──
-function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByUser, skillsByUser, onEdit, onDelete }: {
+function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByUser, skillsByUser, slugByUser, onEdit, onDelete }: {
   title: string; members: OrgUser[]; isAdmin: boolean;
   passedCertsByUser: Map<number, Certification[]>;
   examPassesByUser: Map<number, ExamPass[]>;
   skillsByUser: Map<number, string | null>;
+  slugByUser: Map<number, string | null>;
   onEdit: (u: OrgUser) => void; onDelete: (u: OrgUser) => void;
 }) {
   if (members.length === 0) return null;
@@ -154,7 +157,7 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
           const canEdit = isAdmin || u.role !== "admin"; // 部长可编辑本部门非 admin(含同部门部长/自己)
           const canDelete = isAdmin && u.role !== "admin" && u.role !== "部长";
           return (
-            <Link key={u.id} href={`/admin/profiles/${u.id}`}
+            <Link key={u.id} href={`/admin/profiles/${slugByUser.get(u.id) ?? ""}`}
               className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">

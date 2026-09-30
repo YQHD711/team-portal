@@ -9,6 +9,13 @@ public class User
     [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "member";
+    /// <summary>
+    /// 公开 URL 用的短标识（队员档案页 /admin/profiles/{slug}）。
+    ///
+    /// 为什么不用主键：自增 ID 可顺序枚举，且导库/重建库后会重排，
+    /// 旧链接会**静默指向另一个人**。slug 不可枚举、与主键解耦。
+    /// </summary>
+    public string? Slug { get; set; }
     public int? DepartmentId { get; set; }
     public Department? Department { get; set; }
     public int? InvitedByUserId { get; set; }

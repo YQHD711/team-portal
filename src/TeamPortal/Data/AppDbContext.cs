@@ -45,6 +45,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(u => u.Username).IsUnique();
             entity.Property(u => u.Username).IsRequired().HasMaxLength(50);
             entity.Property(u => u.Role).HasMaxLength(20);
+            // 公开 URL 标识：唯一、不可枚举（见 Services/Slug.cs）
+            entity.Property(u => u.Slug).HasMaxLength(40);
+            entity.HasIndex(u => u.Slug).IsUnique();
         });
 
         modelBuilder.Entity<User>()
