@@ -19,20 +19,20 @@ public class InventoryTools
     [McpServerTool(Name = "inventory_get")]
     public async Task<object?> Get(int id) => await _inv.GetById(id);
     [McpServerTool(Name = "inventory_create")]
-    public async Task<object> Create(string name, string category, int quantity, string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? code = null, string? locationCode = null)
-        => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _inv.Create(name, category, quantity, grade, unitPrice, departmentId, code, locationCode);
+    public async Task<object> Create(string name, string category, int quantity, string grade = "C", decimal unitPrice = 0, string? code = null, string? locationCode = null)
+        => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _inv.Create(name, category, quantity, grade, unitPrice, code, locationCode);
     [McpServerTool(Name = "inventory_update")]
-    public async Task<object?> Update(int id, string? name = null, int? quantity = null, string? status = null, string? grade = null, decimal? unitPrice = null, int? departmentId = null, string? code = null, string? locationCode = null)
-        => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _inv.Update(id, name, quantity, status, grade, unitPrice, departmentId, code, locationCode);
+    public async Task<object?> Update(int id, string? name = null, int? quantity = null, string? status = null, string? grade = null, decimal? unitPrice = null, string? code = null, string? locationCode = null)
+        => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _inv.Update(id, name, quantity, status, grade, unitPrice, code, locationCode);
     [McpServerTool(Name = "inventory_get_by_code")]
     public async Task<object?> GetByCode(string code) => await _inv.GetByCode(code);
     [McpServerTool(Name = "inventory_set_photo")]
     public async Task<object> SetPhoto(int id, string photoUrl)
     {
-        if (!McpAuth.IsStaff(_http)) return McpAuth.Forbidden;
+        if (!McpAuth.IsAdmin(_http)) return McpAuth.Forbidden;
         await _inv.SetPhoto(id, photoUrl);
         return "ok";
     }
     [McpServerTool(Name = "inventory_delete")]
-    public async Task<object> Delete(int id) => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _inv.Delete(id);
+    public async Task<object> Delete(int id) => !McpAuth.IsAdmin(_http) ? McpAuth.Forbidden : await _inv.Delete(id);
 }

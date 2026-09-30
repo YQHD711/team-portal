@@ -114,7 +114,7 @@ public class LowStockThresholdTests : IClassFixture<WebApplicationFactory<Progra
 
             // 阈值 10：库存 4 应触发预警
             await new SettingsService(new TestScopeFactory(db)).Set("Inventory:LowStockThreshold", "10");
-            await svc.Create("低库存件", "耗材", 4, "C", 1m, null, null, null);
+            await svc.Create("低库存件", "耗材", 4, "C", 1m);
             Assert.True(await WaitForNotificationAsync(db, "低库存件"), "阈值 10 时库存 4 应产生预警通知");
         }
         finally { CleanupFileDb(path); }
@@ -124,7 +124,7 @@ public class LowStockThresholdTests : IClassFixture<WebApplicationFactory<Progra
         try
         {
             await new SettingsService(new TestScopeFactory(db2)).Set("Inventory:LowStockThreshold", "3");
-            await CreateService(db2, opts2).Create("充足件", "耗材", 4, "C", 1m, null, null, null);
+            await CreateService(db2, opts2).Create("充足件", "耗材", 4, "C", 1m);
             Assert.False(await WaitForNotificationAsync(db2, "充足件", TimeSpan.FromSeconds(2)), "阈值 3 时库存 4 不应产生通知");
         }
         finally { CleanupFileDb(path2); }

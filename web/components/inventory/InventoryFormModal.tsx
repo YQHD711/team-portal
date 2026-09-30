@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import QRCode from "react-qr-code";
-import { categoryOpts, type Department, type InventoryItem, type InventoryFormState } from "./inventoryTypes";
+import { categoryOpts, type InventoryItem, type InventoryFormState } from "./inventoryTypes";
 import { LocationPicker } from "./LocationPicker";
 import type { RoomLayoutOption } from "./locationOptions";
 
@@ -12,7 +12,6 @@ interface Props {
   rooms: RoomLayoutOption[];
   fallbackRooms: string[];
   onLocationCode: (code: string) => void;
-  departments: Department[];
   calcGrade: (price: number) => string;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -27,7 +26,7 @@ interface Props {
 }
 
 /** 添加/编辑零件弹窗（表单 + 库位编码联动选择） */
-export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError, generatedShortUrl }: Props) {
+export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError, generatedShortUrl }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
@@ -89,7 +88,6 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-sm font-medium mb-1">归属部门</label><select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"><option value={0}>— 无 —</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
             <div>
               <label className="block text-sm font-medium mb-1">
                 物料编码 <span className="text-xs text-faint">（可留空，之后再贴标）</span>
@@ -97,6 +95,9 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
               <input value={form.code} onChange={e => onCode(e.target.value.toUpperCase())}
                 placeholder="如 BAT-LIPO-6S3300MAH-2026-0007"
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            <div className="rounded-lg bg-surface-subtle px-3 py-2 text-xs leading-relaxed text-muted">
+              物料是<strong>队内共享</strong>的，不再挂"归属部门"。领用审批看的是<strong>申请人</strong>的部门，与物料无关（见规范 §8.1）。
             </div>
           </div>
 

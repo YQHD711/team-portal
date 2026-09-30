@@ -74,7 +74,6 @@ export default function ItemByCodePage() {
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${gradeCls}`}>{item.grade} 级</span>
               <span className="text-muted">{item.category || "未分类"}</span>
-              {item.department?.name && <span className="text-muted">· {item.department.name}</span>}
             </div>
           </div>
           <div className="shrink-0 rounded-lg bg-white p-1.5">

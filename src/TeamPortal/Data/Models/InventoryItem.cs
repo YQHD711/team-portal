@@ -16,8 +16,8 @@ public class InventoryItem
     public string Status { get; set; } = "available";
     public string Grade { get; set; } = "C";
     public decimal UnitPrice { get; set; }
-    public int? DepartmentId { get; set; }
-    public Department? Department { get; set; }
+    // 归属部门已于 2026-09 移除：物料是队内共享资源，件件挂部门既没人维护，
+    // 又会让"谁审谁的领用"变得含糊（审批本来就只看**申请人**的部门）。
     public string? PhotoUrl { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

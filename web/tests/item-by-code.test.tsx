@@ -39,7 +39,8 @@ describe("扫码短链 /i/<编码>", () => {
     expect(screen.getByText("201-A-3-05")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("A 级")).toBeInTheDocument();
-    expect(screen.getByText(/飞训部/)).toBeInTheDocument();
+    // 归属部门已移除：物料是队内共享的，页面上不该再出现部门名
+    expect(screen.queryByText(/飞训部/)).not.toBeInTheDocument();
     // 页面上再放一个二维码，方便就地补打
     expect(document.querySelector("svg")).toBeTruthy();
   });
