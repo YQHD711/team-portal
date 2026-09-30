@@ -51,22 +51,40 @@ public partial class WikiGeneratorService
         _options = WikiSettingsStore.Load().Options;
     }
 
-    /// <summary>Get DeepSeek API key: DB SystemSettings first, then config, then env var.</summary>
+    /// <summary>取设置项：新键优先，旧键兜底（老部署不用改配置）</summary>
+    private async Task<string?> SettingEitherAsync(string key, string legacyKey)
+    {
+        var s = await _db.SystemSettings.FindAsync(key);
+        if (s is not null && !string.IsNullOrEmpty(s.Value)) return s.Value;
+        var legacy = await _db.SystemSettings.FindAsync(legacyKey);
+        return legacy is not null && !string.IsNullOrEmpty(legacy.Value) ? legacy.Value : null;
+    }
+
+    /// <summary>Get API key: DB SystemSettings first, then config, then env var.</summary>
     private async Task<string> GetApiKey()
     {
-        var setting = await _db.SystemSettings.FindAsync("AI:DeepSeekKey");
-        if (setting is not null && !string.IsNullOrEmpty(setting.Value)) return setting.Value;
+        var setting = await SettingEitherAsync("AI:ApiKey", "AI:DeepSeekKey");
+        if (!string.IsNullOrEmpty(setting)) return setting;
         return _config["AiService:DeepSeekKey"]
             ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY")
             ?? "";
     }
 
-    /// <summary>Get DeepSeek base URL: DB SystemSettings first, then config.</summary>
+    /// <summary>服务商：deepseek / openai。决定要不要附带 DeepSeek 专有的 thinking 参数</summary>
+    private async Task<AiProvider> GetProviderAsync()
+    {
+        var v = await SettingEitherAsync("AI:Provider", "AI:Provider");
+        return (v ?? "").Equals("openai", StringComparison.OrdinalIgnoreCase)
+            ? AiProvider.OpenAiCompatible
+            : AiProvider.DeepSeek;
+    }
+
+    /// <summary>Get base URL: DB SystemSettings first, then config.</summary>
     private async Task<string> GetBaseUrl()
     {
-        var setting = await _db.SystemSettings.FindAsync("AI:DeepSeekBaseUrl");
-        if (setting is not null && !string.IsNullOrEmpty(setting.Value)) return setting.Value;
-        return _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+        var setting = await SettingEitherAsync("AI:BaseUrl", "AI:DeepSeekBaseUrl");
+        if (!string.IsNullOrEmpty(setting)) return setting;
+        return _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
     }
 
     public WikiGeneratorOptions GetOptions() => _options;

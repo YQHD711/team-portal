@@ -127,7 +127,7 @@ public class SettingsServiceTests
         await svc.SeedDefaults();
 
         var refreshed = db.SystemSettings.Single(s => s.Key == "AI:ModelName");
-        Assert.Contains("可填任意模型名", refreshed.Description);
+        Assert.Contains("获取可用模型", refreshed.Description);
         Assert.Equal("AI 服务", refreshed.Category);
     }
 

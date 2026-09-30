@@ -96,7 +96,7 @@ public class ConversationService
                 temperature = 0.3, max_tokens = 500
             };
             var json = JsonSerializer.Serialize(payload);
-            var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
+            var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(baseUrl, "/chat/completions"))
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
