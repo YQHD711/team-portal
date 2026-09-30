@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import QRCode from "react-qr-code";
 import { categoryOpts, type Department, type InventoryItem, type InventoryFormState } from "./inventoryTypes";
 import { LocationPicker } from "./LocationPicker";
 import type { RoomLayoutOption } from "./locationOptions";
@@ -21,10 +22,12 @@ interface Props {
   onGenerateCode: () => void;
   genCodeLoading: boolean;
   codeError: string;
+  /** 自动生号时后端一并返回的短链：有值就当场把二维码与短链显示出来 */
+  generatedShortUrl: string;
 }
 
 /** 添加/编辑零件弹窗（表单 + 库位编码联动选择） */
-export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError }: Props) {
+export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, departments, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError, generatedShortUrl }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
@@ -118,6 +121,17 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
                 className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
             {codeError && <p className="text-xs text-danger">{codeError}</p>}
+            {generatedShortUrl && (
+              <div data-testid="generated-qr" className="flex items-center gap-3 rounded-lg border border-border bg-surface p-2">
+                <div className="shrink-0 rounded bg-white p-1">
+                  <QRCode value={generatedShortUrl} size={64} level="M" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-muted">二维码与短链已生成</div>
+                  <div className="break-all font-mono text-[10px] text-faint">{generatedShortUrl}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

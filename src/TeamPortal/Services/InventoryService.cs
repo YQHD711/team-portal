@@ -185,6 +185,40 @@ public class InventoryService
             .FirstOrDefaultAsync(i => i.Code == normalized);
     }
 
+    // ── 二维码短链 ──
+
+    /// <summary>
+    /// 决定短链用哪个地址：优先用管理员配的 App:PublicBaseUrl，没配才回退到"当前请求的地址"。
+    /// 这个优先级很重要：管理员完全可能用 localhost 或内网 IP 打开系统去打印标签，
+    /// 那样打出来的二维码队员手机扫不开——所以对外地址必须是可配置的，而不是跟着浏览器走。
+    /// </summary>
+    public async Task<string> ResolvePublicBaseUrlAsync(string? requestBaseUrl)
+    {
+        var configured = (await _settings.Get("App:PublicBaseUrl", "")).Trim();
+        var chosen = !string.IsNullOrEmpty(configured) ? configured : (requestBaseUrl ?? "");
+        return chosen.TrimEnd('/');
+    }
+
+    /// <summary>物料短链：{对外地址}/i/{编码}（规范 §6.3）</summary>
+    public static string BuildShortUrl(string baseUrl, string code)
+        => $"{baseUrl.TrimEnd('/')}/i/{Uri.EscapeDataString(code.Trim().ToUpperInvariant())}";
+
+    /// <summary>服务端渲染二维码（SVG），供浏览器之外的使用方（打印、导出、MCP）取用</summary>
+    public static string BuildQrSvg(string text, int pixelsPerModule = 6)
+    {
+        using var generator = new QRCoder.QRCodeGenerator();
+        using var data = generator.CreateQrCode(text, QRCoder.QRCodeGenerator.ECCLevel.M);
+        return new QRCoder.SvgQRCode(data).GetGraphic(pixelsPerModule);
+    }
+
+    /// <summary>地址看起来不像队员手机能访问的（localhost/回环）——打印标签前用来提醒</summary>
+    public static bool LooksNonPublic(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)) return true;
+        var b = baseUrl.ToLowerInvariant();
+        return b.Contains("localhost") || b.Contains("127.0.0.1") || b.Contains("0.0.0.0") || b.Contains("[::1]");
+    }
+
 
     public async Task SetPhoto(int id, string photoUrl)
     {

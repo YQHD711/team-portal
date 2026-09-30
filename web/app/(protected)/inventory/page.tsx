@@ -37,6 +37,11 @@ export default function InventoryPage() {
   const [codeError, setCodeError] = useState("");
   const [labelItem, setLabelItem] = useState<InventoryItem | null>(null);
   const [showScan, setShowScan] = useState(false);
+  /** 二维码短链的对外地址（后端下发，见 App:PublicBaseUrl） */
+  const [publicBase, setPublicBase] = useState("");
+  const [publicBaseLooksLocal, setPublicBaseLooksLocal] = useState(false);
+  /** 自动生号时后端一并返回的短链，用于在表单里当场出二维码 */
+  const [generatedShortUrl, setGeneratedShortUrl] = useState("");
   /** 房间 + 平面图：库位编码选择器据此列出「货架/柜子/工作台」与层位 */
   const [rooms, setRooms] = useState<RoomLayoutOption[]>([]);
 
@@ -105,6 +110,13 @@ export default function InventoryPage() {
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
   useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
+  // 二维码短链的对外地址由后端下发（App:PublicBaseUrl）。不自己拼 window.location.origin——
+  // 管理员用 localhost 打开时，那样印出来的二维码队员扫不开。
+  useEffect(() => {
+    api.get<{ publicBaseUrl?: string; publicBaseLooksLocal?: boolean }>("/api/inventory/meta")
+      .then(m => { setPublicBase(m.publicBaseUrl || window.location.origin); setPublicBaseLooksLocal(!!m.publicBaseLooksLocal); })
+      .catch(() => { setPublicBase(window.location.origin); setPublicBaseLooksLocal(false); });
+  }, []);
   // 房间 + 平面图从库位布局动态获取（供库位编码联动选择），失败时回退硬编码房间号
   useEffect(() => {
     api.get<RoomLayoutOption[]>("/api/storage/layouts")
@@ -145,8 +157,9 @@ export default function InventoryPage() {
     try {
       const q = new URLSearchParams({ category: form.category, itemNo: form.codeItemNo.trim(), model: form.codeModel.trim() });
       if (form.codeYear) q.set("year", form.codeYear);
-      const res = await api.get<{ code: string }>(`/api/inventory/next-code?${q}`);
+      const res = await api.get<{ code: string; shortUrl: string }>(`/api/inventory/next-code?${q}`);
       setForm(f => ({ ...f, code: res.code }));
+      setGeneratedShortUrl(res.shortUrl); // 编码一生成，短链与二维码立刻给出来
     } catch { setCodeError("生成失败，请稍后重试或手动填写"); }
     finally { setGenCodeLoading(false); }
   };
@@ -247,8 +260,9 @@ export default function InventoryPage() {
           rooms={rooms} fallbackRooms={FALLBACK_ROOMS}
           onLocationCode={code => setForm(f => ({ ...f, locationCode: code }))}
           departments={departments} calcGrade={calcGrade}
-          onCode={code => { setForm(f => ({ ...f, code })); setCodeError(""); }}
+          onCode={code => { setForm(f => ({ ...f, code })); setCodeError(""); setGeneratedShortUrl(""); }}
           onGenerateCode={generateCode} genCodeLoading={genCodeLoading} codeError={codeError}
+          generatedShortUrl={generatedShortUrl}
           onClose={() => setShowForm(false)} onSubmit={handleSave} />
       )}
 
@@ -263,9 +277,10 @@ export default function InventoryPage() {
         <InventoryHistoryPanel item={txItem} history={txHistory} onClose={() => setShowHistory(false)} />
       )}
 
-      {/* 物料标签（二维码） */}
+      {/* 物料标签（二维码 + 短链） */}
       {labelItem && (
-        <ItemLabelModal item={labelItem} origin={typeof window === "undefined" ? "" : window.location.origin} onClose={() => setLabelItem(null)} />
+        <ItemLabelModal item={labelItem} baseUrl={publicBase || (typeof window === "undefined" ? "" : window.location.origin)}
+          baseLooksLocal={publicBaseLooksLocal} onClose={() => setLabelItem(null)} />
       )}
 
       {/* 二维码查询：扫码 / 输码 / 扫码枪 */}
