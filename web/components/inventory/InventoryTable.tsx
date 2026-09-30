@@ -17,7 +17,8 @@ interface Props {
 /** 零件列表（移动端卡片 + 桌面表格），含领用/归还/记录/编辑/删除操作 */
 export default function InventoryTable({ items, loading, role, onTake, onLabel, onReturn, onHistory, onEdit, onDelete }: Props) {
   const isStaff = role === "admin" || role === "部长";
-  // 改/删物料只有管理员能做：归属部门移除后，部长不再按部门划分物料，统一收成管理员专属
+  // 改物料：管理员 + 部长（物料是队内共享资源，部长可订正字段，也能在布局页归位）
+  // 删物料：仅管理员（改错了能改回来，删了连带领用/盘点记录一起没了）
   const isAdmin = role === "admin";
   const { threshold } = useLowStock();
 
@@ -42,7 +43,7 @@ export default function InventoryTable({ items, loading, role, onTake, onLabel, 
                 <button onClick={() => onReturn(item)} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
                 <button onClick={() => onHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
                 {item.code && <button onClick={() => onLabel(item)} className="p-1 rounded-lg hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-4 w-4" /></button>}
-                {isAdmin && <button onClick={() => onEdit(item)} title="编辑物料" className="p-1.5 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
+                {isStaff && <button onClick={() => onEdit(item)} title="编辑物料" className="p-1.5 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
                 {isAdmin && <button onClick={() => onDelete(item)} title="删除物料" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
               </div>
             </div>
@@ -82,7 +83,7 @@ export default function InventoryTable({ items, loading, role, onTake, onLabel, 
                     <button onClick={() => onReturn(item)} className={`p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
                     {item.code && <button onClick={() => onLabel(item)} className="p-1 rounded hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-3.5 w-3.5" /></button>}
-                    {isAdmin && <button onClick={() => onEdit(item)} title="编辑物料" className="p-1 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>}
+                    {isStaff && <button onClick={() => onEdit(item)} title="编辑物料" className="p-1 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>}
                     {isAdmin && <button onClick={() => onDelete(item)} title="删除物料" className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
                   </div>
                 </td>

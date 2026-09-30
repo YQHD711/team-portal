@@ -74,16 +74,16 @@ describe("零件库存页", () => {
     expect(screen.queryByText(/导入 Excel/)).not.toBeInTheDocument();
   });
 
-  // 归属部门移除后，物料是队内共享资源：改/删统一收成管理员专属，部长只读
-  it("部长看不到改/删物料的按钮，管理员看得到", async () => {
+  // 物料是队内共享资源：部长能改（含布局页归位），但删除仍只有管理员能做
+  it("部长能编辑物料但不能删除，管理员两者都能", async () => {
     const leader = { id: 3, username: "leader", role: "部长", department: "飞训部", departmentId: 1 };
 
     mockedUseCurrentUser.mockReturnValue({ user: leader, loading: false, refresh: vi.fn() });
     const { unmount } = render(<InventoryPage />);
     await screen.findAllByText("桨叶");
-    expect(screen.queryAllByTitle("编辑物料")).toHaveLength(0);
+    expect(screen.getAllByTitle("编辑物料").length).toBeGreaterThan(0);
     expect(screen.queryAllByTitle("删除物料")).toHaveLength(0);
-    // 新增仍归 staff —— 部长能建，只是建完不能自己改
+    // 新增也仍归 staff
     expect(screen.getByRole("button", { name: /添加零件/ })).toBeInTheDocument();
     unmount();
 
