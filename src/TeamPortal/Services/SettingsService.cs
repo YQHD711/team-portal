@@ -97,6 +97,13 @@ public class SettingsService
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// 已废弃的设置键：启动时从库里删掉。
+    /// 旧键是 AI:DeepSeekKey / AI:DeepSeekBaseUrl —— 已由 AI:ApiKey / AI:BaseUrl 取代
+    /// （支持任意 OpenAI 兼容服务，名字不该再写死 DeepSeek）。
+    /// </summary>
+    private static readonly string[] ObsoleteKeys = ["AI:DeepSeekKey", "AI:DeepSeekBaseUrl"];
+
     /// <summary>Ensure all default settings exist. Missing keys are added, existing ones left untouched.</summary>
     public async Task SeedDefaults()
     {
@@ -105,16 +112,13 @@ public class SettingsService
 
         var defaults = new List<SystemSetting>
         {
-            new() { Key = "Auth:JwtExpireDays", Value = "7", Category = "认证安全", Description = "JWT Token 过期天数" },
-            new() { Key = "Auth:MaxLoginAttempts", Value = "5", Category = "认证安全", Description = "登录失败最大次数（超限后锁定）" },
+            new() { Key = "Auth:JwtExpireDays", Value = "7", Category = "认证安全", Description = "JWT Token 过期天数" },            new() { Key = "Auth:MaxLoginAttempts", Value = "5", Category = "认证安全", Description = "登录失败最大次数（超限后锁定）" },
             new() { Key = "Auth:LockoutMinutes", Value = "15", Category = "认证安全", Description = "登录锁定分钟数" },
             new() { Key = "Auth:PasswordMinLength", Value = "6", Category = "认证安全", Description = "密码最小长度" },
             new() { Key = "Auth:OpenRegistration", Value = "false", Category = "认证安全", Description = "是否开放自助注册（false 时仅邀请码可注册）" },
             new() { Key = "AI:Provider", Value = "deepseek", Category = "AI 服务", Description = "服务商：deepseek = DeepSeek 官方；openai = 任意 OpenAI 兼容服务（自填地址与模型名）" },
-            new() { Key = "AI:ApiKey", Value = "", Category = "AI 服务", Description = "API Key（留空则回退到旧的 AI:DeepSeekKey）" },
+            new() { Key = "AI:ApiKey", Value = "", Category = "AI 服务", Description = "API Key" },
             new() { Key = "AI:BaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "API 地址。DeepSeek 官方填 https://api.deepseek.com；OpenAI 兼容服务填到 /v1 为止（如 https://api.openai.com/v1）" },
-            new() { Key = "AI:DeepSeekKey", Value = "", Category = "AI 服务", Description = "（旧键，已由 AI:ApiKey 取代，保留兼容）DeepSeek API Key" },
-            new() { Key = "AI:DeepSeekBaseUrl", Value = "https://api.deepseek.com", Category = "AI 服务", Description = "（旧键，已由 AI:BaseUrl 取代，保留兼容）API 地址" },
             new() { Key = "AI:ModelName", Value = "deepseek-flash", Category = "AI 服务", Description = "模型名称。可在设置页点「获取可用模型」从服务端拉取现行列表（DeepSeek 现行为 deepseek-flash / deepseek-v4-pro）" },
             new() { Key = "AI:SystemPrompt", Value = "", Category = "AI 服务", Description = "AI 助手系统提示词（留空用内置默认；内置默认已要求纯文本、不用 Markdown 装饰与 emoji）" },
             new() { Key = "AI:MaxIterations", Value = "25", Category = "AI 服务", Description = "AI Agent 最大迭代次数" },
@@ -170,6 +174,15 @@ public class SettingsService
             db.SystemSettings.AddRange(toAdd);
             changed = true;
         }
+        // 清理已废弃的设置项。只从 defaults 里删掉是不够的：老库里那一行还在，
+        // 设置页照旧会把它列出来，看起来像还能用。
+        foreach (var staleKey in ObsoleteKeys)
+            if (byKey.TryGetValue(staleKey, out var stale))
+            {
+                db.SystemSettings.Remove(stale);
+                _cache.TryRemove(staleKey, out _);
+                changed = true;
+            }
         if (changed)
         {
             await db.SaveChangesAsync();

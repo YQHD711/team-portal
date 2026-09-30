@@ -8,7 +8,7 @@ namespace api;
 /// 1) 工具集恰好是那 9 个只读工具 —— 代码提案（propose_improvement/list_proposals）、
 ///    代码检索（read_file/analyze_code/read_db_schema）、编译重启都不允许再出现；
 /// 2) 提示词里工具清单与注册表同源，不会「写着某个工具其实没注册」；
-/// 3) 设置读取必须脱敏，否则助手会把 AI:DeepSeekKey 明文念出来并写进会话记忆。
+/// 3) 设置读取必须脱敏，否则助手会把 AI:ApiKey 明文念出来并写进会话记忆。
 /// </summary>
 public class SystemAgentAssistantTests
 {
@@ -132,7 +132,7 @@ public class SystemAgentAssistantTests
     // ── 设置脱敏 ────────────────────────────────────────────
 
     [Theory]
-    [InlineData("AI:DeepSeekKey")]
+    [InlineData("AI:ApiKey")]
     [InlineData("Baidu:AppSecret")]
     [InlineData("Smtp:Password")]
     [InlineData("Baidu:RefreshToken")]
@@ -147,15 +147,15 @@ public class SystemAgentAssistantTests
     [Fact]
     public void RedactSettingValue_ReportsUnconfiguredSecretWithoutValue()
     {
-        Assert.Equal("未配置", SystemAgentService.RedactSettingValue("AI:DeepSeekKey", ""));
-        Assert.Equal("未配置", SystemAgentService.RedactSettingValue("AI:DeepSeekKey", null));
+        Assert.Equal("未配置", SystemAgentService.RedactSettingValue("AI:ApiKey", ""));
+        Assert.Equal("未配置", SystemAgentService.RedactSettingValue("AI:ApiKey", null));
     }
 
     [Theory]
     [InlineData("AI:ModelName", "deepseek-v4-pro")]
     [InlineData("Inventory:LowStockThreshold", "5")]
     [InlineData("Auth:JwtExpireDays", "7")]
-    [InlineData("AI:DeepSeekBaseUrl", "https://api.deepseek.com")]
+    [InlineData("AI:BaseUrl", "https://api.deepseek.com")]
     // 「token」既是令牌也是「数量」：计数类键名不能被误脱敏，否则助手连"输出上限是多少"都答不了
     [InlineData("AI:MaxTokens", "8192")]
     [InlineData("AI:TokenLimit", "4096")]

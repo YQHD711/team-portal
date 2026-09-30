@@ -40,6 +40,12 @@ export default function SettingsPage() {
   const [aiModels, setAiModels] = useState<{ id: string; name?: string | null; contextWindow?: number | null; maxOutputTokens?: number | null; effortLevels?: string[] }[]>([]);
   const [aiModelsMsg, setAiModelsMsg] = useState("");
   const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  // 内置默认提示词：展示出来，管理员才知道「留空」到底会用什么
+  const [defaultPrompt, setDefaultPrompt] = useState("");
+
+  useEffect(() => {
+    api.get<{ prompt: string }>("/api/admin/ai/default-prompt").then(r => setDefaultPrompt(r.prompt)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     api.get<SettingsMap>("/api/admin/settings")
@@ -260,6 +266,18 @@ export default function SettingsPage() {
                             list={/model/i.test(s.key) ? MODEL_SUGGESTIONS_ID : undefined}
                             className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
+                        )}
+                        {s.key === "AI:SystemPrompt" && defaultPrompt && (
+                          <details className="w-full rounded-lg border border-border bg-surface-subtle px-3 py-2 text-sm">
+                            <summary className="cursor-pointer text-xs text-muted">
+                              查看内置默认提示词（留空时生效）
+                            </summary>
+                            <pre className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted">{defaultPrompt}</pre>
+                            <button type="button" onClick={() => updateValue(cat, s.key, "")}
+                              className="mt-2 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-surface-hover">
+                              清空输入框 = 恢复使用默认
+                            </button>
+                          </details>
                         )}
                         {s.key === "AI:ModelName" && (
                           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">

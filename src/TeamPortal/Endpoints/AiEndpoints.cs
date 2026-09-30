@@ -24,6 +24,10 @@ public static class AiEndpoints
         // 顺带把上下文长度、最大输出、思考档位这些元信息也显示出来。
         var admin = app.MapGroup("/api/admin/ai").RequireAuthorization("AdminOnly");
 
+        // 内置默认提示词：设置页要能看见它 —— 否则「留空 = 使用内置默认」就是一句
+        // 无法核对的承诺，管理员改提示词时并不知道自己在覆盖什么。
+        admin.MapGet("/default-prompt", () => Results.Ok(new { prompt = AiProxyService.DefaultSystemPrompt }));
+
         admin.MapGet("/models", async (AiClient ai) =>
         {
             var opt = await ai.ResolveAsync();

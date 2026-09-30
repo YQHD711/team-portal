@@ -54,8 +54,8 @@ public class ConversationService
 
         if (nonSystemCount > CompressThreshold)
         {
-            var apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
-            var baseUrl = _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? "https://api.deepseek.com";
+            var apiKey = _config.GetValue<string>("AiService:ApiKey") ?? "";
+            var baseUrl = _config.GetValue<string>("AiService:BaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
             if (!string.IsNullOrEmpty(apiKey))
             {
                 await CompressMemory(db, sessionId, apiKey, baseUrl);
