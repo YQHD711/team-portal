@@ -44,7 +44,13 @@ public class InventoryService
         var query = _db.InventoryItems.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(i => i.Name.Contains(search));
+        {
+            var s = search.Trim();
+            // 编码在库里存的是全大写，而 EF 把 Contains 翻译成大小写敏感的 instr()，
+            // 所以拿大写的搜索词再比一次：这样手输 bat-lipo… 或扫码枪吐出来的都能搜到。
+            var upper = s.ToUpperInvariant();
+            query = query.Where(i => i.Name.Contains(s) || (i.Code != null && i.Code.Contains(upper)));
+        }
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(i => i.Category == category);
 
