@@ -151,7 +151,8 @@ describe("零件库存页", () => {
     expect(codeInput).toHaveValue("CS-SCREW-M3-2026-0001");
     fireEvent.change(codeInput, { target: { value: "" } });
 
-    // 自动生成：先给物品号与型号
+    // 自动生成：分类决定前缀，必须先选分类
+    fireEvent.change(screen.getByLabelText("分类"), { target: { value: "电池电源" } });
     fireEvent.change(screen.getByLabelText("物品号"), { target: { value: "lipo" } });
     fireEvent.change(screen.getByLabelText("型号"), { target: { value: "6s3300mah" } });
     fireEvent.click(screen.getByRole("button", { name: /自动生成编码/ }));
@@ -160,6 +161,8 @@ describe("零件库存页", () => {
     const calledWith = mockedGet.mock.calls.map(c => String(c[0])).find(u => u.includes("next-code"))!;
     expect(calledWith).toContain("itemNo=LIPO");
     expect(calledWith).toContain("model=6S3300MAH");
+    // 必须把自己这边的 origin 传过去：后端眼里的 Host 是容器内网地址（backend:8080）
+    expect(calledWith).toContain("origin=");
 
     await waitFor(() => expect(codeInput).toHaveValue("BAT-LIPO-6S3300MAH-2026-0007"));
 
@@ -168,12 +171,28 @@ describe("零件库存页", () => {
     expect(screen.getByText("http://8.137.161.160:3000/i/BAT-LIPO-6S3300MAH-2026-0007")).toBeInTheDocument();
   });
 
+  it("物料编码：没选分类就点自动生成会被拦下（前缀由分类决定，不选只会得到 XX）", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
+
+    // 物品号/型号都填了，但分类没选 —— 这正是用户实际踩到的那次
+    fireEvent.change(screen.getByLabelText("物品号"), { target: { value: "LIPO" } });
+    fireEvent.change(screen.getByLabelText("型号"), { target: { value: "6300MAH" } });
+    fireEvent.click(screen.getByRole("button", { name: /自动生成编码/ }));
+
+    expect(await screen.findByText(/请先选择分类/)).toBeInTheDocument();
+    expect(mockedGet.mock.calls.map(c => String(c[0])).some(u => u.includes("next-code"))).toBe(false);
+  });
+
   it("物料编码：没填物品号/型号就点自动生成会被拦下并说明原因", async () => {
     mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
     render(<InventoryPage />);
     await screen.findAllByText("桨叶");
     fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
 
+    fireEvent.change(screen.getByLabelText("分类"), { target: { value: "电池电源" } });
     fireEvent.click(screen.getByRole("button", { name: /自动生成编码/ }));
 
     expect(await screen.findByText(/请先填写物品号与型号/)).toBeInTheDocument();

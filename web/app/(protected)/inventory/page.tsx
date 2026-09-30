@@ -110,12 +110,14 @@ export default function InventoryPage() {
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
   useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
-  // 二维码短链的对外地址由后端下发（App:PublicBaseUrl）。不自己拼 window.location.origin——
-  // 管理员用 localhost 打开时，那样印出来的二维码队员扫不开。
+  // 二维码短链的对外地址：优先后端配置的 App:PublicBaseUrl，没配则用我们这边的 origin。
+  // 必须把 origin 传过去 —— 后端收到的是 Next.js 服务端转发的请求，它眼里的 Host 是
+  // 容器内网地址（backend:8080），拿那个生成短链等于生成一堆谁也扫不开的二维码。
   useEffect(() => {
-    api.get<{ publicBaseUrl?: string; publicBaseLooksLocal?: boolean }>("/api/inventory/meta")
-      .then(m => { setPublicBase(m.publicBaseUrl || window.location.origin); setPublicBaseLooksLocal(!!m.publicBaseLooksLocal); })
-      .catch(() => { setPublicBase(window.location.origin); setPublicBaseLooksLocal(false); });
+    const origin = window.location.origin;
+    api.get<{ publicBaseUrl?: string; publicBaseLooksLocal?: boolean }>(`/api/inventory/meta?origin=${encodeURIComponent(origin)}`)
+      .then(m => { setPublicBase(m.publicBaseUrl || origin); setPublicBaseLooksLocal(!!m.publicBaseLooksLocal); })
+      .catch(() => { setPublicBase(origin); setPublicBaseLooksLocal(false); });
   }, []);
   // 房间 + 平面图从库位布局动态获取（供库位编码联动选择），失败时回退硬编码房间号
   useEffect(() => {
@@ -149,6 +151,11 @@ export default function InventoryPage() {
 
   // 自动生号：只拼 前缀（按分类）+ 年份 + 序号；物品号/型号由填单人给
   const generateCode = async () => {
+    // 前缀来自分类：没选分类就只能落到 XX「其他」，那种编码贴到实物上是错的
+    if (!form.category) {
+      setCodeError("请先选择分类——编码前缀由分类决定（不选只会得到 XX）");
+      return;
+    }
     if (!form.codeItemNo.trim() || !form.codeModel.trim()) {
       setCodeError("请先填写物品号与型号（系统无法从名称推出）");
       return;
@@ -157,9 +164,10 @@ export default function InventoryPage() {
     try {
       const q = new URLSearchParams({ category: form.category, itemNo: form.codeItemNo.trim(), model: form.codeModel.trim() });
       if (form.codeYear) q.set("year", form.codeYear);
-      const res = await api.get<{ code: string; shortUrl: string }>(`/api/inventory/next-code?${q}`);
+      q.set("origin", window.location.origin);
+      const res = await api.get<{ code: string; shortUrl: string | null }>(`/api/inventory/next-code?${q}`);
       setForm(f => ({ ...f, code: res.code }));
-      setGeneratedShortUrl(res.shortUrl); // 编码一生成，短链与二维码立刻给出来
+      setGeneratedShortUrl(res.shortUrl ?? ""); // 编码一生成，短链与二维码立刻给出来
     } catch { setCodeError("生成失败，请稍后重试或手动填写"); }
     finally { setGenCodeLoading(false); }
   };

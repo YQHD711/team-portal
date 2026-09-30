@@ -37,7 +37,7 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
             <div><label className="block text-sm font-medium mb-1">名称</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required disabled={!!editItem} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
             <div>
               <label className="block text-sm font-medium mb-1">分类</label>
-              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+              <select aria-label="分类" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <option value="">选择分类...</option>
                 {categoryOpts.map(c => <option key={c} value={c}>{c}</option>)}
