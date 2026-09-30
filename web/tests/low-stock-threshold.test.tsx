@@ -78,7 +78,7 @@ describe("低库存阈值：后端设置为唯一来源", () => {
   it("库存表格的高亮走同一阈值", async () => {
     mockedGet.mockResolvedValue({ lowStockThreshold: 10, lowStockGrade: "C" });
     render(<LowStockProvider><InventoryTable items={[item({ quantity: 6 })]} loading={false} role="admin"
-      onTake={vi.fn()} onReturn={vi.fn()} onHistory={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} /></LowStockProvider>);
+      onTake={vi.fn()} onLabel={vi.fn()} onReturn={vi.fn()} onHistory={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} /></LowStockProvider>);
 
     // 6 < 10 → 数量以 warning 色显示（阈值 3 时同样的数量不会高亮）
     await waitFor(() => expect(document.querySelectorAll("tr.bg-amber-50\\/50").length).toBeGreaterThan(0));

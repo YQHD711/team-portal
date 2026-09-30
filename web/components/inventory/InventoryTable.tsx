@@ -1,4 +1,4 @@
-import { Package, Minus, Plus as PlusIcon, History, Pencil, Trash2 } from "lucide-react";
+import { Package, Minus, Plus as PlusIcon, History, Pencil, Trash2, QrCode } from "lucide-react";
 import { statusOpts, type InventoryItem } from "./inventoryTypes";
 import { useLowStock } from "./LowStockProvider";
 
@@ -7,6 +7,7 @@ interface Props {
   loading: boolean;
   role: string;
   onTake: (item: InventoryItem) => void;   // 领用(C/B级走审批)或消耗(C级直接扣库存)
+  onLabel: (item: InventoryItem) => void;  // 物料标签（二维码）
   onReturn: (item: InventoryItem) => void; // 归还
   onHistory: (item: InventoryItem) => void;
   onEdit: (item: InventoryItem) => void;
@@ -14,7 +15,7 @@ interface Props {
 }
 
 /** 零件列表（移动端卡片 + 桌面表格），含领用/归还/记录/编辑/删除操作 */
-export default function InventoryTable({ items, loading, role, onTake, onReturn, onHistory, onEdit, onDelete }: Props) {
+export default function InventoryTable({ items, loading, role, onTake, onLabel, onReturn, onHistory, onEdit, onDelete }: Props) {
   const isStaff = role === "admin" || role === "部长";
   const { threshold } = useLowStock();
 
@@ -29,6 +30,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
             <div className="flex items-start justify-between mb-2">
               <div>
                 <div className="font-medium text-sm">{item.name}</div>
+                {item.code && <div className="text-xs font-mono text-faint">{item.code}</div>}
                 <div className="text-xs text-muted">{item.category} · {item.locationCode || "—"}</div>
               </div>
               <div className="flex items-center gap-1">
@@ -37,6 +39,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
                   title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
                 <button onClick={() => onReturn(item)} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
                 <button onClick={() => onHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
+                {item.code && <button onClick={() => onLabel(item)} className="p-1 rounded-lg hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-4 w-4" /></button>}
                 {isStaff && <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
                 {isStaff && <button onClick={() => onDelete(item)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
               </div>
@@ -57,7 +60,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
              items.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无零件，点击"添加零件"开始</td></tr> :
              items.map(item => (
               <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-950 ${isStaff && item.quantity < threshold ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
-                <td className="px-4 py-3"><span className="font-medium">{item.name}</span><span className="block text-xs text-faint sm:hidden">{item.category}</span></td>
+                <td className="px-4 py-3"><span className="font-medium">{item.name}</span>{item.code && <span className="block text-xs font-mono text-faint">{item.code}</span>}<span className="block text-xs text-faint sm:hidden">{item.category}</span></td>
                 <td className="px-4 py-3 text-muted hidden sm:table-cell">{item.category}</td>
                 <td className="px-4 py-3 text-center">
                   <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${item.grade === "A" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : item.grade === "B" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-zinc-100 text-muted dark:bg-zinc-800 dark:text-faint"}`}>{item.grade || "C"}</span>
@@ -76,6 +79,7 @@ export default function InventoryTable({ items, loading, role, onTake, onReturn,
                       title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onReturn(item)} className={`p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onHistory(item)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-3.5 w-3.5" /></button>
+                    {item.code && <button onClick={() => onLabel(item)} className="p-1 rounded hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-3.5 w-3.5" /></button>}
                     {isStaff && <>
                       <button onClick={() => onEdit(item)} className="p-1 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
                       <button onClick={() => onDelete(item)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>

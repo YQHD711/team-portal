@@ -130,4 +130,86 @@ describe("零件库存页", () => {
     expect(btns.length).toBeGreaterThan(0);
     for (const b of btns) expect(b).toBeDisabled();
   });
+
+  it("物料编码：物品号/型号填好后可自动生成，也能直接手填", async () => {
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory/next-code")) return { code: "BAT-LIPO-6S3300MAH-2026-0007" };
+      if (endpoint.startsWith("/api/inventory")) return items;
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
+
+    const codeInput = screen.getByPlaceholderText("如 BAT-LIPO-6S3300MAH-2026-0007");
+    // 手填：小写敲进去自动转大写（规范要求全串大写，否则短链查不到）
+    fireEvent.change(codeInput, { target: { value: "cs-screw-m3-2026-0001" } });
+    expect(codeInput).toHaveValue("CS-SCREW-M3-2026-0001");
+    fireEvent.change(codeInput, { target: { value: "" } });
+
+    // 自动生成：先给物品号与型号
+    fireEvent.change(screen.getByLabelText("物品号"), { target: { value: "lipo" } });
+    fireEvent.change(screen.getByLabelText("型号"), { target: { value: "6s3300mah" } });
+    fireEvent.click(screen.getByRole("button", { name: /自动生成编码/ }));
+
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith(expect.stringContaining("/api/inventory/next-code?")));
+    const calledWith = mockedGet.mock.calls.map(c => String(c[0])).find(u => u.includes("next-code"))!;
+    expect(calledWith).toContain("itemNo=LIPO");
+    expect(calledWith).toContain("model=6S3300MAH");
+
+    await waitFor(() => expect(codeInput).toHaveValue("BAT-LIPO-6S3300MAH-2026-0007"));
+  });
+
+  it("物料编码：没填物品号/型号就点自动生成会被拦下并说明原因", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: /自动生成编码/ }));
+
+    expect(await screen.findByText(/请先填写物品号与型号/)).toBeInTheDocument();
+    // 不该白跑一趟后端
+    expect(mockedGet.mock.calls.map(c => String(c[0])).some(u => u.includes("next-code"))).toBe(false);
+  });
+
+  it("库位编码处明确写着可以留空", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getByRole("button", { name: /添加零件/ }));
+
+    expect(screen.getByText(/可以留空/)).toBeInTheDocument();
+  });
+
+  it("有编码的物料可以打开二维码标签", async () => {
+    const withCode = [{ ...items[0], code: "BAT-LIPO-6S3300MAH-2026-0007" }];
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory")) return withCode;
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
+
+    expect(await screen.findByText("物料标签")).toBeInTheDocument();
+    // 可读编码必须印出来（扫码枪坏了靠它手输兜底）
+    expect(screen.getAllByText("BAT-LIPO-6S3300MAH-2026-0007").length).toBeGreaterThan(0);
+    expect(document.querySelector("svg")).toBeTruthy();
+  });
+
+  it("没有编码的物料不显示二维码入口", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("桨叶");
+    expect(screen.queryAllByTitle("物料标签（二维码）")).toHaveLength(0);
+  });
 });

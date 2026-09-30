@@ -91,6 +91,23 @@ public static class InventoryEndpoints
             return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
         });
 
+        // 按物料编码查（贴在实物上的二维码短链 /i/<编码> 与手输兜底都走这里；大小写不敏感）
+        group.MapGet("/by-code/{code}", async (string code, InventoryService svc) =>
+        {
+            var item = await svc.GetByCode(code);
+            return item is not null ? Results.Ok(item) : Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
+        });
+
+        // 自动生号预览：前缀按分类、年份取采购年、序号取该池的下一个。
+        // 物品号与型号必须由人给（系统无法从名称可靠推出），所以这里要求传全。
+        group.MapGet("/next-code", async (string? category, string? itemNo, string? model, int? year, InventoryService svc) =>
+        {
+            if (string.IsNullOrWhiteSpace(itemNo) || string.IsNullOrWhiteSpace(model))
+                return Results.Problem("请先填写物品号与型号，再生成编码", statusCode: 400);
+            var code = await svc.NextCodeAsync(category ?? "", itemNo, model, year);
+            return Results.Ok(new { code, prefix = InventoryService.CategoryPrefix(category) });
+        });
+
         group.MapPost("/", async (CreateItemRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
@@ -105,11 +122,20 @@ public static class InventoryEndpoints
             if (HasUnsafeName(req.Name))
                 return Results.Problem("名称包含非法字符", statusCode: 400);
 
-            var item = await svc.Create(req.Name, req.Category ?? "", req.Quantity,
-                req.Grade ?? "C", req.UnitPrice ?? 0, req.DepartmentId, req.ProjectTag, req.LocationCode);
+            InventoryItem item;
+            try
+            {
+                item = await svc.Create(req.Name, req.Category ?? "", req.Quantity,
+                    req.Grade ?? "C", req.UnitPrice ?? 0, req.DepartmentId, req.Code, req.LocationCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 编码撞车等业务校验失败 → 400，别让它冒成 500
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
             log.Info("inventory", $"Part added: {item.Name} (qty {item.Quantity}) by {user.Identity?.Name}");
             log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "item", targetId: item.Id.ToString(),
-                data: new { name = item.Name, quantity = item.Quantity, category = req.Category, grade = req.Grade }, ipAddress: LogService.ClientIp(ctx));
+                data: new { name = item.Name, quantity = item.Quantity, category = req.Category, grade = req.Grade, code = item.Code }, ipAddress: LogService.ClientIp(ctx));
             return Results.Created($"/api/inventory/{item.Id}", item);
         });
 
@@ -156,15 +182,23 @@ public static class InventoryEndpoints
             if (req.Name is not null && HasUnsafeName(req.Name))
                 return Results.Problem("名称包含非法字符", statusCode: 400);
 
-            var item = await svc.Update(id,
-                req.Name, req.Quantity, req.Status,
-                req.Grade, req.UnitPrice, req.DepartmentId, req.ProjectTag, req.LocationCode);
+            InventoryItem? item;
+            try
+            {
+                item = await svc.Update(id,
+                    req.Name, req.Quantity, req.Status,
+                    req.Grade, req.UnitPrice, req.DepartmentId, req.Code, req.LocationCode, req.ClearCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
             if (item is not null)
             {
                 var actor = user.Identity?.Name ?? "unknown";
                 log.Info("inventory", $"Part updated: {item.Name} by {actor}");
                 log.Audit("update", actor, targetType: "item", targetId: id.ToString(),
-                    data: new { name = item.Name, grade = req.Grade, unitPrice = req.UnitPrice, locationCode = req.LocationCode },
+                    data: new { name = item.Name, grade = req.Grade, unitPrice = req.UnitPrice, code = item.Code, locationCode = req.LocationCode },
                     ipAddress: LogService.ClientIp(ctx));
                 if (item.Quantity > 0 && item.Quantity <= 3)
                     notify.Notify("库存预警", $"零件「{item.Name}」库存仅剩 {item.Quantity} 件", "/inventory", targetRole: "staff", level: "warning");
@@ -353,9 +387,11 @@ public static class InventoryEndpoints
 }
 
 public record CreateItemRequest(string Name, string? Category, int Quantity,
-    string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
+    string? Grade, decimal? UnitPrice, int? DepartmentId, string? Code, string? LocationCode);
 public record UpdateItemRequest(
     string? Name, int? Quantity, string? Status,
-    string? Grade, decimal? UnitPrice, int? DepartmentId, string? ProjectTag, string? LocationCode);
+    string? Grade, decimal? UnitPrice, int? DepartmentId, string? Code, string? LocationCode,
+    // true 表示"明确清空编码"（与 null = 不改区分开）
+    bool ClearCode = false);
 public record ImportRequest(string FilePath);
 public record TransactionRequest(int Quantity, string? Note);

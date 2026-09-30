@@ -16,7 +16,8 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   ssr: false,
   loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
-import { type Department, type InventoryFormState, type InventoryItem, type Transaction } from "@/components/inventory/inventoryTypes";
+import { type Department, type InventoryFormState, type InventoryItem, type Transaction, emptyInventoryForm } from "@/components/inventory/inventoryTypes";
+import ItemLabelModal from "@/components/inventory/ItemLabelModal";
 import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
 import { useLowStock } from "@/components/inventory/LowStockProvider";
 
@@ -30,7 +31,10 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
-  const [form, setForm] = useState<InventoryFormState>({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" });
+  const [form, setForm] = useState<InventoryFormState>(emptyInventoryForm());
+  const [genCodeLoading, setGenCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState("");
+  const [labelItem, setLabelItem] = useState<InventoryItem | null>(null);
   /** 房间 + 平面图：库位编码选择器据此列出「货架/柜子/工作台」与层位 */
   const [rooms, setRooms] = useState<RoomLayoutOption[]>([]);
 
@@ -117,17 +121,54 @@ export default function InventoryPage() {
     finally { setLoading(false); }
   };
 
-  const openCreate = () => { setEditItem(null); setForm({ name: "", category: "", quantity: 0, grade: "C", unitPrice: 0, departmentId: 0, projectTag: "", locationCode: "" }); setShowForm(true); };
-  const openEdit = (i: InventoryItem) => { setEditItem(i); setForm({ name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C", unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0, projectTag: i.projectTag || "", locationCode: i.locationCode || "" }); setShowForm(true); };
+  const openCreate = () => { setEditItem(null); setForm(emptyInventoryForm()); setCodeError(""); setShowForm(true); };
+  const openEdit = (i: InventoryItem) => {
+    setEditItem(i);
+    setForm({
+      name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C",
+      unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0,
+      locationCode: i.locationCode || "", code: i.code || "",
+      codeItemNo: "", codeModel: "", codeYear: String(new Date().getFullYear()),
+    });
+    setCodeError(""); setShowForm(true);
+  };
+
+  // 自动生号：只拼 前缀（按分类）+ 年份 + 序号；物品号/型号由填单人给
+  const generateCode = async () => {
+    if (!form.codeItemNo.trim() || !form.codeModel.trim()) {
+      setCodeError("请先填写物品号与型号（系统无法从名称推出）");
+      return;
+    }
+    setCodeError(""); setGenCodeLoading(true);
+    try {
+      const q = new URLSearchParams({ category: form.category, itemNo: form.codeItemNo.trim(), model: form.codeModel.trim() });
+      if (form.codeYear) q.set("year", form.codeYear);
+      const res = await api.get<{ code: string }>(`/api/inventory/next-code?${q}`);
+      setForm(f => ({ ...f, code: res.code }));
+    } catch { setCodeError("生成失败，请稍后重试或手动填写"); }
+    finally { setGenCodeLoading(false); }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    // 库位留空是允许的：空串要传给后端表示"清空"，而不是 null（null = 本次不改）
+    const locCode = form.locationCode.trim();
+    const code = form.code.trim();
     try {
-      const locCode = form.locationCode.trim() || null;
-      if (editItem) await api.put(`/api/inventory/${editItem.id}`, { grade: form.grade, unitPrice: form.unitPrice, departmentId: form.departmentId || null, projectTag: form.projectTag || null, locationCode: locCode });
-      else await api.post("/api/inventory", { ...form, locationCode: locCode });
+      if (editItem) {
+        await api.put(`/api/inventory/${editItem.id}`, {
+          grade: form.grade, unitPrice: form.unitPrice, departmentId: form.departmentId || null,
+          code: code || null, clearCode: !code, locationCode: locCode,
+        });
+      } else {
+        await api.post("/api/inventory", {
+          name: form.name, category: form.category, quantity: form.quantity, grade: form.grade,
+          unitPrice: form.unitPrice, departmentId: form.departmentId || null,
+          code: code || null, locationCode: locCode || null,
+        });
+      }
       setShowForm(false); fetchItems();
-    } catch { alert("操作失败"); }
+    } catch (err) { alert(err instanceof Error && err.message ? err.message : "操作失败"); }
   };
 
   const handleDelete = async (i: InventoryItem) => {
@@ -186,7 +227,7 @@ export default function InventoryPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <InventoryTable items={items} loading={loading} role={role}
-          onTake={handleTake} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete} />
+          onTake={handleTake} onLabel={setLabelItem} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete} />
 
         <div className="rounded-xl border border-border bg-surface p-4">
           <h3 className="font-medium text-sm mb-3">分类分布</h3>
@@ -203,6 +244,8 @@ export default function InventoryPage() {
           rooms={rooms} fallbackRooms={FALLBACK_ROOMS}
           onLocationCode={code => setForm(f => ({ ...f, locationCode: code }))}
           departments={departments} calcGrade={calcGrade}
+          onCode={code => { setForm(f => ({ ...f, code })); setCodeError(""); }}
+          onGenerateCode={generateCode} genCodeLoading={genCodeLoading} codeError={codeError}
           onClose={() => setShowForm(false)} onSubmit={handleSave} />
       )}
 
@@ -215,6 +258,11 @@ export default function InventoryPage() {
       {/* Transaction History Panel */}
       {showHistory && txItem && (
         <InventoryHistoryPanel item={txItem} history={txHistory} onClose={() => setShowHistory(false)} />
+      )}
+
+      {/* 物料标签（二维码） */}
+      {labelItem && (
+        <ItemLabelModal item={labelItem} origin={typeof window === "undefined" ? "" : window.location.origin} onClose={() => setLabelItem(null)} />
       )}
     </div>
   );
