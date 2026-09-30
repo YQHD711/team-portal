@@ -41,8 +41,8 @@ public partial class SystemAgentService
     /// <summary>Main entry: runs a read-only agent session with tools + conversation memory.</summary>
     public async Task<string> RunAgent(string task, string userName, List<(string role, string content)>? history = null)
     {
-        var apiKey = await _settings.Get("AI:DeepSeekKey");
-        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
+        var apiKey = await _settings.Get("AI:ApiKey", "");
+        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:ApiKey") ?? "";
         if (string.IsNullOrEmpty(apiKey)) return "❌ AI 密钥未配置";
 
         var messages = new List<object> { new { role = "system", content = BuildSystemPrompt() } };

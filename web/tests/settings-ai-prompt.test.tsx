@@ -17,7 +17,7 @@ const settingsPayload = {
   "AI 服务": [
     { key: "AI:SystemPrompt", value: "", category: "AI 服务", description: "AI 助手系统提示词（留空使用内置默认…）" },
     { key: "AI:ModelName", value: "deepseek-v4-pro", category: "AI 服务", description: "对话/分析模型名称" },
-    { key: "AI:DeepSeekKey", value: "secret", category: "AI 服务", description: "DeepSeek API Key" },
+    { key: "AI:ApiKey", value: "secret", category: "AI 服务", description: "API Key" },
   ],
 };
 
@@ -42,7 +42,7 @@ describe("系统设置：AI 提示词", () => {
     expect(model).toHaveAttribute("list");
 
     // 密钥仍然是密码框
-    const key = screen.getByLabelText("AI:DeepSeekKey");
+    const key = screen.getByLabelText("AI:ApiKey");
     expect(key).toHaveAttribute("type", "password");
   });
 

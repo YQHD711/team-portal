@@ -51,7 +51,7 @@ public partial class WikiGeneratorService
         _options = WikiSettingsStore.Load().Options;
     }
 
-    /// <summary>取设置项：新键优先，旧键兜底（老部署不用改配置）</summary>
+    /// <summary>取设置项（缺失返回 null）</summary>
     private async Task<string?> SettingEitherAsync(string key, string legacyKey)
     {
         var s = await _db.SystemSettings.FindAsync(key);
@@ -63,9 +63,9 @@ public partial class WikiGeneratorService
     /// <summary>Get API key: DB SystemSettings first, then config, then env var.</summary>
     private async Task<string> GetApiKey()
     {
-        var setting = await SettingEitherAsync("AI:ApiKey", "AI:DeepSeekKey");
+        var setting = await SettingEitherAsync("AI:ApiKey", "AI:ApiKey");
         if (!string.IsNullOrEmpty(setting)) return setting;
-        return _config["AiService:DeepSeekKey"]
+        return _config["AiService:ApiKey"]
             ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY")
             ?? "";
     }
@@ -82,9 +82,9 @@ public partial class WikiGeneratorService
     /// <summary>Get base URL: DB SystemSettings first, then config.</summary>
     private async Task<string> GetBaseUrl()
     {
-        var setting = await SettingEitherAsync("AI:BaseUrl", "AI:DeepSeekBaseUrl");
+        var setting = await SettingEitherAsync("AI:BaseUrl", "AI:BaseUrl");
         if (!string.IsNullOrEmpty(setting)) return setting;
-        return _config.GetValue<string>("AiService:DeepSeekBaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
+        return _config.GetValue<string>("AiService:BaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
     }
 
     public WikiGeneratorOptions GetOptions() => _options;

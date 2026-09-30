@@ -146,4 +146,27 @@ public class SettingsServiceTests
         // 描述/分组由代码维护，但 value 是运维配置，绝不能被种子覆盖
         Assert.Equal("my-custom-model", db.SystemSettings.Single(s => s.Key == "AI:ModelName").Value);
     }
+
+    [Fact]
+    public async Task SeedDefaults_RemovesObsoleteKeys()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+
+        // 模拟老库：还留着被 AI:ApiKey / AI:BaseUrl 取代的旧键
+        db.SystemSettings.Add(new SystemSetting { Key = "AI:DeepSeekKey", Value = "sk-old", Category = "AI 服务", Description = "旧" });
+        db.SystemSettings.Add(new SystemSetting { Key = "AI:DeepSeekBaseUrl", Value = "https://old", Category = "AI 服务", Description = "旧" });
+        await db.SaveChangesAsync();
+
+        await svc.SeedDefaults();
+
+        // 只从 defaults 里删掉是不够的：老库里那两行还在，设置页照旧会列出来，
+        // 看起来像还能用 —— 必须真的从库里清掉
+        Assert.DoesNotContain(db.SystemSettings, s => s.Key == "AI:DeepSeekKey");
+        Assert.DoesNotContain(db.SystemSettings, s => s.Key == "AI:DeepSeekBaseUrl");
+        // 新键不受影响
+        Assert.Contains(db.SystemSettings, s => s.Key == "AI:ApiKey");
+        Assert.Contains(db.SystemSettings, s => s.Key == "AI:BaseUrl");
+    }
 }

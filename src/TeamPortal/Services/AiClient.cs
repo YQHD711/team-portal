@@ -25,16 +25,15 @@ public class AiClient
         _http = http; _config = config; _settings = settings;
     }
 
-    private async Task<string> GetWithLegacy(string key, string legacyKey, string envKey, string fallback)
+    /// <summary>取设置项；库里没有则回退到配置 / 环境变量（密钥用环境变量注入是部署常规做法）</summary>
+    private async Task<string> Get(string key, string envKey, string fallback)
     {
         var v = await _settings.Get(key, "");
         if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
-        v = await _settings.Get(legacyKey, "");
-        if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
-        return (_config.GetValue<string>(envKey) ?? fallback).Trim();
+        return (_config.GetValue<string>(envKey) ?? Environment.GetEnvironmentVariable(envKey) ?? fallback).Trim();
     }
 
-    /// <summary>解析当前生效的接入配置（新键优先，旧键/环境变量兜底，保证老部署不用改配置）</summary>
+    /// <summary>解析当前生效的接入配置</summary>
     public async Task<AiOptions> ResolveAsync()
     {
         var providerRaw = await _settings.Get("AI:Provider", "deepseek");
@@ -42,9 +41,8 @@ public class AiClient
             ? AiProvider.OpenAiCompatible
             : AiProvider.DeepSeek;
 
-        var baseUrl = await GetWithLegacy("AI:BaseUrl", "AI:DeepSeekBaseUrl", "AiService:DeepSeekBaseUrl",
-            AiOptions.DeepSeekDefaultBaseUrl);
-        var apiKey = await GetWithLegacy("AI:ApiKey", "AI:DeepSeekKey", "AiService:DeepSeekKey", "");
+        var baseUrl = await Get("AI:BaseUrl", "AiService:BaseUrl", AiOptions.DeepSeekDefaultBaseUrl);
+        var apiKey = await Get("AI:ApiKey", "AiService:ApiKey", "");
 
         var model = await _settings.Get("AI:ModelName", "");
         if (string.IsNullOrWhiteSpace(model)) model = "deepseek-flash"; // 官方现行模型（旧的 deepseek-chat 已不在列表）
