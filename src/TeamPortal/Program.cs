@@ -268,6 +268,34 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
+    // 管理委员会：给管理员一个「部门」属性，纯粹是名号与归属展示。
+    //
+    // **不改动任何权限**：所有鉴权都先按 role 判定，管理员在比对部门之前就已经短路
+    // （见 ProfileEndpoints.CanManageAsync / RequireCanViewAsync、MaterialService 的
+    // isAdminSelf、Wiki 可见性的 role == "admin" 等）。这里只是让组织架构页与档案页
+    // 能把管理员归到一栏，而不是孤零零挂在「未分配」。
+    //
+    // 幂等：部门不存在就建；只给"还没有部门"的管理员补上，不覆盖别人手动设置的部门。
+    {
+        var committee = db.Departments.FirstOrDefault(d => d.Name == "管理委员会");
+        if (committee is null)
+        {
+            committee = new Department
+            {
+                Name = "管理委员会",
+                Description = "管理委员会：管理员的归属名号，不参与部门业务与权限判定",
+            };
+            db.Departments.Add(committee);
+            db.SaveChanges();
+        }
+        var orphanAdmins = db.Users.Where(u => u.Role == "admin" && u.DepartmentId == null).ToList();
+        if (orphanAdmins.Count > 0)
+        {
+            foreach (var a in orphanAdmins) a.DepartmentId = committee.Id;
+            db.SaveChanges();
+        }
+    }
+
     // Seed default storage room layouts if empty (B2冯如楼)
     if (!db.StorageLayouts.Any())
     {
