@@ -72,11 +72,14 @@ public static class InventoryEndpoints
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
 
         // 前端需要的库存规则（低库存阈值/提醒等级）与二维码短链的对外地址。
-        // 对外地址由后端统一下发，前端不再自己拼 window.location.origin ——
-        // 管理员用 localhost 打开时，那种拼法打出来的二维码队员扫不开。
-        group.MapGet("/meta", async (InventoryService svc, SettingsService settings, HttpContext ctx) =>
+        //
+        // 对外地址优先取管理员配置的 App:PublicBaseUrl；没配则用调用方传来的 origin
+        // （浏览器实际访问的地址）。**绝不用 ctx.Request.Host** —— 后端收到的是
+        // Next.js 服务端转发的请求，那是容器内网地址，曾生成出 http://backend:8080/i/...
+        // 这种谁也扫不开的短链。
+        group.MapGet("/meta", async (string? origin, InventoryService svc, SettingsService settings) =>
         {
-            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync(origin);
             return Results.Ok(new
             {
                 lowStockThreshold = await svc.GetLowStockThresholdAsync(),
@@ -107,25 +110,31 @@ public static class InventoryEndpoints
 
         // 自动生号预览：前缀按分类、年份取采购年、序号取该池的下一个。
         // 物品号与型号必须由人给（系统无法从名称可靠推出），所以这里要求传全。
-        group.MapGet("/next-code", async (string? category, string? itemNo, string? model, int? year, InventoryService svc, HttpContext ctx) =>
+        group.MapGet("/next-code", async (string? category, string? itemNo, string? model, int? year, string? origin, InventoryService svc) =>
         {
+            if (string.IsNullOrWhiteSpace(category))
+                return Results.Problem("请先选择分类——编码前缀由分类决定（不选只能落到 XX「其他」）", statusCode: 400);
             if (string.IsNullOrWhiteSpace(itemNo) || string.IsNullOrWhiteSpace(model))
                 return Results.Problem("请先填写物品号与型号，再生成编码", statusCode: 400);
-            var code = await svc.NextCodeAsync(category ?? "", itemNo, model, year);
-            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
-            // 编码一生成，短链就一起给出来：填单人不用保存后再去列表里找
+            var code = await svc.NextCodeAsync(category, itemNo, model, year);
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync(origin);
+            // 编码一生成，短链就一起给出来：填单人不用保存后再去列表里找。
+            // baseUrl 为空（既没配对外地址、前端也没给 origin）时不给短链，避免编出一个错的。
             return Results.Ok(new
             {
                 code,
                 prefix = InventoryService.CategoryPrefix(category),
-                shortUrl = InventoryService.BuildShortUrl(baseUrl, code),
+                shortUrl = string.IsNullOrEmpty(baseUrl) ? null : InventoryService.BuildShortUrl(baseUrl, code),
             });
         });
 
-        // 服务端渲染的二维码（SVG）：浏览器之外的使用方（打印、导出、MCP）可直接取
-        group.MapGet("/by-code/{code}/qr.svg", async (string code, InventoryService svc, HttpContext ctx) =>
+        // 服务端渲染的二维码（SVG）：浏览器之外的使用方（打印、导出、MCP）可直接取。
+        // 必须能确定对外地址才给图——否则二维码里会是一个谁也扫不开的内网地址。
+        group.MapGet("/by-code/{code}/qr.svg", async (string code, string? origin, InventoryService svc) =>
         {
-            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync(origin);
+            if (string.IsNullOrEmpty(baseUrl))
+                return Results.Problem("还没有配置「对外访问地址」，无法生成可扫的二维码。请到系统设置里填写后重试", statusCode: 409);
             var svg = InventoryService.BuildQrSvg(InventoryService.BuildShortUrl(baseUrl, code));
             return Results.Content(svg, "image/svg+xml");
         });

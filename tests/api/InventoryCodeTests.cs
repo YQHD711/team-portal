@@ -235,12 +235,53 @@ public class InventoryCodeTests : IDisposable
     [InlineData("http://localhost:3000", true)]
     [InlineData("http://127.0.0.1:3000", true)]
     [InlineData("http://0.0.0.0:3000", true)]
+    // 回归：后端收到的是 Next.js 服务端转发的请求，Host 是容器服务名。
+    // 曾经真的生成出过 http://backend:8080/i/XX-... 这种谁也扫不开的短链。
+    [InlineData("http://backend:8080", true)]
+    [InlineData("http://web:3000", true)]
     [InlineData("http://8.137.161.160:3000", false)]
     [InlineData("https://team.example.com", false)]
     [InlineData("", true)]
     [InlineData(null, true)]
+    [InlineData("不是个地址", true)]
     public void LooksNonPublic_FlagsAddressesPhonesCannotReach(string? baseUrl, bool expected)
         => Assert.Equal(expected, InventoryService.LooksNonPublic(baseUrl));
+
+    [Theory]
+    [InlineData("http://8.137.161.160:3000", "http://8.137.161.160:3000")]
+    [InlineData("http://8.137.161.160:3000/", "http://8.137.161.160:3000")]   // 尾斜杠去掉
+    [InlineData("https://team.example.com/x/y", "https://team.example.com")]  // 只保留 origin
+    [InlineData("  http://a.b:1  ", "http://a.b:1")]
+    [InlineData("javascript:alert(1)", "")]   // 非 http(s) 一律拒绝
+    [InlineData("//evil.com", "")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    public void NormalizeOrigin_OnlyAcceptsHttpOrigin(string? input, string expected)
+        => Assert.Equal(expected, InventoryService.NormalizeOrigin(input));
+
+    [Fact]
+    public async Task ResolvePublicBaseUrl_ConfiguredWinsOverClientOrigin()
+    {
+        await new SettingsService(new TestScopeFactory(_db)).Set("App:PublicBaseUrl", "http://8.137.161.160:3000/");
+
+        // 配了就听配的，哪怕调用方给的是别的地址
+        Assert.Equal("http://8.137.161.160:3000", await _svc.ResolvePublicBaseUrlAsync("http://localhost:3000"));
+    }
+
+    [Fact]
+    public async Task ResolvePublicBaseUrl_FallsBackToClientOrigin()
+    {
+        // 没配 → 用调用方给的浏览器地址。服务器自己收到的 Host 是容器内网地址，不可信
+        Assert.Equal("http://8.137.161.160:3000", await _svc.ResolvePublicBaseUrlAsync("http://8.137.161.160:3000"));
+    }
+
+    [Fact]
+    public async Task ResolvePublicBaseUrl_NeitherConfiguredNorGiven_ReturnsEmpty()
+    {
+        // 返回空 = "不知道"。调用方必须自己处理，绝不能瞎编一个内网地址
+        Assert.Equal("", await _svc.ResolvePublicBaseUrlAsync(null));
+        Assert.Equal("", await _svc.ResolvePublicBaseUrlAsync("不是地址"));
+    }
 
     // ── 库位编码可以留空 ──
 

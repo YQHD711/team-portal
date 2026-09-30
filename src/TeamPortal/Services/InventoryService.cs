@@ -188,15 +188,28 @@ public class InventoryService
     // ── 二维码短链 ──
 
     /// <summary>
-    /// 决定短链用哪个地址：优先用管理员配的 App:PublicBaseUrl，没配才回退到"当前请求的地址"。
-    /// 这个优先级很重要：管理员完全可能用 localhost 或内网 IP 打开系统去打印标签，
-    /// 那样打出来的二维码队员手机扫不开——所以对外地址必须是可配置的，而不是跟着浏览器走。
+    /// 决定短链用哪个地址。优先级：**管理员配置的 App:PublicBaseUrl** > 调用方给的浏览器地址。
+    ///
+    /// 为什么不用"当前请求的地址"：后端前面的请求是 Next.js 服务端转发的，ctx.Request.Host
+    /// 永远是容器内网地址（曾经生成出过 `http://backend:8080/i/...` 这种谁也扫不开的短链）。
+    /// 内网地址在任何情况下都不该出现在给队员扫的链接里。
+    ///
+    /// 返回空串表示"既没配、调用方也没给"——此时调用方必须自己决定怎么处理，不要瞎编一个。
     /// </summary>
-    public async Task<string> ResolvePublicBaseUrlAsync(string? requestBaseUrl)
+    public async Task<string> ResolvePublicBaseUrlAsync(string? clientOrigin)
     {
         var configured = (await _settings.Get("App:PublicBaseUrl", "")).Trim();
-        var chosen = !string.IsNullOrEmpty(configured) ? configured : (requestBaseUrl ?? "");
-        return chosen.TrimEnd('/');
+        if (!string.IsNullOrEmpty(configured)) return configured.TrimEnd('/');
+        return NormalizeOrigin(clientOrigin);
+    }
+
+    /// <summary>把调用方给的地址规范化；不是合法的 http(s) 绝对地址就返回空串（宁可不给，也不给个错的）</summary>
+    public static string NormalizeOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return "";
+        if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)) return "";
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return "";
+        return $"{uri.Scheme}://{uri.Authority}";
     }
 
     /// <summary>物料短链：{对外地址}/i/{编码}（规范 §6.3）</summary>
@@ -211,12 +224,21 @@ public class InventoryService
         return new QRCoder.SvgQRCode(data).GetGraphic(pixelsPerModule);
     }
 
-    /// <summary>地址看起来不像队员手机能访问的（localhost/回环）——打印标签前用来提醒</summary>
+    /// <summary>
+    /// 地址看起来不像队员手机能访问的——打印标签前用来提醒。命中任意一条即为真：
+    /// 空值 / localhost / 回环 / **单段主机名**（`backend`、`web` 这类容器服务名没有点，
+    /// 手机在公网 DNS 上解析不了）。
+    /// </summary>
     public static bool LooksNonPublic(string? baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl)) return true;
-        var b = baseUrl.ToLowerInvariant();
-        return b.Contains("localhost") || b.Contains("127.0.0.1") || b.Contains("0.0.0.0") || b.Contains("[::1]");
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri)) return true;
+
+        var host = uri.Host.ToLowerInvariant();
+        if (host is "localhost" or "127.0.0.1" or "0.0.0.0" or "::1") return true;
+        // IPv4 字面量有"点"，域名的点更多；单段主机名（无点）= 内网服务名
+        if (!host.Contains('.') && !System.Net.IPAddress.TryParse(host, out _)) return true;
+        return false;
     }
 
 
