@@ -295,6 +295,84 @@ public class MaterialServiceTests
         Assert.Equal("pending_dept", req.Status);
     }
 
+    // ── 借出中（已批准未归还）──
+    // 以前只有"我的领用"和"待审批"，别人的 approved 单人谁也看不见，
+    // 于是规范里"逾期由部长催办"这条流程在系统里没有入口。
+
+    private static void SeedOutstanding(AppDbContext db)
+    {
+        db.InventoryItems.AddRange(
+            new InventoryItem { Id = 1, Name = "桨叶", Grade = "B", Quantity = 8, UnitPrice = 45 },
+            new InventoryItem { Id = 2, Name = "飞控板", Grade = "A", Quantity = 3, UnitPrice = 1200 });
+        var now = DateTime.UtcNow;
+        db.CheckoutRequests.AddRange(
+            // 借出中：2 条，其中桨叶借得最久
+            new CheckoutRequest { Id = 1, InventoryItemId = 1, RequesterUserId = 1, Quantity = 2, Grade = "B", Status = "approved", CreatedAt = now.AddDays(-20), ApprovedAt = now.AddDays(-19) },
+            new CheckoutRequest { Id = 2, InventoryItemId = 2, RequesterUserId = 3, Quantity = 1, Grade = "A", Status = "approved", CreatedAt = now.AddDays(-2), ApprovedAt = now.AddDays(-2) },
+            // 以下都不该出现在"借出中"
+            new CheckoutRequest { Id = 3, InventoryItemId = 1, RequesterUserId = 1, Quantity = 1, Grade = "B", Status = "pending_dept", CreatedAt = now },
+            new CheckoutRequest { Id = 4, InventoryItemId = 2, RequesterUserId = 1, Quantity = 1, Grade = "A", Status = "pending_admin", CreatedAt = now },
+            new CheckoutRequest { Id = 5, InventoryItemId = 1, RequesterUserId = 1, Quantity = 1, Grade = "B", Status = "returned", CreatedAt = now.AddDays(-5), ApprovedAt = now.AddDays(-5), ReturnedAt = now.AddDays(-1) },
+            new CheckoutRequest { Id = 6, InventoryItemId = 1, RequesterUserId = 1, Quantity = 1, Grade = "B", Status = "rejected", CreatedAt = now.AddDays(-4) });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task GetOutstandingCheckouts_OnlyApprovedNotReturned()
+    {
+        var db = CreateContext();
+        SeedOutstanding(db);
+
+        var list = await new MaterialService(db).GetOutstandingCheckouts();
+
+        Assert.Equal(2, list.Count);
+        Assert.All(list, r => Assert.Equal("approved", r.Status));
+        Assert.DoesNotContain(list, r => r.Id == 5); // 已归还的不算借出中
+        Assert.DoesNotContain(list, r => r.Status is "pending_dept" or "pending_admin" or "rejected");
+        // 催办要能直接看到借用人是谁
+        Assert.All(list, r => Assert.NotNull(r.Requester));
+        Assert.All(list, r => Assert.NotNull(r.Item));
+    }
+
+    [Fact]
+    public async Task GetOutstandingCheckouts_OldestFirst()
+    {
+        // 借得越久越该催 → 最早的排最前
+        var db = CreateContext();
+        SeedOutstanding(db);
+
+        var list = await new MaterialService(db).GetOutstandingCheckouts();
+
+        Assert.Equal([1, 2], list.Select(r => r.Id).ToArray());
+    }
+
+    [Theory]
+    [InlineData("桨叶")]        // 按物料名
+    [InlineData("leader")]      // 按借用人（user 3 = leader）
+    [InlineData("requester")]   // 按借用人（user 1 = requester）
+    public async Task GetOutstandingCheckouts_SearchMatchesItemOrBorrower(string search)
+    {
+        var db = CreateContext();
+        SeedOutstanding(db);
+
+        var list = await new MaterialService(db).GetOutstandingCheckouts(search);
+
+        Assert.NotEmpty(list);
+        Assert.All(list, r =>
+            Assert.True(r.Item!.Name.Contains(search) || r.Requester!.Username.Contains(search)));
+    }
+
+    [Fact]
+    public async Task GetOutstandingCheckouts_SearchNoMatch_ReturnsEmpty()
+    {
+        var db = CreateContext();
+        SeedOutstanding(db);
+
+        var list = await new MaterialService(db).GetOutstandingCheckouts("不存在的东西");
+
+        Assert.Empty(list);
+    }
+
     [Fact]
     public async Task Checkin_GradeA_RequiresPhoto()
     {

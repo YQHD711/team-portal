@@ -168,6 +168,28 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
         return await q.OrderByDescending(r => r.CreatedAt).ToListAsync();
     }
 
+    /// <summary>
+    /// 借出中：已批准但尚未归还的领用单（含借用人、物料、数量、借出时间）。
+    /// 之前只有"我的领用"和"待审批"两个视角，别人的 approved 单人谁也看不见，
+    /// 于是"逾期催办"这条流程根本没有入口。可按借用人或物料名搜索。
+    /// </summary>
+    public async Task<List<CheckoutRequest>> GetOutstandingCheckouts(string? search = null)
+    {
+        var q = _db.CheckoutRequests.AsNoTracking()
+            .Include(r => r.Item).Include(r => r.Requester)
+            .Where(r => r.Status == "approved");
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            q = q.Where(r => r.Item!.Name.Contains(s)
+                          || (r.Requester != null && r.Requester.Username.Contains(s)));
+        }
+
+        // 借得越久越该催：按借出时间正序（最早的排最前）
+        return await q.OrderBy(r => r.ApprovedAt ?? r.CreatedAt).ToListAsync();
+    }
+
     public async Task<CheckoutRequest?> GetRequest(int id) =>
         await _db.CheckoutRequests.Include(r => r.Item).Include(r => r.Requester)
             .Include(r => r.DeptApprover).Include(r => r.AdminApprover).Include(r => r.Checkin)

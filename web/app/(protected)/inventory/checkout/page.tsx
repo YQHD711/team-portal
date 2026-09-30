@@ -7,13 +7,17 @@ import { Package } from "lucide-react";
 import Link from "next/link";
 import CheckoutForm from "@/components/inventory/CheckoutForm";
 import CheckoutList from "@/components/inventory/CheckoutList";
+import OutstandingList from "@/components/inventory/OutstandingList";
 import ReturnModal from "@/components/inventory/ReturnModal";
 import type { CheckoutReq, Item } from "@/components/inventory/checkoutTypes";
 
 export default function CheckoutPage() {
-  const [tab, setTab] = useState<"my" | "pending">("my");
+  const [tab, setTab] = useState<"my" | "pending" | "outstanding">("my");
   const [my, setMy] = useState<CheckoutReq[]>([]);
   const [pending, setPending] = useState<CheckoutReq[]>([]);
+  const [outstanding, setOutstanding] = useState<CheckoutReq[]>([]);
+  const [outSearch, setOutSearch] = useState("");
+  const [outRefresh, setOutRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const { user, loading: userLoading } = useCurrentUser();
   const role = user?.role ?? "";
@@ -40,6 +44,17 @@ export default function CheckoutPage() {
     } catch { }
     setLoading(false);
   };
+
+  // 借出中单独拉：搜索词变化时重新查（服务端过滤），不动其它 tab 的数据
+  useEffect(() => {
+    if (userLoading || !isStaff) return;
+    let alive = true;
+    const q = outSearch.trim() ? `?search=${encodeURIComponent(outSearch.trim())}` : "";
+    api.get<CheckoutReq[]>(`/api/material/checkout/outstanding${q}`)
+      .then(list => { if (alive) setOutstanding(list); })
+      .catch(() => { if (alive) setOutstanding([]); });
+    return () => { alive = false; };
+  }, [userLoading, isStaff, outSearch, outRefresh]);
 
   // 等用户信息就绪后再拉数据，保证 isStaff 判断正确（首次进入只拉一次）
   useEffect(() => { if (!userLoading) fetchData(); }, [userLoading, isStaff]);
@@ -122,6 +137,7 @@ export default function CheckoutPage() {
       });
       setCheckinTarget(null);
       fetchData();
+      setOutRefresh(n => n + 1);
     } catch (e: any) { alert(e.message || "归还失败"); }
     finally { setCkSubmitting(false); }
   };
@@ -152,6 +168,11 @@ export default function CheckoutPage() {
             待审批 ({pending.length})
           </button>
         )}
+        {isStaff && (
+          <button onClick={() => setTab("outstanding")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "outstanding" ? "bg-surface shadow-sm" : "text-muted"}`}>
+            借出中 ({outstanding.length})
+          </button>
+        )}
       </div>
 
       {tab === "my" && (
@@ -162,6 +183,10 @@ export default function CheckoutPage() {
       {tab === "pending" && isStaff && (
         <CheckoutList tab="pending" loading={loading} my={my} pending={pending} isStaff={isStaff} isAdmin={isAdmin}
           onCheckin={openCheckin} onApproveDept={approveDept} onApproveAdmin={approveAdmin} onReject={reject} />
+      )}
+
+      {tab === "outstanding" && isStaff && (
+        <OutstandingList items={outstanding} loading={loading} search={outSearch} onSearch={setOutSearch} onCheckin={openCheckin} />
       )}
 
       {/* ── 归还弹窗(A级:管理员/部长操作,上传照片+功能测试说明) ── */}
