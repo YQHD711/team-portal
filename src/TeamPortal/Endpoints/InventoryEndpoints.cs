@@ -19,13 +19,22 @@ public static class InventoryEndpoints
     private static bool IsStaff(string? role) => role == "admin" || role == "部长";
 
     /// <summary>
-    /// 卡片记录本身的修改权：**只有管理员**。
+    /// 物料**修改**权：管理员 + 部长。
     ///
-    /// 归属部门移除后，原来的"部长只能改本部门物料"失去了判定依据；按"物料是队内共享
-    /// 资源、部长只读"的口径统一收成管理员专属。注意这只管**记录**（改名/改价/改编码/
-    /// 删除），库存操作（领用/归还/消耗）仍属岗位职责，走 IsStaff。
+    /// 归属部门移除后，"部长只能改本部门物料"的判定依据没了。改口为：物料是队内共享
+    /// 资源，部长可以订正它的任何字段（名称/单价/编码/库位/等级/数量），也能在物料
+    /// 布局页把物料挂到货位上——这些都是日常且可纠正的操作。
     /// </summary>
-    internal static bool CanEditItem(ClaimsPrincipal user)
+    internal static bool CanModifyItem(ClaimsPrincipal user)
+        => user.FindFirstValue(ClaimTypes.Role) is "admin" or "部长";
+
+    /// <summary>
+    /// 物料**删除**权：仅管理员。
+    ///
+    /// 与修改分开是有意的：改错了还能再改回来，删了就没了（连带它的领用/盘点记录
+    /// 都会失去关联）。所以把它单独留成管理员专属。
+    /// </summary>
+    internal static bool CanDeleteItem(ClaimsPrincipal user)
         => user.FindFirstValue(ClaimTypes.Role) == "admin";
 
     /// <summary>
@@ -183,7 +192,7 @@ public static class InventoryEndpoints
 
         group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
-            if (!CanEditItem(user)) return Results.Problem("仅管理员可修改物料", statusCode: 403);
+            if (!CanModifyItem(user)) return Results.Problem("仅管理员和部长可修改物料", statusCode: 403);
 
             var existing = await svc.GetById(id);
             if (existing is null) return Results.Problem("Not found", statusCode: 404);
@@ -221,7 +230,7 @@ public static class InventoryEndpoints
 
         group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
-            if (!CanEditItem(user)) return Results.Problem("仅管理员可删除物料", statusCode: 403);
+            if (!CanDeleteItem(user)) return Results.Problem("仅管理员可删除物料", statusCode: 403);
 
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Not found", statusCode: 404);
@@ -241,7 +250,7 @@ public static class InventoryEndpoints
         group.MapPost("/{id:int}/photo", async (int id, IFormFile file, InventoryService svc, BaiduNetdiskService baidu, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
             // 照片写进物料卡片，属于"改物料" → 与改/删同权，管理员专属
-            if (!CanEditItem(user)) return Results.Problem("仅管理员可上传零件照片", statusCode: 403);
+            if (!CanModifyItem(user)) return Results.Problem("仅管理员和部长可上传零件照片", statusCode: 403);
 
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
             if (file.Length > 10 * 1024 * 1024) return Results.Problem("Photo too large (max 10MB)", statusCode: 400);

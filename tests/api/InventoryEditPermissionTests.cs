@@ -10,11 +10,12 @@ using TeamPortal.Endpoints;
 namespace api;
 
 /// <summary>
-/// 物料卡片的改/删权限。
+/// 物料的改/删权限。
 ///
-/// 背景：这一层原先按"物料归属部门"判定（部长只能动本部门的）。归属部门移除后
-/// 判定依据没了，按"物料是队内共享资源、部长只读"统一收成**管理员专属**。
-/// 库存操作（领用/归还/消耗）不受影响 —— 那是岗位职责，仍然 staff 可用。
+/// 演变：原先按"物料归属部门"判定（部长只能动本部门的）。归属部门移除后判定依据
+/// 没了，最终定为——**改 = 管理员 + 部长**（物料是队内共享资源，部长要能订正字段，
+/// 也要能在物料布局页把物料归位）；**删 = 仅管理员**（改错了能改回来，删了连带
+/// 领用/盘点记录一起没了）。
 /// </summary>
 public class InventoryEditPermissionTests
 {
@@ -22,18 +23,22 @@ public class InventoryEditPermissionTests
         new(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"));
 
     [Fact]
-    public void CanEditItem_OnlyAdmin()
+    public void Modify_AdminAndHead_Delete_AdminOnly()
     {
-        Assert.True(InventoryEndpoints.CanEditItem(Actor("admin")));
-        Assert.False(InventoryEndpoints.CanEditItem(Actor("部长")));
-        Assert.False(InventoryEndpoints.CanEditItem(Actor("member")));
-        Assert.False(InventoryEndpoints.CanEditItem(new ClaimsPrincipal(new ClaimsIdentity())));
+        Assert.True(InventoryEndpoints.CanModifyItem(Actor("admin")));
+        Assert.True(InventoryEndpoints.CanModifyItem(Actor("部长")));
+        Assert.False(InventoryEndpoints.CanModifyItem(Actor("member")));
+        Assert.False(InventoryEndpoints.CanModifyItem(new ClaimsPrincipal(new ClaimsIdentity())));
+
+        Assert.True(InventoryEndpoints.CanDeleteItem(Actor("admin")));
+        Assert.False(InventoryEndpoints.CanDeleteItem(Actor("部长")));
+        Assert.False(InventoryEndpoints.CanDeleteItem(Actor("member")));
     }
 }
 
 /// <summary>
-/// 端到端确认权限真的落在接口上（只有服务层单测会漏掉接口那一层 —— 短链地址的
-/// bug 就是这么溜过去的）。
+/// 端到端确认权限真的落在接口上（只测服务层会漏掉接口那一层 —— 短链地址的 bug
+/// 就是这么溜过去的）。
 /// </summary>
 public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -43,7 +48,8 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
 
     private sealed record LoginResp(string Token);
 
-    private async Task<(HttpClient Client, int ItemId)> SetupAsync(string dbPath, string username)
+    /// <summary>起一个测试宿主、塞一个指定角色的用户和一件物料，返回已登录的 client</summary>
+    private async Task<(HttpClient Client, int ItemId)> SetupAsync(string dbPath, string username, string role)
     {
         var client = _factory.WithWebHostBuilder(b =>
         {
@@ -57,7 +63,7 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
         int itemId;
         await using (var seed = new AppDbContext(opts))
         {
-            // 部门必须先落库：User.DepartmentId 是 FK，拿未保存的 dept.Id（0）会直接违反约束
+            // 部门必须先落库：User.DepartmentId 是 FK，拿未保存的 dept.Id（0）会违反约束
             var dept = new Department { Name = "飞训部" };
             seed.Departments.Add(dept);
             await seed.SaveChangesAsync();
@@ -66,10 +72,14 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
             {
                 Username = username,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("pw123456"),
-                Role = username == "boss" ? "admin" : "部长",
+                Role = role,
                 DepartmentId = dept.Id,
             });
-            var item = new InventoryItem { Name = "桨叶", Category = "动力系统", Quantity = 5, Grade = "B", UnitPrice = 45 };
+            var item = new InventoryItem
+            {
+                Name = "桨叶", Category = "动力系统", Quantity = 5, Grade = "B", UnitPrice = 45,
+                Code = "PW-PROP-9450-2026-0001", LocationCode = "201-A-3-05",
+            };
             seed.InventoryItems.Add(item);
             await seed.SaveChangesAsync();
             itemId = item.Id;
@@ -83,23 +93,60 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
     }
 
     [Fact]
-    public async Task DepartmentHead_CannotModifyOrDeleteItems()
+    public async Task DepartmentHead_CanChangeNamePriceCodeAndLocation()
+    {
+        // 这是明确要求的能力：部长要能订正名称/单价/编码，库位则是物料布局页归位所用
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-perm-{Guid.NewGuid():N}.db");
+        try
+        {
+            var (client, itemId) = await SetupAsync(dbPath, "head", "部长");
+
+            var put = await client.PutAsJsonAsync($"/api/inventory/{itemId}", new
+            {
+                name = "桨叶（新规格）",
+                unitPrice = 60m,
+                code = "PW-PROP-9450-2026-0002",
+                locationCode = "201-B-1-01",
+            });
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+            var after = await client.GetFromJsonAsync<InventoryItem>($"/api/inventory/{itemId}");
+            Assert.Equal("桨叶（新规格）", after!.Name);
+            Assert.Equal(60m, after.UnitPrice);
+            Assert.Equal("PW-PROP-9450-2026-0002", after.Code);
+            Assert.Equal("201-B-1-01", after.LocationCode);
+        }
+        finally { try { File.Delete(dbPath); } catch { } }
+    }
+
+    [Fact]
+    public async Task DepartmentHead_StillCanCreate()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"tp-perm-{Guid.NewGuid():N}.db");
         try
         {
-            var (client, itemId) = await SetupAsync(dbPath, "head");
+            var (client, _) = await SetupAsync(dbPath, "head", "部长");
 
-            // 部长即使原本是"本部门"的物料，现在也不能改
-            var put = await client.PutAsJsonAsync($"/api/inventory/{itemId}", new { grade = "A" });
-            Assert.Equal(HttpStatusCode.Forbidden, put.StatusCode);
+            var res = await client.PostAsJsonAsync("/api/inventory", new { name = "新件", category = "耗材", quantity = 1 });
+
+            Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        }
+        finally { try { File.Delete(dbPath); } catch { } }
+    }
+
+    [Fact]
+    public async Task DepartmentHead_CannotDeleteItems()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-perm-{Guid.NewGuid():N}.db");
+        try
+        {
+            var (client, itemId) = await SetupAsync(dbPath, "head", "部长");
 
             var del = await client.DeleteAsync($"/api/inventory/{itemId}");
             Assert.Equal(HttpStatusCode.Forbidden, del.StatusCode);
 
-            // 确认真的没改掉
-            var after = await client.GetFromJsonAsync<InventoryItem>($"/api/inventory/{itemId}");
-            Assert.Equal("B", after!.Grade);
+            // 确认物料还在
+            Assert.NotNull(await client.GetFromJsonAsync<InventoryItem>($"/api/inventory/{itemId}"));
         }
         finally { try { File.Delete(dbPath); } catch { } }
     }
@@ -110,7 +157,7 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
         var dbPath = Path.Combine(Path.GetTempPath(), $"tp-perm-{Guid.NewGuid():N}.db");
         try
         {
-            var (client, itemId) = await SetupAsync(dbPath, "boss");
+            var (client, itemId) = await SetupAsync(dbPath, "boss", "admin");
 
             var put = await client.PutAsJsonAsync($"/api/inventory/{itemId}", new { grade = "A" });
             Assert.Equal(HttpStatusCode.OK, put.StatusCode);
@@ -122,15 +169,15 @@ public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplication
     }
 
     [Fact]
-    public async Task Member_CannotCreateItems()
+    public async Task Member_CannotModifyOrDeleteItems()
     {
-        // 新增仍归 staff（部长也能建），队员不行
         var dbPath = Path.Combine(Path.GetTempPath(), $"tp-perm-{Guid.NewGuid():N}.db");
         try
         {
-            var (client, _) = await SetupAsync(dbPath, "head"); // head=部长，先确认部长能建
-            var ok = await client.PostAsJsonAsync("/api/inventory", new { name = "新件", category = "耗材", quantity = 1 });
-            Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+            var (client, itemId) = await SetupAsync(dbPath, "member", "member");
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/inventory/{itemId}", new { grade = "A" })).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"/api/inventory/{itemId}")).StatusCode);
         }
         finally { try { File.Delete(dbPath); } catch { } }
     }
