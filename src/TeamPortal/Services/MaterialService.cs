@@ -28,6 +28,10 @@ public class MaterialService
         var item = await _db.InventoryItems.FindAsync(itemId)
             ?? throw new InvalidOperationException("零件不存在");
         if (quantity <= 0) throw new InvalidOperationException("数量必须大于0");
+        // 已报损的件不能领用。此前只校验数量，broken 状态的物料照样能被正常领走
+        // （报损只改状态不改数量），等于"报损"没有任何拦截效果。
+        if (item.Status == "broken")
+            throw new InvalidOperationException("该物料已报损，不能领用。请先由管理员完成定责/维修，或经盘点入账后恢复可用");
         if (item.Quantity < quantity) throw new InvalidOperationException("库存不足");
 
         // 审批流转规则(以申请人所在部门为准):

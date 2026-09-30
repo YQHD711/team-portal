@@ -63,6 +63,22 @@ export default function InventoryFormModal({ editItem, form, setForm, rooms, fal
               )}
             </div>
           </div>
+          {form.unitPrice <= 0 && (
+            <div data-testid="unit-price-warning"
+              className={`rounded-lg border-l-4 px-3 py-2 text-xs leading-relaxed ${
+                form.grade === "C"
+                  ? "border-danger bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300"
+                  : "border-warning bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              }`}>
+              {form.grade === "C" ? (
+                <>⚠️ <strong>单价为空，且等级是 C</strong>：C 级物料<strong>无需审批、可被任何人自助领走</strong>，
+                  归还也没有强制留痕。贵重件请填真实单价（≥¥1000 自动判 A 级），或手动把等级改成 B 级以上。</>
+              ) : (
+                <>⚠️ <strong>单价为空</strong>：无法计入"库存总价值"，也无法自动校验等级。
+                  建议补填实际采购价（见《物料管理规范》第 3 节）。</>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-sm font-medium mb-1">归属部门</label><select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"><option value={0}>— 无 —</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
             <div><label className="block text-sm font-medium mb-1">项目标签</label><input value={form.projectTag} onChange={e => setForm({ ...form, projectTag: e.target.value })} placeholder="如: CADC2026" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" /></div>
