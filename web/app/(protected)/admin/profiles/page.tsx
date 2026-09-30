@@ -7,7 +7,7 @@ import { useCurrentUser } from "@/lib/hooks";
 import { User, Search, Loader2, BadgeCheck, Upload } from "lucide-react";
 
 interface UserInfo { id: number; username: string; role: string; department: string | null; departmentId: number | null; invitedBy: string | null; }
-interface ProfileBrief { userId: number; skills: string | null; }
+interface ProfileBrief { userId: number; slug: string | null; skills: string | null; }
 interface Certification { id: number; userId: number; certName: string; level: string; status: string; }
 interface Dept { id: number; name: string; }
 
@@ -53,6 +53,8 @@ export default function AdminProfilesPage() {
   }, []);
 
   const skillsByUser = new Map(profiles.map(p => [p.userId, p.skills ?? null]));
+  // 档案页链接用公开 slug（不是自增 ID）；档案列表里已经带了，不用再查一次
+  const slugByUser = new Map(profiles.map(p => [p.userId, p.slug]));
   const passedCertsByUser = new Map<number, Certification[]>();
   for (const c of certs) {
     if (c.status !== "passed") continue;
@@ -114,7 +116,7 @@ export default function AdminProfilesPage() {
               const skills = (skillsByUser.get(u.id) || "").split(",").map(s => s.trim()).filter(Boolean);
               const certs = passedCertsByUser.get(u.id) || [];
               return (
-                <Link key={u.id} href={`/admin/profiles/${u.id}`}
+                <Link key={u.id} href={`/admin/profiles/${slugByUser.get(u.id) ?? ""}`}
                   className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">

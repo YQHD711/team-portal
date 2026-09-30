@@ -54,6 +54,7 @@ export default function OrganizationPage() {
     examPassesByUser.set(p.userId, list);
   }
   const skillsByUser = new Map(profiles.map(p => [p.userId, p.skills ?? null]));
+  const slugByUser = new Map(profiles.map(p => [p.userId, p.slug]));
   const examsByDept = new Map<number, ExamBrief[]>();
   for (const e of exams) {
     const list = examsByDept.get(e.departmentId) || [];
@@ -114,7 +115,7 @@ export default function OrganizationPage() {
       ) : tab === "org" ? (
         <OrgTab users={users} depts={depts} isAdmin={isAdmin} ownDeptId={ownDeptId}
           passedCertsByUser={passedByUser}
-          examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} examsByDept={examsByDept} onChanged={refresh} />
+          examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser} examsByDept={examsByDept} onChanged={refresh} />
       ) : tab === "invites" ? (
         <InvitesTab depts={visibleDepts} onChanged={refresh} />
       ) : (

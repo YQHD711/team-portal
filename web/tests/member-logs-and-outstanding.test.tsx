@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import AdminProfileDetailPage from "@/app/(protected)/admin/profiles/[userId]/page";
+import AdminProfileDetailPage from "@/app/(protected)/admin/profiles/[slug]/page";
 import CheckoutPage from "@/app/(protected)/inventory/checkout/page";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
@@ -10,10 +10,11 @@ vi.mock("@/lib/api", () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock("@/lib/hooks", () => ({ useCurrentUser: vi.fn() }));
+// 档案页的 URL 参数是公开 slug，不是自增 ID
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ userId: "7" }),
+  useParams: () => ({ slug: "u_abc123def456" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
-  usePathname: () => "/admin/profiles/7",
+  usePathname: () => "/admin/profiles/u_abc123def456",
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -25,6 +26,7 @@ const leader = { id: 3, username: "leader", role: "部长", department: "飞训�
 
 const profile = {
   id: 9, userId: 7, username: "王睿翔", role: "member", department: "飞训部", departmentId: 1,
+  slug: "u_abc123def456",
   level: "中级", totalFlightHours: 12, firstFlightDate: null,
   bio: null, emergencyContact: null, emergencyPhone: null, flightTypes: null, skills: null,
   updatedAt: "2026-09-01T00:00:00Z", trainingRecords: [], competitionRecords: [],
@@ -41,7 +43,7 @@ const opLogs = {
 
 function setupProfileApi() {
   mockedGet.mockImplementation(async (endpoint: string) => {
-    if (endpoint.startsWith("/api/admin/profiles/7")) return profile;
+    if (endpoint.startsWith("/api/admin/profiles/u_abc123def456")) return profile;
     if (endpoint.startsWith("/api/admin/logs/operations")) return opLogs;
     if (endpoint === "/api/admin/departments") return [];
     return {};
@@ -87,7 +89,7 @@ describe("队员档案 · 操作日志", () => {
 
   it("没有记录时给出空状态而不是空白", async () => {
     mockedGet.mockImplementation(async (endpoint: string) => {
-      if (endpoint.startsWith("/api/admin/profiles/7")) return profile;
+      if (endpoint.startsWith("/api/admin/profiles/u_abc123def456")) return profile;
       if (endpoint.startsWith("/api/admin/logs/operations")) return { total: 0, items: [] };
       return {};
     });

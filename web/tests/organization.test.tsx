@@ -11,7 +11,7 @@ const member: OrgUser = { id: 4, username: "测试队员", role: "member", depar
 function renderTab(isAdmin: boolean, ownDeptId: number | null, depts: Dept[], users: OrgUser[]) {
   return render(
     <OrgTab users={users} depts={depts} isAdmin={isAdmin} ownDeptId={ownDeptId}
-      passedCertsByUser={new Map()} examPassesByUser={new Map()} skillsByUser={new Map()} examsByDept={new Map()}
+      passedCertsByUser={new Map()} examPassesByUser={new Map()} skillsByUser={new Map()} slugByUser={new Map()} examsByDept={new Map()}
       onChanged={() => {}} />
   );
 }

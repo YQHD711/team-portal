@@ -16,7 +16,11 @@ import { type CompetitionRecord, type FullProfile, type TrainingRecord } from "@
 export default function AdminProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const userId = Number(params.userId);
+  // URL 里是**公开 slug**（不可枚举、导库重建也不会指错人），不是自增 ID。
+  // 子资源（培训/参赛/认证/日志）仍用内部 userId —— 它们不出现在地址栏，
+  // 而且是从档案响应里拿到的，不用再查一次。
+  const slug = String(params.slug ?? "");
+  const [userId, setUserId] = useState<number | null>(null);
 
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,8 +73,9 @@ export default function AdminProfileDetailPage() {
   const [certsLoading, setCertsLoading] = useState(false);
 
   const fetchProfile = () => {
-    api.get<FullProfile>(`/api/admin/profiles/${userId}`).then(data => {
+    api.get<FullProfile>(`/api/admin/profiles/${slug}`).then(data => {
       setProfile(data);
+      setUserId(data.userId);
       setLevel(data.level);
       setFlightHours(String(data.totalFlightHours));
       setFirstFlight(data.firstFlightDate ? data.firstFlightDate.slice(0, 10) : "");
@@ -85,7 +90,7 @@ export default function AdminProfileDetailPage() {
     }).catch(() => router.push("/admin/profiles")).finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchProfile(); }, [userId]);
+  useEffect(() => { fetchProfile(); }, [slug]);
 
   useEffect(() => { api.get<{ id: number; name: string }[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
 
@@ -101,6 +106,7 @@ export default function AdminProfileDetailPage() {
 
   // Save profile info
   const saveInfo = async () => {
+    if (userId === null) return;
     setSaving(true);
     await api.put(`/api/admin/profiles/${userId}`, {
       level, flightHours: parseFloat(flightHours) || 0,
@@ -120,7 +126,7 @@ export default function AdminProfileDetailPage() {
 
   // Save training
   const saveTraining = async () => {
-    if (!trainCourse) return;
+    if (!trainCourse || userId === null) return;
     setSaving(true);
     const body = { courseName: trainCourse, score: parseFloat(trainScore) || null, examDate: trainDate, examiner: trainExaminer || null, notes: trainNotes || null };
     if (editTrainId) {
@@ -134,7 +140,7 @@ export default function AdminProfileDetailPage() {
   };
 
   const deleteTraining = async (id: number) => {
-    if (!confirm("确定删除？")) return;
+    if (userId === null || !confirm("确定删除？")) return;
     await api.delete(`/api/admin/profiles/${userId}/training/${id}`);
     fetchProfile();
   };
@@ -152,7 +158,7 @@ export default function AdminProfileDetailPage() {
 
   // Save competition
   const saveCompetition = async () => {
-    if (!compName) return;
+    if (!compName || userId === null) return;
     setSaving(true);
     const body = { competitionName: compName, date: compDate, event: compEvent || null, ranking: compRanking || null, certificate: compCert || null, notes: compNotes || null };
     if (editCompId) {
@@ -166,7 +172,7 @@ export default function AdminProfileDetailPage() {
   };
 
   const deleteCompetition = async (id: number) => {
-    if (!confirm("确定删除？")) return;
+    if (userId === null || !confirm("确定删除？")) return;
     await api.delete(`/api/admin/profiles/${userId}/competitions/${id}`);
     fetchProfile();
   };
@@ -257,7 +263,7 @@ export default function AdminProfileDetailPage() {
       )}
 
       {/* Tab: Operation logs (admin only) */}
-      {tab === "logs" && me?.role === "admin" && (
+      {tab === "logs" && me?.role === "admin" && userId !== null && (
         <ProfileLogsTab userId={userId} username={profile.username} />
       )}
     </div>

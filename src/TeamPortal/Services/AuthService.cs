@@ -80,6 +80,7 @@ public class AuthService
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "member",
+            Slug = Slug.NewUser(),
             DepartmentId = deptId,
             InvitedByUserId = invitedById,
             CreatedAt = DateTime.UtcNow,
@@ -182,7 +183,8 @@ public class AuthService
             {
                 Username = username,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(pwd),
-                Role = "member"
+                Role = "member",
+                Slug = Slug.NewUser()
             };
 
             // Optional: department from column 2
@@ -306,6 +308,7 @@ public class AuthService
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "admin",
+            Slug = Slug.NewUser(),
             CreatedAt = DateTime.UtcNow,
         };
 

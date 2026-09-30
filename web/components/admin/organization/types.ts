@@ -7,6 +7,8 @@ export interface OrgUser {
 
 export interface ProfileBrief {
   id: number; userId: number; username: string;
+  /** 公开 URL 标识：档案页链接用 /admin/profiles/{slug}（不用自增 ID） */
+  slug: string | null;
   department: string | null; skills: string | null;
 }
 

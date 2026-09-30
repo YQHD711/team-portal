@@ -125,10 +125,15 @@ public static class ProfileEndpoints
             return Results.Ok(await svc.ListAllProfiles(role == "admin" ? null : deptId));
         });
 
-        adminGroup.MapGet("/{userId:int}", async (int userId, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
+        // 按公开 slug 取档案（URL 里不再出现自增 ID）。
+        // 子资源（培训/参赛/认证）仍用内部 userId —— 它们不出现在浏览器地址栏，
+        // 且调用方本来就已经通过这里拿到了 userId。
+        adminGroup.MapGet("/{slug}", async (string slug, ClaimsPrincipal user, AppDbContext db, ProfileService svc) =>
         {
-            if (await RequireCanViewAsync(user, db, userId) is { } denied) return denied;
-            var profile = await svc.GetFullProfile(userId);
+            var userId = await svc.GetUserIdBySlug(slug);
+            if (userId is null) return Results.Problem("档案不存在", statusCode: 404);
+            if (await RequireCanViewAsync(user, db, userId.Value) is { } denied) return denied;
+            var profile = await svc.GetFullProfile(userId.Value);
             return profile is not null ? Results.Ok(profile) : Results.Problem("档案不存在", statusCode: 404);
         });
 

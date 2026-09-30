@@ -41,7 +41,7 @@ public class AdminService
             var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == currentDept);
             deptId = dept?.Id;
         }
-        var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", DepartmentId = deptId };
+        var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", Slug = Slug.NewUser(), DepartmentId = deptId };
         _db.Users.Add(user); await _db.SaveChangesAsync();
         _log.Info("admin", $"User created: {username}");
         return user;

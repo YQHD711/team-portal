@@ -2,6 +2,8 @@
 
 export interface FullProfile {
   id: number; userId: number; username: string; role: string; department: string | null; departmentId: number | null;
+  /** 公开 URL 标识（档案页地址栏用它，不是 userId） */
+  slug: string | null;
   level: string; totalFlightHours: number; firstFlightDate: string | null;
   bio: string | null; emergencyContact: string | null; emergencyPhone: string | null; flightTypes: string | null; skills: string | null; updatedAt: string;
   trainingRecords: TrainingRecord[]; competitionRecords: CompetitionRecord[];
