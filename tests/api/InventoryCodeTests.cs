@@ -193,6 +193,22 @@ public class InventoryCodeTests : IDisposable
         Assert.Null(await _svc.GetByCode(""));
     }
 
+    // ── 库存页搜索框也要能搜编码（扫码枪/粘贴编码后直接搜）──
+
+    [Fact]
+    public async Task GetAll_SearchMatchesCode_CaseInsensitively()
+    {
+        await _svc.Create("3S 3300mAh 电池", "电池电源", 4, code: "BAT-LIPO-6S3300MAH-2026-0007");
+
+        // 库里存的是全大写，而 EF 把 Contains 翻译成大小写敏感的 instr()，
+        // 所以这里刻意用小写搜 —— 手输与扫码枪都可能是任意大小写
+        Assert.Single(await _svc.GetAll("bat-lipo", null));
+        Assert.Single(await _svc.GetAll("6s3300mah-2026-0007", null));
+        // 原来的按名称搜不受影响
+        Assert.Single(await _svc.GetAll("电池", null));
+        Assert.Empty(await _svc.GetAll("不存在的编码", null));
+    }
+
     // ── 库位编码可以留空 ──
 
     [Fact]

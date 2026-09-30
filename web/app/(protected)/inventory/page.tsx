@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
-import { AlertTriangle, Plus, Upload } from "lucide-react";
+import { AlertTriangle, Plus, Upload, ScanLine } from "lucide-react";
 import InventoryFilters from "@/components/inventory/InventoryFilters";
 import InventoryTable from "@/components/inventory/InventoryTable";
 import InventoryFormModal from "@/components/inventory/InventoryFormModal";
@@ -18,6 +18,7 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
 });
 import { type Department, type InventoryFormState, type InventoryItem, type Transaction, emptyInventoryForm } from "@/components/inventory/inventoryTypes";
 import ItemLabelModal from "@/components/inventory/ItemLabelModal";
+import ScanQueryModal from "@/components/inventory/ScanQueryModal";
 import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
 import { useLowStock } from "@/components/inventory/LowStockProvider";
 
@@ -35,6 +36,7 @@ export default function InventoryPage() {
   const [genCodeLoading, setGenCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState("");
   const [labelItem, setLabelItem] = useState<InventoryItem | null>(null);
+  const [showScan, setShowScan] = useState(false);
   /** 房间 + 平面图：库位编码选择器据此列出「货架/柜子/工作台」与层位 */
   const [rooms, setRooms] = useState<RoomLayoutOption[]>([]);
 
@@ -207,6 +209,7 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div><h1 className="text-2xl font-bold">零件库存</h1><p className="text-sm text-muted">{items.length} 种 · 共 {totalItems} 件</p></div>
         <div className="flex gap-2">
+          <button onClick={() => setShowScan(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-surface-hover"><ScanLine className="h-4 w-4" />扫码查询</button>
           {(role === "admin" || role === "部长") && <>
             <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover shadow-sm"><Plus className="h-4 w-4" />添加零件</button>
             <label className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>
@@ -264,6 +267,9 @@ export default function InventoryPage() {
       {labelItem && (
         <ItemLabelModal item={labelItem} origin={typeof window === "undefined" ? "" : window.location.origin} onClose={() => setLabelItem(null)} />
       )}
+
+      {/* 二维码查询：扫码 / 输码 / 扫码枪 */}
+      {showScan && <ScanQueryModal onClose={() => setShowScan(false)} />}
     </div>
   );
 }
