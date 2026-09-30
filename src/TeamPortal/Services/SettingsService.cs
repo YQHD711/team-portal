@@ -139,6 +139,7 @@ public class SettingsService
             new() { Key = "Brand:Theme", Value = "indigo", Category = "品牌", Description = "品牌色调：indigo(靛蓝)/sky(天青)/warm(暖橙)" },
             new() { Key = "Inventory:LowStockGrade", Value = "C", Category = "库存", Description = "仪表盘「低库存提醒」限定的等级（A/B/C）；库存页高亮不过滤等级" },
             new() { Key = "Inventory:LowStockThreshold", Value = "5", Category = "库存", Description = "低库存阈值：数量 < 此值即视为不足，同时驱动仪表盘提醒、库存页高亮与库存预警通知（前端经 GET /api/inventory/meta 取值）" },
+            new() { Key = "App:PublicBaseUrl", Value = "", Category = "系统参数", Description = "对外访问地址（如 http://8.137.161.160:3000）：物料二维码短链按 {地址}/i/{编码} 生成。留空则回退成当前浏览器地址——用 localhost 打开并打印标签会让二维码扫不开，正式贴标前请设好这一项" },
         };
 
         var existing = await db.SystemSettings.ToListAsync();

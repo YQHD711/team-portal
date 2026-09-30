@@ -71,13 +71,20 @@ public static class InventoryEndpoints
     {
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
 
-        // 前端需要的库存规则（低库存阈值/提醒等级）：与仪表盘、通知共用同一个设置项，
-        // 前端不再硬编码阈值 —— 管理员在设置页改一次，三处同时生效。
-        group.MapGet("/meta", async (InventoryService svc, SettingsService settings) => Results.Ok(new
+        // 前端需要的库存规则（低库存阈值/提醒等级）与二维码短链的对外地址。
+        // 对外地址由后端统一下发，前端不再自己拼 window.location.origin ——
+        // 管理员用 localhost 打开时，那种拼法打出来的二维码队员扫不开。
+        group.MapGet("/meta", async (InventoryService svc, SettingsService settings, HttpContext ctx) =>
         {
-            lowStockThreshold = await svc.GetLowStockThresholdAsync(),
-            lowStockGrade = await settings.Get("Inventory:LowStockGrade", "C"),
-        }));
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
+            return Results.Ok(new
+            {
+                lowStockThreshold = await svc.GetLowStockThresholdAsync(),
+                lowStockGrade = await settings.Get("Inventory:LowStockGrade", "C"),
+                publicBaseUrl = baseUrl,
+                publicBaseLooksLocal = InventoryService.LooksNonPublic(baseUrl),
+            });
+        });
 
         group.MapGet("/", async (string? search, string? category, InventoryService svc) =>
         {
@@ -100,12 +107,27 @@ public static class InventoryEndpoints
 
         // 自动生号预览：前缀按分类、年份取采购年、序号取该池的下一个。
         // 物品号与型号必须由人给（系统无法从名称可靠推出），所以这里要求传全。
-        group.MapGet("/next-code", async (string? category, string? itemNo, string? model, int? year, InventoryService svc) =>
+        group.MapGet("/next-code", async (string? category, string? itemNo, string? model, int? year, InventoryService svc, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(itemNo) || string.IsNullOrWhiteSpace(model))
                 return Results.Problem("请先填写物品号与型号，再生成编码", statusCode: 400);
             var code = await svc.NextCodeAsync(category ?? "", itemNo, model, year);
-            return Results.Ok(new { code, prefix = InventoryService.CategoryPrefix(category) });
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
+            // 编码一生成，短链就一起给出来：填单人不用保存后再去列表里找
+            return Results.Ok(new
+            {
+                code,
+                prefix = InventoryService.CategoryPrefix(category),
+                shortUrl = InventoryService.BuildShortUrl(baseUrl, code),
+            });
+        });
+
+        // 服务端渲染的二维码（SVG）：浏览器之外的使用方（打印、导出、MCP）可直接取
+        group.MapGet("/by-code/{code}/qr.svg", async (string code, InventoryService svc, HttpContext ctx) =>
+        {
+            var baseUrl = await svc.ResolvePublicBaseUrlAsync($"{ctx.Request.Scheme}://{ctx.Request.Host}");
+            var svg = InventoryService.BuildQrSvg(InventoryService.BuildShortUrl(baseUrl, code));
+            return Results.Content(svg, "image/svg+xml");
         });
 
         group.MapPost("/", async (CreateItemRequest req, ClaimsPrincipal user, InventoryService svc, AppDbContext db, LogService log, HttpContext ctx) =>

@@ -209,6 +209,39 @@ public class InventoryCodeTests : IDisposable
         Assert.Empty(await _svc.GetAll("不存在的编码", null));
     }
 
+    // ── 二维码短链（服务端生成，不跟浏览器地址走）──
+
+    [Fact]
+    public void BuildShortUrl_JoinsWithoutDoubleSlash_AndUppercasesCode()
+    {
+        Assert.Equal("http://8.137.161.160:3000/i/BAT-LIPO-6S3300MAH-2026-0007",
+            InventoryService.BuildShortUrl("http://8.137.161.160:3000/", "bat-lipo-6s3300mah-2026-0007"));
+        Assert.Equal("https://team.example.com/i/CS-SCREW-M3-2026-0001",
+            InventoryService.BuildShortUrl("https://team.example.com", "CS-SCREW-M3-2026-0001"));
+    }
+
+    [Fact]
+    public void BuildQrSvg_ProducesSvgContainingNothingButTheCode()
+    {
+        var svg = InventoryService.BuildQrSvg("http://x/i/BAT-2026-0001");
+
+        Assert.StartsWith("<svg", svg.TrimStart());
+        Assert.Contains("</svg>", svg);
+        // 二维码是图形，不该把原文当文本塞进 SVG（否则等于没编码）
+        Assert.DoesNotContain("BAT-2026-0001", svg);
+    }
+
+    [Theory]
+    [InlineData("http://localhost:3000", true)]
+    [InlineData("http://127.0.0.1:3000", true)]
+    [InlineData("http://0.0.0.0:3000", true)]
+    [InlineData("http://8.137.161.160:3000", false)]
+    [InlineData("https://team.example.com", false)]
+    [InlineData("", true)]
+    [InlineData(null, true)]
+    public void LooksNonPublic_FlagsAddressesPhonesCannotReach(string? baseUrl, bool expected)
+        => Assert.Equal(expected, InventoryService.LooksNonPublic(baseUrl));
+
     // ── 库位编码可以留空 ──
 
     [Fact]

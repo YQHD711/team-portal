@@ -133,7 +133,8 @@ describe("零件库存页", () => {
 
   it("物料编码：物品号/型号填好后可自动生成，也能直接手填", async () => {
     mockedGet.mockImplementation(async (endpoint: string) => {
-      if (endpoint.startsWith("/api/inventory/next-code")) return { code: "BAT-LIPO-6S3300MAH-2026-0007" };
+      if (endpoint.startsWith("/api/inventory/next-code"))
+        return { code: "BAT-LIPO-6S3300MAH-2026-0007", shortUrl: "http://8.137.161.160:3000/i/BAT-LIPO-6S3300MAH-2026-0007" };
       if (endpoint.startsWith("/api/inventory")) return items;
       if (endpoint === "/api/admin/departments") return [];
       if (endpoint === "/api/storage/layouts") return [];
@@ -161,6 +162,10 @@ describe("零件库存页", () => {
     expect(calledWith).toContain("model=6S3300MAH");
 
     await waitFor(() => expect(codeInput).toHaveValue("BAT-LIPO-6S3300MAH-2026-0007"));
+
+    // 编码一生成，二维码与短链当场就给出来，不用保存后再去列表里找
+    expect(await screen.findByTestId("generated-qr")).toBeInTheDocument();
+    expect(screen.getByText("http://8.137.161.160:3000/i/BAT-LIPO-6S3300MAH-2026-0007")).toBeInTheDocument();
   });
 
   it("物料编码：没填物品号/型号就点自动生成会被拦下并说明原因", async () => {
@@ -211,5 +216,51 @@ describe("零件库存页", () => {
 
     await screen.findAllByText("桨叶");
     expect(screen.queryAllByTitle("物料标签（二维码）")).toHaveLength(0);
+  });
+
+  // 回归：短链曾经用 window.location.origin 拼，管理员用 localhost 打开去打印标签，
+  // 印出来的二维码队员手机根本扫不开。现在地址由后端 App:PublicBaseUrl 下发。
+  it("二维码短链用后端下发的对外地址，而不是浏览器地址", async () => {
+    const withCode = [{ ...items[0], code: "BAT-LIPO-6S3300MAH-2026-0007" }];
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory/meta"))
+        return { lowStockThreshold: 5, lowStockGrade: "C", publicBaseUrl: "http://8.137.161.160:3000", publicBaseLooksLocal: false };
+      if (endpoint.startsWith("/api/inventory")) return withCode;
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
+
+    expect(await screen.findByText("http://8.137.161.160:3000/i/BAT-LIPO-6S3300MAH-2026-0007")).toBeInTheDocument();
+    // jsdom 的地址是 localhost，绝不该出现在标签上
+    expect(screen.queryByText(/localhost/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("local-base-warning")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制短链" })).toBeInTheDocument();
+  });
+
+  it("对外地址还是本机时，打印前明确警告二维码扫不开", async () => {
+    const withCode = [{ ...items[0], code: "BAT-LIPO-6S3300MAH-2026-0007" }];
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory/meta"))
+        return { lowStockThreshold: 5, lowStockGrade: "C", publicBaseUrl: "http://localhost:3000", publicBaseLooksLocal: true };
+      if (endpoint.startsWith("/api/inventory")) return withCode;
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+
+    await screen.findAllByText("桨叶");
+    fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
+
+    const warn = await screen.findByTestId("local-base-warning");
+    expect(warn).toHaveTextContent(/扫不开/);
+    expect(warn).toHaveTextContent(/对外访问地址/);
   });
 });
