@@ -17,6 +17,28 @@ public static class AiEndpoints
 
     public static void MapAiEndpoints(this WebApplication app)
     {
+        // ── 模型发现（管理员）：直接打服务商官方的 GET /models ──
+        //
+        // 为什么要它：模型名以前是硬编码的，官方一换名（deepseek-chat → deepseek-flash /
+        // deepseek-v4-pro）配置就悄悄失效，而界面上看不出来。改成一键拉取现行列表，
+        // 顺带把上下文长度、最大输出、思考档位这些元信息也显示出来。
+        var admin = app.MapGroup("/api/admin/ai").RequireAuthorization("AdminOnly");
+
+        admin.MapGet("/models", async (AiClient ai) =>
+        {
+            var opt = await ai.ResolveAsync();
+            var (ok, error, models) = await ai.ListModelsAsync(opt);
+            return Results.Ok(new
+            {
+                ok,
+                error,
+                provider = opt.Provider == AiProvider.DeepSeek ? "deepseek" : "openai",
+                baseUrl = opt.BaseUrl,
+                currentModel = opt.Model,
+                models,
+            });
+        });
+
         // 限流:AI 调用直接产生 DeepSeek 费用,必须挡住单账号刷量
         var group = app.MapGroup("/api/ai").RequireAuthorization().RequireRateLimiting("default");
 

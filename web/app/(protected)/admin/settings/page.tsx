@@ -36,6 +36,10 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState("");
   // 品牌主色草稿（原生 color input 需受控值，留空用主题默认）
   const [colorDraft, setColorDraft] = useState("#5e6ad2");
+  // 从服务商拉取到的可用模型（GET /models）。元信息一并显示，省得去翻官方文档。
+  const [aiModels, setAiModels] = useState<{ id: string; name?: string | null; contextWindow?: number | null; maxOutputTokens?: number | null; effortLevels?: string[] }[]>([]);
+  const [aiModelsMsg, setAiModelsMsg] = useState("");
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
 
   useEffect(() => {
     api.get<SettingsMap>("/api/admin/settings")
@@ -46,6 +50,27 @@ export default function SettingsPage() {
 
   // 已存储的品牌主色 —— 同步到 color input 草稿（hooks 必须位于早期 return 之前）
   const storedColor = settings["品牌"]?.find(s => s.key === "Brand:PrimaryColor")?.value ?? "";
+
+  /**
+   * 拉取服务商现行可用模型（GET /models）。
+   * 模型名以前是硬编码的，官方一换名配置就悄悄失效且界面看不出来 ——
+   * 这里直接问服务商要现行列表，并把上下文长度/输出上限/思考档位显示出来。
+   */
+  const fetchAiModels = async () => {
+    setAiModelsLoading(true); setAiModelsMsg("");
+    try {
+      const res = await api.get<{
+        ok: boolean; error: string | null; baseUrl: string;
+        models: { id: string; name?: string | null; contextWindow?: number | null; maxOutputTokens?: number | null; effortLevels?: string[] }[];
+      }>("/api/admin/ai/models");
+      setAiModels(res.models || []);
+      setAiModelsMsg(res.ok
+        ? `✅ 从 ${res.baseUrl} 获取到 ${res.models.length} 个模型`
+        : `❌ ${res.error || "获取失败"}`);
+    } catch (e) {
+      setAiModelsMsg(`❌ ${e instanceof Error ? e.message : "获取失败"}`);
+    } finally { setAiModelsLoading(false); }
+  };
   useEffect(() => {
     if (storedColor) setColorDraft(storedColor);
   }, [storedColor]);
@@ -236,6 +261,15 @@ export default function SettingsPage() {
                             className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
                         )}
+                        {s.key === "AI:ModelName" && (
+                          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                            <button type="button" onClick={fetchAiModels} disabled={aiModelsLoading}
+                              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover disabled:opacity-50">
+                              {aiModelsLoading ? "获取中…" : "获取可用模型"}
+                            </button>
+                            {aiModelsMsg && <span className="text-xs text-muted">{aiModelsMsg}</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -246,10 +280,28 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {/* 模型名建议（可自由输入，这里只提供候选） */}
+      {/* 模型名建议：优先用刚从服务商拉到的现行列表，没有则用内置候选（仍可自由输入，模型名由上游决定） */}
       <datalist id={MODEL_SUGGESTIONS_ID}>
-        {MODEL_SUGGESTIONS.map(m => <option key={m} value={m} />)}
+        {(aiModels.length > 0 ? aiModels.map(m => m.id) : MODEL_SUGGESTIONS).map(m => <option key={m} value={m} />)}
       </datalist>
+
+      {/* 拉到的模型元信息：上下文长度/最大输出/思考档位 —— 省得再去翻官方文档 */}
+      {aiModels.some(m => m.contextWindow || m.maxOutputTokens) && (
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h3 className="mb-2 font-semibold text-sm">服务商报告的模型信息</h3>
+          <div className="space-y-1 text-xs text-muted">
+            {aiModels.filter(m => m.contextWindow || m.maxOutputTokens).map(m => (
+              <div key={m.id} className="font-mono">
+                <span className="text-zinc-700 dark:text-zinc-300">{m.id}</span>
+                {m.name ? ` （${m.name}）` : ""}
+                {m.contextWindow ? ` · 上下文 ${m.contextWindow.toLocaleString()}` : ""}
+                {m.maxOutputTokens ? ` · 最大输出 ${m.maxOutputTokens.toLocaleString()}` : ""}
+                {m.effortLevels?.length ? ` · 思考档位 ${m.effortLevels.join("/")}` : ""}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* System info footer */}
       <div className="rounded-2xl border border-border bg-surface p-5">

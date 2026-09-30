@@ -13,7 +13,7 @@ public partial class SystemAgentService
     /// <summary>单次 DeepSeek chat/completions 调用；网络层失败直接返回给用户可读的 Error。</summary>
     private async Task<ApiReply> PostChatAsync(string json, string apiKey, string baseUrl, int reqTimeoutSec, CancellationToken outer, string userName)
     {
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
+        var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(baseUrl, "/chat/completions"))
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };

@@ -140,7 +140,7 @@ public partial class WikiGeneratorService
                 };
 
                 var json = JsonSerializer.Serialize(payload, JsonOpts);
-                var req = new HttpRequestMessage(HttpMethod.Post, $"{aiUrl}/v1/chat/completions")
+                var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(aiUrl, "/chat/completions"))
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };

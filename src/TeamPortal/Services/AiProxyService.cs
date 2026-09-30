@@ -9,8 +9,7 @@ namespace TeamPortal.Services;
 /// </summary>
 public class AiProxyService
 {
-    private readonly HttpClient _http;
-    private readonly IConfiguration _config;
+    private readonly AiClient _ai;
     private readonly SettingsService _settings;
     private readonly KnowledgeSearchService _search;
 
@@ -45,10 +44,9 @@ public class AiProxyService
     private async Task<string> ResolveSystemPrompt() =>
         SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
-    public AiProxyService(HttpClient http, IConfiguration config, SettingsService settings, KnowledgeSearchService search)
+    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search)
     {
-        _http = http;
-        _config = config;
+        _ai = ai;
         _settings = settings;
         _search = search;
     }
@@ -58,9 +56,8 @@ public class AiProxyService
 
     public async Task<Stream?> ChatStream(string question, SearchScope scope, List<(string role, string content)>? history = null)
     {
-        var apiKey = await _settings.Get("AI:DeepSeekKey");
-        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
-        if (string.IsNullOrEmpty(apiKey)) return null;
+        var opt = await _ai.ResolveAsync();
+        if (!opt.IsConfigured) return null;
 
         var results = _search.Search(question, topK: 8, scope.Role, scope.Department, scope.UserId);
         // Filter: only include results with meaningful TF-IDF score (>5% of top score)
@@ -84,23 +81,8 @@ public class AiProxyService
 
         messages.Add(new { role = "user", content = question });
 
-        var modelName = await _settings.Get("AI:ModelName", "deepseek-chat");
-        var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
-        var temperature = await _settings.GetDouble("AI:Temperature", 1.0);
-
-        var payload = new
-        {
-            model = modelName, messages, stream = true, temperature,
-            top_p = 1.0, max_tokens = 4096,
-            extra_body = new { thinking_mode = "non-thinking" }
-        };
-
-        var json = JsonSerializer.Serialize(payload);
-        var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
-        { Content = new StringContent(json, Encoding.UTF8, "application/json") };
-        req.Headers.Add("Authorization", $"Bearer {apiKey}");
-
-        var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+        var payload = _ai.BuildChatPayload(opt, messages, stream: true);
+        var response = await _ai.SendAsync(_ai.CreateChatRequest(opt, payload), HttpCompletionOption.ResponseHeadersRead);
         return response.IsSuccessStatusCode ? await response.Content.ReadAsStreamAsync() : null;
     }
 
@@ -110,9 +92,8 @@ public class AiProxyService
         var context = BuildContext(results);
 
         string? answer = null;
-        var apiKey = await _settings.Get("AI:DeepSeekKey");
-        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:DeepSeekKey") ?? "";
-        if (!string.IsNullOrEmpty(apiKey))
+        var opt = await _ai.ResolveAsync();
+        if (opt.IsConfigured)
         {
             try
             {
@@ -122,25 +103,13 @@ public class AiProxyService
                     : query;
                 messages.Add(new { role = "user", content = ragPrompt });
 
-                var modelName = await _settings.Get("AI:ModelName", "deepseek-chat");
-                var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
-                var payload = new
-                {
-                    model = modelName, messages, temperature = 1.0, top_p = 1.0, max_tokens = 4096,
-                    extra_body = new { thinking_mode = "non-thinking" }
-                };
-
-                var json = JsonSerializer.Serialize(payload);
-                var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
-                { Content = new StringContent(json, Encoding.UTF8, "application/json") };
-                req.Headers.Add("Authorization", $"Bearer {apiKey}");
-
-                var resp = await _http.SendAsync(req);
+                var payload = _ai.BuildChatPayload(opt, messages, stream: false);
+                var resp = await _ai.SendAsync(_ai.CreateChatRequest(opt, payload));
                 if (resp.IsSuccessStatusCode)
                 {
                     var body = await resp.Content.ReadAsStringAsync();
                     using var doc = JsonDocument.Parse(body);
-                    answer = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+                    answer = AiClient.ExtractMessageContent(doc.RootElement);
                 }
             }
             catch { }

@@ -18,6 +18,7 @@ public partial class WikiGeneratorService
     {
         var apiKey = await GetApiKey();
         var baseUrl = await GetBaseUrl();
+        var provider = await GetProviderAsync();
         var model = modelName ?? _options.ContentModel;
 
         var messages = new List<object>
@@ -35,8 +36,10 @@ public partial class WikiGeneratorService
             {
                 model,
                 messages,
-                temperature = _options.Temperature,
-                top_p = _options.TopP,
+                // 官方文档：思考模式下 temperature 无效、非思考模式下 top_p 被忽略（固定 1.0）。
+                // 两个都发等于一个都没用对，所以按 ThinkingMode 二选一。
+                temperature = _options.ThinkingMode == "thinking" ? (double?)null : _options.Temperature,
+                top_p = _options.ThinkingMode == "thinking" ? 1.0 : (double?)null,
                 tools = tools.Select(t => new
                 {
                     type = "function",
@@ -44,12 +47,19 @@ public partial class WikiGeneratorService
                 }).ToList(),
                 tool_choice = "auto",
                 max_tokens = _options.MaxOutputTokens,
-                extra_body = new { thinking_mode = _options.ThinkingMode }
+                // 思考开关走官方参数 thinking.type。
+                // 原先是 extra_body:{thinking_mode:...} —— extra_body 是 OpenAI **Python SDK**
+                // 的包装概念，原生 HTTP 里没有这个字段，thinking_mode 也不是官方参数名，
+                // 服务端直接忽略 → 思考模式其实一直开着。
+                // 这里按服务商决定是否附带：通用 OpenAI 兼容服务不认识 thinking，带上可能 400。
+                thinking = provider == AiProvider.DeepSeek
+                    ? new { type = _options.ThinkingMode == "thinking" ? "enabled" : "disabled" }
+                    : null
             };
 
             var json = JsonSerializer.Serialize(payload, JsonOpts);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions")
+            var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(baseUrl, "/chat/completions"))
             {
                 Content = content
             };
@@ -67,6 +77,16 @@ public partial class WikiGeneratorService
 
             // Add assistant message to conversation
             var assistantMsg = new Dictionary<string, object> { ["role"] = "assistant" };
+
+            // 文档（思考模式 → 工具调用）：**携带 tools 的请求，后续每一轮都必须完整回传
+            // 上一轮的 reasoning_content**，否则 API 直接返回 400 —— 即使那一轮没真的调工具。
+            // 这里以前只回传 role + tool_calls，content 与 reasoning_content 都丢了，
+            // 而"关闭思考"的参数又是无效的（详见 AiClient 注释），思考其实一直开着，
+            // 所以多轮工具调用正好踩中这条规则。
+            if (msg.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.String)
+                assistantMsg["content"] = contentEl.GetString();
+            if (msg.TryGetProperty("reasoning_content", out var rcEl) && rcEl.ValueKind == JsonValueKind.String)
+                assistantMsg["reasoning_content"] = rcEl.GetString();
 
             // Check for tool calls
             if (msg.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.GetArrayLength() > 0)
