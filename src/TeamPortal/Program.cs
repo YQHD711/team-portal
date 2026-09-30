@@ -536,11 +536,9 @@ static void MigrateExistingTables(AppDbContext db)
             "duplicate column");
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN UnitPrice REAL DEFAULT 0",
             "duplicate column");
-        MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN DepartmentId INTEGER NULL REFERENCES Departments(Id) ON DELETE SET NULL",
-            "duplicate column");
-        // 注意：ProjectTag 已于 2026-09 随"物料编码"改版删除。
-        // 这里原先有一句 ADD COLUMN ProjectTag，会在每次启动把删掉的列又加回来，
-        // 让迁移的效果悄悄失效 —— 已一并移除。新增列走 EF 迁移，不再往本函数加语句。
+        // 注意：ProjectTag 与 DepartmentId（归属部门）均已于 2026-09 删除。
+        // 这里原先各有一句 ADD COLUMN，会在每次启动把删掉的列又加回来，让迁移的
+        // 效果悄悄失效 —— 已一并移除。新增列走 EF 迁移，不再往本函数加语句。
         MigrateSql(conn, "ALTER TABLE InventoryItems ADD COLUMN LocationCode TEXT",
             "duplicate column");
         // SQLite forbids ADD COLUMN with a non-constant default — add bare column, then backfill

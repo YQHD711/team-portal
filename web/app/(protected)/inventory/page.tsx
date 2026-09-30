@@ -16,7 +16,7 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   ssr: false,
   loading: () => <div className="h-[250px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
-import { type Department, type InventoryFormState, type InventoryItem, type Transaction, emptyInventoryForm } from "@/components/inventory/inventoryTypes";
+import { type InventoryFormState, type InventoryItem, type Transaction, emptyInventoryForm } from "@/components/inventory/inventoryTypes";
 import ItemLabelModal from "@/components/inventory/ItemLabelModal";
 import ScanQueryModal from "@/components/inventory/ScanQueryModal";
 import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
@@ -46,7 +46,6 @@ export default function InventoryPage() {
   const [rooms, setRooms] = useState<RoomLayoutOption[]>([]);
 
   const [importMsg, setImportMsg] = useState("");
-  const [departments, setDepartments] = useState<Department[]>([]);
   const { user } = useCurrentUser();
   const role = user?.role ?? "";
   // 库存预警文案仅 staff 可见;队员只见普通数量/状态
@@ -109,7 +108,6 @@ export default function InventoryPage() {
   };
 
   useEffect(() => { const t = setTimeout(() => fetchItems(), 300); return () => clearTimeout(t); }, [search, category]);
-  useEffect(() => { api.get<Department[]>("/api/admin/departments").then(setDepartments).catch(() => {}); }, []);
   // 二维码短链的对外地址：优先后端配置的 App:PublicBaseUrl，没配则用我们这边的 origin。
   // 必须把 origin 传过去 —— 后端收到的是 Next.js 服务端转发的请求，它眼里的 Host 是
   // 容器内网地址（backend:8080），拿那个生成短链等于生成一堆谁也扫不开的二维码。
@@ -142,7 +140,7 @@ export default function InventoryPage() {
     setEditItem(i);
     setForm({
       name: i.name, category: i.category, quantity: i.quantity, grade: i.grade || "C",
-      unitPrice: i.unitPrice || 0, departmentId: i.departmentId || 0,
+      unitPrice: i.unitPrice || 0,
       locationCode: i.locationCode || "", code: i.code || "",
       codeItemNo: "", codeModel: "", codeYear: String(new Date().getFullYear()),
     });
@@ -180,13 +178,13 @@ export default function InventoryPage() {
     try {
       if (editItem) {
         await api.put(`/api/inventory/${editItem.id}`, {
-          grade: form.grade, unitPrice: form.unitPrice, departmentId: form.departmentId || null,
+          grade: form.grade, unitPrice: form.unitPrice,
           code: code || null, clearCode: !code, locationCode: locCode,
         });
       } else {
         await api.post("/api/inventory", {
           name: form.name, category: form.category, quantity: form.quantity, grade: form.grade,
-          unitPrice: form.unitPrice, departmentId: form.departmentId || null,
+          unitPrice: form.unitPrice,
           code: code || null, locationCode: locCode || null,
         });
       }
@@ -267,7 +265,7 @@ export default function InventoryPage() {
         <InventoryFormModal editItem={editItem} form={form} setForm={setForm}
           rooms={rooms} fallbackRooms={FALLBACK_ROOMS}
           onLocationCode={code => setForm(f => ({ ...f, locationCode: code }))}
-          departments={departments} calcGrade={calcGrade}
+          calcGrade={calcGrade}
           onCode={code => { setForm(f => ({ ...f, code })); setCodeError(""); setGeneratedShortUrl(""); }}
           onGenerateCode={generateCode} genCodeLoading={genCodeLoading} codeError={codeError}
           generatedShortUrl={generatedShortUrl}

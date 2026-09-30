@@ -74,6 +74,26 @@ describe("零件库存页", () => {
     expect(screen.queryByText(/导入 Excel/)).not.toBeInTheDocument();
   });
 
+  // 归属部门移除后，物料是队内共享资源：改/删统一收成管理员专属，部长只读
+  it("部长看不到改/删物料的按钮，管理员看得到", async () => {
+    const leader = { id: 3, username: "leader", role: "部长", department: "飞训部", departmentId: 1 };
+
+    mockedUseCurrentUser.mockReturnValue({ user: leader, loading: false, refresh: vi.fn() });
+    const { unmount } = render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    expect(screen.queryAllByTitle("编辑物料")).toHaveLength(0);
+    expect(screen.queryAllByTitle("删除物料")).toHaveLength(0);
+    // 新增仍归 staff —— 部长能建，只是建完不能自己改
+    expect(screen.getByRole("button", { name: /添加零件/ })).toBeInTheDocument();
+    unmount();
+
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+    expect(screen.getAllByTitle("编辑物料").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle("删除物料").length).toBeGreaterThan(0);
+  });
+
   it("成员不可见低库存预警横幅(库存预警仅 staff)", async () => {
     mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
     render(<InventoryPage />);

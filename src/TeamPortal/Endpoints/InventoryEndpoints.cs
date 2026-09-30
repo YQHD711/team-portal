@@ -18,27 +18,15 @@ public static class InventoryEndpoints
 
     private static bool IsStaff(string? role) => role == "admin" || role == "部长";
 
-    private static async Task<int?> GetDeptIdAsync(ClaimsPrincipal user, AppDbContext db)
-    {
-        var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (idClaim is null) return null;
-        var uid = int.Parse(idClaim);
-        return await db.Users.Where(u => u.Id == uid).Select(u => (int?)u.DepartmentId).FirstOrDefaultAsync();
-    }
-
     /// <summary>
-    /// 部长只能操作本部门零件(DepartmentId 为空的共享件按共享池处理);管理员不受限。
-    /// 旧实现只判 IsStaff(role),部长可改/删/借出任意部门的零件、改其它部门单价。
+    /// 卡片记录本身的修改权：**只有管理员**。
+    ///
+    /// 归属部门移除后，原来的"部长只能改本部门物料"失去了判定依据；按"物料是队内共享
+    /// 资源、部长只读"的口径统一收成管理员专属。注意这只管**记录**（改名/改价/改编码/
+    /// 删除），库存操作（领用/归还/消耗）仍属岗位职责，走 IsStaff。
     /// </summary>
-    internal static async Task<bool> CanManageItemAsync(ClaimsPrincipal user, AppDbContext db, InventoryItem item)
-    {
-        var role = user.FindFirstValue(ClaimTypes.Role);
-        if (role == "admin") return true;
-        if (role != "部长") return false;
-        if (item.DepartmentId is null) return true;
-        var actorDeptId = await GetDeptIdAsync(user, db);
-        return actorDeptId.HasValue && item.DepartmentId == actorDeptId.Value;
-    }
+    internal static bool CanEditItem(ClaimsPrincipal user)
+        => user.FindFirstValue(ClaimTypes.Role) == "admin";
 
     /// <summary>
     /// 导入文件必须位于 OS 临时目录或数据库所在目录内。
@@ -157,7 +145,7 @@ public static class InventoryEndpoints
             try
             {
                 item = await svc.Create(req.Name, req.Category ?? "", req.Quantity,
-                    req.Grade ?? "C", req.UnitPrice ?? 0, req.DepartmentId, req.Code, req.LocationCode);
+                    req.Grade ?? "C", req.UnitPrice ?? 0, req.Code, req.LocationCode);
             }
             catch (InvalidOperationException ex)
             {
@@ -195,16 +183,10 @@ public static class InventoryEndpoints
 
         group.MapPut("/{id:int}", async (int id, UpdateItemRequest req, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可修改零件", statusCode: 403);
+            if (!CanEditItem(user)) return Results.Problem("仅管理员可修改物料", statusCode: 403);
 
             var existing = await svc.GetById(id);
             if (existing is null) return Results.Problem("Not found", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, existing))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
-            // 非管理员不得把零件挪到别的部门(否则等于绕过上面的范围校验)
-            if (role != "admin" && req.DepartmentId.HasValue && req.DepartmentId != existing.DepartmentId)
-                return Results.Problem("仅管理员可调整零件所属部门", statusCode: 403);
 
             if (req.Quantity is < 0 || req.Quantity > 1_000_000)
                 return Results.Problem(req.Quantity < 0 ? "数量不能为负数" : "数量超出合理范围(上限1000000)", statusCode: 400);
@@ -218,7 +200,7 @@ public static class InventoryEndpoints
             {
                 item = await svc.Update(id,
                     req.Name, req.Quantity, req.Status,
-                    req.Grade, req.UnitPrice, req.DepartmentId, req.Code, req.LocationCode, req.ClearCode);
+                    req.Grade, req.UnitPrice, req.Code, req.LocationCode, req.ClearCode);
             }
             catch (InvalidOperationException ex)
             {
@@ -239,13 +221,10 @@ public static class InventoryEndpoints
 
         group.MapDelete("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可删除零件", statusCode: 403);
+            if (!CanEditItem(user)) return Results.Problem("仅管理员可删除物料", statusCode: 403);
 
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Not found", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, item))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
             var deleted = await svc.Delete(id);
             if (deleted)
             {
@@ -261,8 +240,8 @@ public static class InventoryEndpoints
         // Upload photo for a part → store in cloud, save view URL
         group.MapPost("/{id:int}/photo", async (int id, IFormFile file, InventoryService svc, BaiduNetdiskService baidu, ClaimsPrincipal user, AppDbContext db, LogService log, NotificationService notify) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
-            if (!IsStaff(role)) return Results.Problem("仅管理员和部长可上传零件照片", statusCode: 403);
+            // 照片写进物料卡片，属于"改物料" → 与改/删同权，管理员专属
+            if (!CanEditItem(user)) return Results.Problem("仅管理员可上传零件照片", statusCode: 403);
 
             if (file is null || file.Length == 0) return Results.Problem("No file", statusCode: 400);
             if (file.Length > 10 * 1024 * 1024) return Results.Problem("Photo too large (max 10MB)", statusCode: 400);
@@ -273,8 +252,6 @@ public static class InventoryEndpoints
 
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, item))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             if (!await baidu.IsConfigured()) return Results.Problem("Cloud storage not configured", statusCode: 400);
 
@@ -305,8 +282,6 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, item))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             var userName = user.Identity?.Name ?? "unknown";
             // Atomic decrement: only succeeds if enough stock remains
@@ -342,8 +317,6 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, item))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
 
             var userName = user.Identity?.Name ?? "unknown";
             var updated = await db.InventoryItems
@@ -378,8 +351,6 @@ public static class InventoryEndpoints
             if (req.Quantity <= 0) return Results.Problem("数量必须大于0", statusCode: 400);
             var item = await db.InventoryItems.FindAsync(id);
             if (item is null) return Results.Problem("零件不存在", statusCode: 404);
-            if (!await CanManageItemAsync(user, db, item))
-                return Results.Problem("仅可操作本部门零件", statusCode: 403);
             if (item.Quantity < req.Quantity) return Results.Problem("库存不足", statusCode: 400);
 
             var updated = await db.InventoryItems
@@ -418,10 +389,10 @@ public static class InventoryEndpoints
 }
 
 public record CreateItemRequest(string Name, string? Category, int Quantity,
-    string? Grade, decimal? UnitPrice, int? DepartmentId, string? Code, string? LocationCode);
+    string? Grade, decimal? UnitPrice, string? Code, string? LocationCode);
 public record UpdateItemRequest(
     string? Name, int? Quantity, string? Status,
-    string? Grade, decimal? UnitPrice, int? DepartmentId, string? Code, string? LocationCode,
+    string? Grade, decimal? UnitPrice, string? Code, string? LocationCode,
     // true 表示"明确清空编码"（与 null = 不改区分开）
     bool ClearCode = false);
 public record ImportRequest(string FilePath);

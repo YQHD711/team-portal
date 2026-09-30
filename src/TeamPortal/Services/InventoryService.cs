@@ -63,7 +63,7 @@ public class InventoryService
     }
 
     public async Task<InventoryItem> Create(string name, string category, int quantity,
-        string grade = "C", decimal unitPrice = 0, int? departmentId = null, string? code = null, string? locationCode = null)
+        string grade = "C", decimal unitPrice = 0, string? code = null, string? locationCode = null)
     {
         var normalized = await NormalizeCodeAsync(code, null);
         var item = new InventoryItem
@@ -71,7 +71,7 @@ public class InventoryService
             Name = name, Category = category, Quantity = quantity,
             Status = "available",
             Grade = unitPrice > 0 ? CalcGrade(unitPrice) : grade,
-            UnitPrice = unitPrice, DepartmentId = departmentId,
+            UnitPrice = unitPrice,
             Code = normalized, LocationCode = LocationOrNull(locationCode),
             UpdatedAt = DateTime.UtcNow,
         };
@@ -93,7 +93,7 @@ public class InventoryService
 
     public async Task<InventoryItem?> Update(int id,
         string? name = null, int? quantity = null, string? status = null,
-        string? grade = null, decimal? unitPrice = null, int? departmentId = null,
+        string? grade = null, decimal? unitPrice = null,
         string? code = null, string? locationCode = null, bool clearCode = false)
     {
         var item = await _db.InventoryItems.FindAsync(id);
@@ -106,7 +106,6 @@ public class InventoryService
             item.Grade = CalcGrade(unitPrice.Value);
         else if (grade is not null)
             item.Grade = grade;
-        if (departmentId.HasValue) item.DepartmentId = departmentId.Value;
         if (clearCode) item.Code = null;
         else if (code is not null) item.Code = await NormalizeCodeAsync(code, id);
         // 库位：null = 本次不改；空串 = 明确清空（物料可以先不归位）
@@ -181,7 +180,6 @@ public class InventoryService
         if (string.IsNullOrWhiteSpace(code)) return null;
         var normalized = code.Trim().ToUpperInvariant();
         return await _db.InventoryItems.AsNoTracking()
-            .Include(i => i.Department)
             .FirstOrDefaultAsync(i => i.Code == normalized);
     }
 
