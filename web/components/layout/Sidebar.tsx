@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, UserCircle, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, Ticket, LayoutGrid, GraduationCap
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
@@ -51,7 +51,6 @@ const materialNav = [
 /** 管理员子菜单（staff 折叠展开） */
 const staffNav = [
   { href: "/admin/knowledge", label: "知识库", icon: BookOpen },
-  { href: "/admin/profiles", label: "队员档案", icon: UserCircle },
   { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
 ];
 
@@ -59,7 +58,6 @@ const staffNav = [
 const adminNavStaff = [
   { href: "/admin/organization", label: "组织架构", icon: Users },
   { href: "/admin/exams", label: "考核管理", icon: ClipboardCheck },
-  { href: "/admin/invites", label: "邀请码", icon: Ticket },
   { href: "/admin/wiki-settings", label: "Wiki 设置", icon: Settings },
 ];
 

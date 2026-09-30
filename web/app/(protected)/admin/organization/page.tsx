@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { Users, Building2, BadgeCheck, ClipboardCheck, Loader2 } from "lucide-react";
 import { OrgTab } from "@/components/admin/organization/OrgTab";
+import ProfilesTab from "@/components/admin/organization/ProfilesTab";
 import { InvitesTab } from "@/components/admin/organization/InvitesTab";
 import { ImportTab } from "@/components/admin/organization/ImportTab";
 import { Dept, OrgUser, ProfileBrief, Certification, ExamBrief, ExamPass } from "@/components/admin/organization/types";
@@ -15,7 +16,7 @@ export default function OrganizationPage() {
   // 部长:只在本部门内自主;admin:全队
   const ownDeptId = isAdmin ? null : (me?.departmentId ?? null);
 
-  const [tab, setTab] = useState<"org" | "invites" | "import">("org");
+  const [tab, setTab] = useState<"org" | "profiles" | "invites" | "import">("org");
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);
   const [profiles, setProfiles] = useState<ProfileBrief[]>([]);
@@ -76,8 +77,12 @@ export default function OrganizationPage() {
         { label: "本部门考核", value: ownDeptId != null ? (examsByDept.get(ownDeptId)?.length ?? 0) : 0, icon: ClipboardCheck },
       ];
 
-  type OrgTabKey = "org" | "invites" | "import";
-  const tabs: { key: OrgTabKey; label: string }[] = [{ key: "org", label: "组织架构" }];
+  type OrgTabKey = "org" | "profiles" | "invites" | "import";
+  const tabs: { key: OrgTabKey; label: string }[] = [
+    { key: "org", label: "组织架构" },
+    // 队员档案并到这里：两者本来就是同一批人、同一批部门数据，拆成两个导航项只是让人多点一次
+    { key: "profiles", label: "队员档案" },
+  ];
   if (me?.role === "admin" || me?.role === "部长") tabs.push({ key: "invites", label: "邀请码" });
   if (isAdmin) tabs.push({ key: "import", label: "批量导入" });
 
@@ -116,6 +121,9 @@ export default function OrganizationPage() {
         <OrgTab users={users} depts={depts} isAdmin={isAdmin} ownDeptId={ownDeptId}
           passedCertsByUser={passedByUser}
           examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser} examsByDept={examsByDept} onChanged={refresh} />
+      ) : tab === "profiles" ? (
+        <ProfilesTab users={users} depts={depts} isAdmin={isAdmin}
+          skillsByUser={skillsByUser} slugByUser={slugByUser} passedCertsByUser={passedByUser} />
       ) : tab === "invites" ? (
         <InvitesTab depts={visibleDepts} onChanged={refresh} />
       ) : (
