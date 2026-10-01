@@ -6,17 +6,36 @@
  * 注意：Konva 的属性（x/y/fill/stroke 等）在 DOM 上不可验证，视觉断言应放在
  * 纯 DOM 的浮层/卡片上，或者交给 Playwright E2E。
  */
-import { createElement, type MouseEvent, type ReactNode } from "react";
+import { createElement, type MouseEvent, type ReactNode, type Ref } from "react";
+import type Konva from "konva";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 
 /** Stage 的替身：useCellCenters 会调用 getContent().getBoundingClientRect()，给个空 div */
 export const stageCanvas = { current: null as HTMLDivElement | null };
 
-function StageStub({ children }: AnyProps) {
+/** 只实现 useCellCenters / useStageView 用到的 Stage 表面（getContent / position / stopDrag） */
+function fakeStage(node: HTMLDivElement | null): Konva.Stage {
+  return {
+    getContent: () => node,
+    position: () => ({ x: 0, y: 0 }),
+    stopDrag: () => {},
+  } as unknown as Konva.Stage;
+}
+
+/** 组件把自己的 ref 交给真 Stage；替身要把它接住，否则 stageRef 永远为 null（定位/格位中心都测不到） */
+function assignStageRef(ref: unknown, node: HTMLDivElement | null) {
+  if (typeof ref === "function") (ref as (stage: Konva.Stage) => void)(fakeStage(node));
+  else if (ref) (ref as { current: Konva.Stage | null }).current = fakeStage(node);
+}
+
+function StageStub({ children, ref }: AnyProps & { ref?: Ref<Konva.Stage> }) {
   return createElement("div", {
     "data-konva": "Stage",
-    ref: (node: HTMLDivElement | null) => { stageCanvas.current = node; },
+    ref: (node: HTMLDivElement | null) => {
+      stageCanvas.current = node;
+      assignStageRef(ref, node);
+    },
   }, children);
 }
 

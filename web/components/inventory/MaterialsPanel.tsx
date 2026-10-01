@@ -28,6 +28,10 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
   const [search, setSearch] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef(new Map<number, HTMLElement>());
+  // 本面板是否上报过锚点：卸载时据此清掉，别把过期坐标留给连线
+  const reportedRef = useRef(false);
+  const onItemRectsRef = useRef(onItemRects);
+  useEffect(() => { onItemRectsRef.current = onItemRects; }, [onItemRects]);
 
   const filtered = useMemo(
     () => (search ? items.filter(it => it.name.toLowerCase().includes(search.toLowerCase())) : items),
@@ -57,11 +61,23 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
   // 上报条目中心（视口坐标）：条目/搜索变化、面板滚动、窗口缩放、任意祖先滚动时重测
   const report = useCallback(() => {
     if (!onItemRects) return;
+    const box = boxRef.current;
+    // 不可见面板（如移动端下被 max-lg:hidden 藏起来的桌面面板，抽屉里同时挂着另一个）量到的
+    // 是全 0 尺寸的假 rect，上报会把连线一端画到容器角上；曾上报过的面板转为不可见时还要清空，
+    // 否则过期坐标会继续画线。（同一处隐藏面板总排在可见面板之前注册，故清空不会被旧值覆盖）
+    if (!box || box.clientWidth === 0 || box.clientHeight === 0) {
+      if (reportedRef.current) {
+        reportedRef.current = false;
+        onItemRects(new Map());
+      }
+      return;
+    }
     const m = new Map<number, { x: number; y: number }>();
     for (const [id, el] of chipRefs.current) {
       const r = el.getBoundingClientRect();
       m.set(id, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
     }
+    reportedRef.current = true;
     onItemRects(m);
   }, [onItemRects]);
 
@@ -81,6 +97,11 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
       ro.disconnect();
     };
   }, [report]);
+
+  // 面板消失（移动端收起抽屉 / 切换布局）后其锚点已失效：清空，否则连线会留在旧位置
+  useEffect(() => () => {
+    if (reportedRef.current) onItemRectsRef.current?.(new Map());
+  }, []);
 
   const setChipRef = (id: number) => (el: HTMLElement | null) => {
     if (el) chipRefs.current.set(id, el);
