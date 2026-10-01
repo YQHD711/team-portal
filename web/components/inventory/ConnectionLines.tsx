@@ -63,9 +63,11 @@ export function ConnectionLines({ containerRef, lines, hoverKey }: ConnectionLin
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
       window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
     };
   }, [containerRef]);
 
@@ -74,12 +76,29 @@ export function ConnectionLines({ containerRef, lines, hoverKey }: ConnectionLin
     <svg className="pointer-events-none absolute inset-0 z-10" width={size.w} height={size.h}>
       {lines.map(line => {
         const hot = hoverKey !== null && (hoverKey === String(line.id) || hoverKey === line.code);
+        const x1 = line.from.x - origin.x;
+        const y1 = line.from.y - origin.y;
+        const x2 = line.to.x - origin.x;
+        const y2 = line.to.y - origin.y;
+        const ends = [{ x: x1, y: y1 }, { x: x2, y: y2 }];
         return (
-          <line key={line.id}
-            x1={line.from.x - origin.x} y1={line.from.y - origin.y}
-            x2={line.to.x - origin.x} y2={line.to.y - origin.y}
-            stroke={line.color} strokeWidth={hot ? 2.5 : 1.5}
-            strokeOpacity={hot ? 0.9 : 0.35} />
+          <g key={line.id}>
+            {/* 同色低透明度加粗底衬：让细线在浅色画布上也有存在感 */}
+            <line data-testid="connection-halo"
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={line.color} strokeWidth={hot ? 10 : 8}
+              strokeOpacity={hot ? 0.28 : 0.14} strokeLinecap="round" />
+            {/* 主线：3px 圆头，hover 增粗提亮 */}
+            <line data-testid="connection-line"
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={line.color} strokeWidth={hot ? 4.5 : 3}
+              strokeOpacity={hot ? 1 : 0.8} strokeLinecap="round" />
+            {/* 两端圆点：明确「物料 ↔ 格位」的落点 */}
+            {ends.map((p, i) => (
+              <circle key={i} data-testid="connection-dot" cx={p.x} cy={p.y}
+                r={hot ? 4 : 3} fill={line.color} fillOpacity={hot ? 1 : 0.85} />
+            ))}
+          </g>
         );
       })}
     </svg>
