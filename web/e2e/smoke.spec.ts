@@ -422,9 +422,12 @@ test.describe("冒烟流程", () => {
     // 阶段条：生成流程任务应出现「审查」阶段
     await expect(page.getByTestId("wiki-task-t1").getByText("审查")).toHaveCount(1);
 
-    // 模型名可自由填写：input + datalist 建议，不是写死的下拉
+    // 模型名可自由填写：input + 自己画的下拉建议（原生 datalist 点箭头不可靠，见 ModelInput），不是写死的 select
     const model = page.getByLabel("生成模型");
-    await expect(model).toHaveAttribute("list");
+    await page.getByTestId("model-input-toggle").first().click();
+    await expect(page.locator('[data-testid="model-input-options"] [role="option"]')).toHaveCount(2);
+    await page.getByTestId("model-option-deepseek-v4-flash").click();
+    await expect(model).toHaveValue("deepseek-v4-flash");
     await model.fill("my-own-model-7b");
     await expect(model).toHaveValue("my-own-model-7b");
   });
