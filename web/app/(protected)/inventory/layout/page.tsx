@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
@@ -10,6 +10,7 @@ import { parseLayout } from "@/components/inventory/layoutCodec";
 import { formatDims } from "@/components/inventory/layoutUnits";
 import { RoomCard } from "@/components/inventory/RoomCard";
 import { locationRoom } from "@/components/inventory/locCode";
+import { hasLayoutFocus, parseLayoutFocus, resolveLayoutFocus, type LayoutFocusTarget } from "@/components/inventory/layoutFocus";
 import type { RoomLayoutRow } from "@/components/inventory/layoutRow";
 
 // react-konva 依赖 Canvas，SSR 时不可用，关闭服务端渲染
@@ -24,6 +25,9 @@ export default function StorageLayoutPage() {
   const [selected, setSelected] = useState<RoomLayoutRow | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+  /** 跳转定位目标（来自查询参数）；无参数时为空，行为与以前完全一致 */
+  const [focus, setFocus] = useState<LayoutFocusTarget | null>(null);
+  const focused = useRef(false);
 
   const fetchData = useCallback(
     (): Promise<[RoomLayoutRow[], MaterialItem[]]> =>
@@ -37,6 +41,23 @@ export default function StorageLayoutPage() {
   useEffect(() => {
     fetchData().then(([ls, it]) => { setLayouts(ls); setItems(it); setLoading(false); });
   }, [fetchData]);
+
+  // 查询参数定位（`?room=&element=&item=`）：只在数据到位后解析一次，
+  // 之后用户进出房间仍走原来的交互，不被 URL 反复拉回去。
+  // 这里的 setState 是「一次性从 URL 同步」：URL 与楼层列表都只有在客户端、
+  // 数据到位后才可用（SSR 阶段 window 不存在），所以必须放在 effect 里。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (loading || focused.current) return;
+    focused.current = true;
+    const query = parseLayoutFocus(new URLSearchParams(window.location.search));
+    if (!hasLayoutFocus(query)) return;
+    const hit = resolveLayoutFocus(query, layouts, items);
+    if (!hit) return;
+    setSelected(hit.row);
+    setFocus(hit.target);
+  }, [loading, layouts, items]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const roomItems = useMemo(
     () => (selected ? items.filter(i => locationRoom(i.locationCode) === selected.roomCode) : []),
@@ -70,7 +91,7 @@ export default function StorageLayoutPage() {
         </div>
       ) : selected ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div data-testid="layout-room-header" className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <button onClick={() => { setSelected(null); setEditing(false); }}
                 className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-sm text-muted hover:bg-surface-hover hover:text-sky-600">
@@ -95,7 +116,9 @@ export default function StorageLayoutPage() {
           {editing ? (
             <RoomPlanner layout={selected} onSaved={handleSaved} onBack={() => setEditing(false)} />
           ) : parsedLayout ? (
-            <PlannerViewer layout={parsedLayout} roomCode={selected.roomCode} items={roomItems} />
+            <PlannerViewer layout={parsedLayout} roomCode={selected.roomCode} items={roomItems}
+              initialElementId={focus?.initialElementId} focusElementId={focus?.focusElementId}
+              focusItem={focus?.focusItemId ? roomItems.find(i => i.id === focus.focusItemId) ?? null : null} />
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-surface py-20">
               <LayoutGrid className="h-10 w-10 text-zinc-300" />

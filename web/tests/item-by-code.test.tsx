@@ -52,6 +52,14 @@ describe("扫码短链 /i/<编码>", () => {
     expect(await screen.findByText("未指定")).toBeInTheDocument();
   });
 
+  it("有库位时是一个指向布局页的链接，带上房间/元素/物料", async () => {
+    mockedGet.mockResolvedValue(item);
+    render(<ItemByCodePage />);
+
+    const link = await screen.findByTestId("item-location-link");
+    expect(link).toHaveAttribute("href", "/inventory/layout?room=201&element=201-A&item=BAT-LIPO-6S3300MAH-2026-0007");
+  });
+
   it("编码查不到时给出明确提示和出路", async () => {
     mockedGet.mockRejectedValue(new Error("404"));
     render(<ItemByCodePage />);

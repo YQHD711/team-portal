@@ -3,29 +3,39 @@
 /**
  * 平面图查看模式：只读渲染 LayoutJson（cm 网格 / 墙门窗 / 元素格位热点），
  * 支持缩放平移、格位点选查看物料、双击打开正视细节视图、物料连线，移动端面板折叠为抽屉。
+ *
+ * 定位入口：带 `initialElementId / focusItem` 从别的页面跳进来时（见布局页的查询参数），
+ * 进入即选中该元素并把所查物料圈出来；不传这些参数时行为与以前完全一致。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Layer, Stage } from "react-konva";
 import type Konva from "konva";
-import { LayoutGrid, Network, X } from "lucide-react";
+import { Network } from "lucide-react";
 import type { ItemElement, MaterialItem, RoomLayout } from "./layoutTypes";
-import { cellSummary } from "./layoutTypes";
 import { GridShape, ItemShape, PosShape } from "./PlannerShapes";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { ConnectionLines } from "./ConnectionLines";
 import { ElementDetail } from "./ElementDetail";
 import { MobileDrawer } from "./MobileDrawer";
+import { ViewerFocusBanner, ViewerSelectionCard } from "./PlannerOverlays";
 import { ZoomControls } from "./ZoomControls";
 import { useMountingView } from "./useMountingState";
 import { useCellCenters } from "./useCellCenters";
 import { useStageView } from "./useStageView";
 import { cellKey, cellLabelAt, type ElementCell } from "./elementGeometry";
 import { elementMaterials, materialsByCell } from "./locationCodes";
+import { findFocusCell, pickInitialElement } from "./viewerFocus";
 
 interface PlannerViewerProps {
   layout: RoomLayout;
   roomCode: string;
   items: MaterialItem[];
+  /** 初始选中的元素（带参数跳进来时定位；用户后续交互不受影响） */
+  initialElementId?: string;
+  /** 要高亮的元素：查询参数指定了元素时才传，交互式点选不会有这层定位圈 */
+  focusElementId?: string;
+  /** 所查询的物料：进入后高亮它并可滚动到它 */
+  focusItem?: MaterialItem | null;
 }
 
 interface Selection {
@@ -33,12 +43,23 @@ interface Selection {
   cell: ElementCell | null;
 }
 
-export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
+/** 元素的格位名（整体挂载返回 locCode）；null 表示没定位到格位 */
+function cellLabelOf(el: ItemElement, cell: ElementCell | null): string | null {
+  return cell ? cellLabelAt(el, cell.row, cell.col) : el.locCode || null;
+}
+
+export function PlannerViewer({ layout, roomCode, items, initialElementId, focusElementId, focusItem }: PlannerViewerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const workRef = useRef<HTMLDivElement>(null);
+  const focusCardRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [sel, setSel] = useState<Selection | null>(null);
+  // 初始值由入参决定（受控种子）；此后仍由页面内交互驱动，与原来一致
+  const [sel, setSel] = useState<Selection | null>(() => {
+    const el = pickInitialElement(layout.items, initialElementId);
+    if (!el) return null;
+    return { el, cell: findFocusCell(el, focusItem ?? null) };
+  });
   const [detail, setDetail] = useState<{ el: ItemElement; cell: string | null } | null>(null);
   const [showLines, setShowLines] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -46,6 +67,14 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
   const { view, fit, zoomBy, onWheel, onTouchStart, onTouchMove, onTouchEnd, consumeStageDrag } =
     useStageView({ stageRef, width: size.w, height: size.h, contentW: layout.width, contentH: layout.height });
   useCellCenters(layout, items, view, stageRef, setCellCenters);
+
+  // 所查物料在画布上的落点：用于把定位卡片滚到视野里（元素可能在画布外）
+  const focusCellLabel = sel && focusItem ? cellLabelOf(sel.el, sel.cell) : null;
+  useEffect(() => {
+    if (!focusItem) return;
+    // jsdom / 老浏览器可能没有 scrollIntoView
+    focusCardRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [focusItem, focusCellLabel]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -91,7 +120,9 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
             {layout.doors.map(el => <PosShape key={el.id} el={el} kind="door" highlight={sel?.el.id === el.id} />)}
             {layout.windows.map(el => <PosShape key={el.id} el={el} kind="window" highlight={sel?.el.id === el.id} />)}
             {layout.items.map(el => (
-              <ItemShape key={el.id} el={el} items={items} highlight={sel?.el.id === el.id} scale={view.scale}
+              <ItemShape key={el.id} el={el} items={items} scale={view.scale}
+                highlight={sel?.el.id === el.id} focus={!!focusElementId && el.id === focusElementId}
+                focusItem={el.id === focusElementId ? focusItem ?? null : null}
                 onCellHover={code => setHoverKey(code)}
                 onCellClick={(_code, cell) => setSel({ el, cell })}
                 onDblClick={() => setDetail({ el, cell: sel?.cell?.code ?? null })} />
@@ -111,36 +142,16 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
         <ZoomControls scale={view.scale} onZoom={zoomBy} onFit={fit}
           className="bottom-2 right-2 max-lg:bottom-auto max-lg:right-auto max-lg:left-2 max-lg:top-2" />
 
+        {/* 跳转定位卡片：明确告诉用户"查的就是这件、它在哪个格位"（元素没定位到就不显示） */}
+        {focusItem && sel && (
+          <ViewerFocusBanner item={focusItem} element={sel.el} cell={sel.cell}
+            roomCode={roomCode} containerRef={focusCardRef} />
+        )}
+
         {sel && (
-          <div className="absolute bottom-2 left-2 z-10 w-[min(300px,calc(100%-1rem))] rounded-xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
-            <div className="mb-1 flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">{sel.el.name}</div>
-                <div className="text-[11px] text-faint">
-                  {sel.cell ? cellLabelAt(sel.el, sel.cell.row, sel.cell.col) : cellSummary(sel.el)} · {cellItems.length} 种
-                </div>
-              </div>
-              <button onClick={() => setSel(null)} aria-label="关闭" className="rounded p-0.5 text-faint hover:bg-surface-hover">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {cellItems.length === 0 ? (
-              <p className="text-xs text-faint">该位置暂无物料</p>
-            ) : (
-              <ul className="max-h-24 space-y-0.5 overflow-y-auto text-xs">
-                {cellItems.map(it => (
-                  <li key={it.id} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate">{it.name}</span>
-                    <span className="shrink-0 font-semibold tabular-nums">×{it.quantity}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button onClick={() => setDetail({ el: sel.el, cell: sel.cell?.code ?? null })}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-lg border border-border py-1.5 text-xs font-medium text-muted hover:border-sky-400 hover:text-sky-600">
-              <LayoutGrid className="h-3.5 w-3.5" />正视细节视图
-            </button>
-          </div>
+          <ViewerSelectionCard element={sel.el} cell={sel.cell} items={cellItems} focusItem={focusItem}
+            onClose={() => setSel(null)}
+            onDetail={() => setDetail({ el: sel.el, cell: sel.cell?.code ?? null })} />
         )}
       </div>
 
@@ -152,7 +163,8 @@ export function PlannerViewer({ layout, roomCode, items }: PlannerViewerProps) {
       {showLines && <ConnectionLines containerRef={workRef} lines={lines} hoverKey={hoverKey} />}
 
       {detail && (
-        <ElementDetail element={detail.el} items={items} initialCell={detail.cell} onClose={() => setDetail(null)} />
+        <ElementDetail element={detail.el} items={items} initialCell={detail.cell}
+          focusItemId={focusItem?.id ?? null} onClose={() => setDetail(null)} />
       )}
     </div>
   );

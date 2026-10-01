@@ -19,6 +19,8 @@ interface ElementDetailProps {
   items: MaterialItem[];
   /** 初始选中的格位编码（从画布点进来时定位） */
   initialCell?: string | null;
+  /** 所查询的物料 id：在明细里高亮它（从库位链接跳进来时用） */
+  focusItemId?: number | null;
   onClose: () => void;
 }
 
@@ -31,7 +33,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ElementDetail({ element, items, initialCell, onClose }: ElementDetailProps) {
+export function ElementDetail({ element, items, initialCell, focusItemId, onClose }: ElementDetailProps) {
   const def = ELEMENT_DEFS[element.type];
   const { threshold } = useLowStock();
   const split = usesCells(element);
@@ -136,8 +138,13 @@ export function ElementDetail({ element, items, initialCell, onClose }: ElementD
           ) : (
             <ul className="space-y-1">
               {selectedItems.map(it => (
-                <li key={it.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
+                <li key={it.id}
+                  data-testid={`detail-item-${it.id}`}
+                  className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${
+                    it.id === focusItemId ? "border-amber-400 bg-amber-50 font-medium dark:bg-amber-950/40" : "border-border"
+                  }`}>
                   <span className="min-w-0 flex-1 truncate">{it.name}</span>
+                  {it.id === focusItemId && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white">所查物料</span>}
                   {it.category && <span className="shrink-0 text-[11px] text-faint">{it.category}</span>}
                   <span className="shrink-0 font-mono text-[11px] text-faint">{it.locationCode}</span>
                   <span className="shrink-0 font-semibold tabular-nums">×{it.quantity}</span>

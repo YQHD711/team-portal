@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import QRCode from "react-qr-code";
 import { ArrowLeft, Loader2, PackageX, MapPin, Package } from "lucide-react";
 import type { InventoryItem } from "@/components/inventory/inventoryTypes";
+import LocationLink from "@/components/inventory/LocationLink";
 
 /**
  * 扫码短链落地页：/i/<物料编码>（规范 §6.3/§6.6）。
@@ -88,7 +89,10 @@ export default function ItemByCodePage() {
           </div>
           <div className="rounded-xl bg-surface-subtle p-3">
             <dt className="flex items-center gap-1 text-xs text-muted"><MapPin className="h-3.5 w-3.5" />库位</dt>
-            <dd className="mt-1 font-mono text-sm">{item.locationCode || "未指定"}</dd>
+            <dd className="mt-1 font-mono text-sm">
+              <LocationLink locationCode={item.locationCode} item={item.code ?? item.id}
+                fallback="未指定" testId="item-location-link" />
+            </dd>
           </div>
         </dl>
 

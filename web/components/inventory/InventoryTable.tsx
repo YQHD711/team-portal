@@ -1,6 +1,7 @@
 import { Package, Minus, Plus as PlusIcon, History, Pencil, Trash2, QrCode } from "lucide-react";
 import { statusOpts, type InventoryItem } from "./inventoryTypes";
 import { useLowStock } from "./LowStockProvider";
+import LocationLink from "./LocationLink";
 
 interface Props {
   items: InventoryItem[];
@@ -34,7 +35,9 @@ export default function InventoryTable({ items, loading, role, onTake, onLabel, 
               <div>
                 <div className="font-medium text-sm">{item.name}</div>
                 {item.code && <div className="text-xs font-mono text-faint">{item.code}</div>}
-                <div className="text-xs text-muted">{item.category} · {item.locationCode || "—"}</div>
+                <div className="text-xs text-muted">
+                  {item.category} · <LocationLink locationCode={item.locationCode} item={item.code || item.id} testId={`item-location-m-${item.id}`} />
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => onTake(item)} disabled={item.status === "broken"}
@@ -69,7 +72,9 @@ export default function InventoryTable({ items, loading, role, onTake, onLabel, 
                   <span className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-bold ${item.grade === "A" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : item.grade === "B" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-zinc-100 text-muted dark:bg-zinc-800 dark:text-faint"}`}>{item.grade || "C"}</span>
                 </td>
                 <td className={`px-4 py-3 text-right font-medium tabular-nums ${isStaff ? (item.quantity === 0 ? "text-danger" : item.quantity < threshold ? "text-warning" : "") : ""}`}>{item.quantity}</td>
-                <td className="px-4 py-3 text-muted hidden md:table-cell text-xs font-mono">{item.locationCode || "—"}</td>
+                <td className="px-4 py-3 text-muted hidden md:table-cell text-xs font-mono">
+                  <LocationLink locationCode={item.locationCode} item={item.code || item.id} testId={`item-location-${item.id}`} />
+                </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-faint"}`}>
                     {statusOpts.find(s => s.value === item.status)?.label || item.status}
