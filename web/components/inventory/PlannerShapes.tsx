@@ -11,6 +11,8 @@ import { GRID_STEP_CM, MAJOR_STEP_CM, cm } from "./layoutUnits";
 import { ElementCells } from "./PlannerCells";
 
 const SELECT_COLOR = "#f43f5e";
+/** 带查询参数跳转时的定位圈颜色（琥珀，与选中/连线色的红绿区分） */
+const FOCUS_COLOR = "#f59e0b";
 const MINOR_COLOR = "#eef0f3";
 const MAJOR_COLOR = "#d4d4d8";
 const RULER_COLOR = "#a1a1aa";
@@ -69,6 +71,8 @@ interface ShapeProps {
   onDragEnd?: (el: PosElement) => void;
   onTransformEnd?: (el: PosElement) => void;
   highlight?: boolean;
+  /** 带查询参数跳进来时定位到的元素：额外描一层醒目的圈，与普通选中态区分 */
+  focus?: boolean;
 }
 
 /** 墙/门/窗：薄矩形，按类型着色；选中时标注长度（cm） */
@@ -106,10 +110,12 @@ interface ItemShapeProps extends ShapeProps {
   scale?: number;
   onCellHover?: (code: string | null) => void;
   onCellClick?: (code: string, cell: ElementCell) => void;
+  /** 所查询物料：画布上把它的格位再圈一层 */
+  focusItem?: MaterialItem | null;
 }
 
 /** 物品元素：类型色块 + 名称/编码/格位规格；有格位时渲染 行×列 网格与物料数量 */
-export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblClick, onDragEnd, onTransformEnd, highlight, scale = 1, onCellHover, onCellClick }: ItemShapeProps) {
+export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblClick, onDragEnd, onTransformEnd, highlight, focus, focusItem, scale = 1, onCellHover, onCellClick }: ItemShapeProps) {
   const def = ELEMENT_DEFS[el.type];
   const counts = cellCounts(el, items);
   const totalQty = [...counts.values()].reduce((s, n) => s + n, 0);
@@ -132,8 +138,12 @@ export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblC
       onTransformEnd={onTransformEnd ? handleTransformEnd(el, onTransformEnd) : undefined}
     >
       <Rect width={el.w} height={el.h} fill={def.color} cornerRadius={4}
-        stroke={selected || highlight ? SELECT_COLOR : undefined}
-        strokeWidth={selected || highlight ? 2 : 0} />
+        stroke={focus ? FOCUS_COLOR : selected || highlight ? SELECT_COLOR : undefined}
+        strokeWidth={focus ? 3 : selected || highlight ? 2 : 0} />
+      {focus && (
+        <Rect x={-4} y={-4} width={el.w + 8} height={el.h + 8} cornerRadius={6} listening={false}
+          stroke={FOCUS_COLOR} strokeWidth={2} dash={[6, 4]} />
+      )}
       <Rect x={0} y={0} width={el.w} height={headerH} fill="rgba(0,0,0,0.18)" cornerRadius={[4, 4, 0, 0]} listening={false} />
       <Text text={el.name} x={4} y={2} width={el.w - (totalQty > 0 ? 34 : 8)} height={Math.min(14, headerH - 2)}
         fontSize={11} fontStyle="bold" fill="#ffffff" listening={false} ellipsis />
@@ -149,7 +159,8 @@ export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblC
         </>
       )}
       {cells.length > 0 && (
-        <ElementCells el={el} cells={cells} counts={counts} scale={scale} onCellHover={onCellHover} onCellClick={onCellClick} />
+        <ElementCells el={el} cells={cells} counts={counts} scale={scale} focusItem={focusItem}
+          onCellHover={onCellHover} onCellClick={onCellClick} />
       )}
       {showDims && (
         <Text text={`${cm(el.w)} × ${cm(el.h)} cm`} x={4} y={el.h - 11} width={el.w - 8} fontSize={9}

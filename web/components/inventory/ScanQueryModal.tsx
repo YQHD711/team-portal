@@ -6,6 +6,7 @@ import jsQR from "jsqr";
 import { Camera, CameraOff, Loader2, PackageSearch, Search, X } from "lucide-react";
 import type { InventoryItem } from "./inventoryTypes";
 import { cameraUnavailableReason, canUseCamera, extractCodeFromScan } from "@/lib/scan";
+import LocationLink from "./LocationLink";
 
 interface Props {
   onClose: () => void;
@@ -140,7 +141,11 @@ export default function ScanQueryModal({ onClose, onFound }: Props) {
             <div className="font-mono text-xs text-faint">{item.code}</div>
             <div className="mt-0.5 font-medium">{item.name}</div>
             <div className="mt-1 text-xs text-muted">
-              {item.grade} 级 · 在库 {item.quantity} · {item.locationCode || "库位未指定"} · {item.category || "未分类"}
+              {item.grade} 级 · 在库 {item.quantity} · {item.category || "未分类"}
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              库位：<LocationLink locationCode={item.locationCode} item={item.code || item.id}
+                fallback="库位未指定" withIcon testId="scan-result-location" />
             </div>
             <a href={`/i/${encodeURIComponent(item.code ?? "")}`} className="mt-2 inline-block text-xs text-sky-500 hover:text-sky-600">打开物料页 →</a>
           </div>

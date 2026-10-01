@@ -52,6 +52,8 @@ export interface MaterialItem {
   quantity: number;
   unitPrice?: number;
   locationCode?: string;
+  /** 物料编码（后端 /api/inventory 返回；布局页跳转时用于 `?item=`） */
+  code?: string;
 }
 
 export interface ElementDef {
