@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import QRCode from "react-qr-code";
-import { Printer, X, Copy, Check } from "lucide-react";
+import { Printer, X, Copy, Check, FileDown } from "lucide-react";
 import type { InventoryItem } from "./inventoryTypes";
 
 interface Props {
@@ -25,6 +25,8 @@ interface Props {
  */
 export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
   const code = item.code ?? "";
   const url = `${baseUrl.replace(/\/+$/, "")}/i/${encodeURIComponent(code)}`;
 
@@ -36,6 +38,28 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
     } catch {
       // 非安全上下文/未授权时剪贴板不可用，界面上仍能看到完整短链可手动选
       setCopied(false);
+    }
+  };
+
+  /**
+   * 导出 80×50mm 标签 PDF（对齐精臣软件里的 T80*50-560白 标签），拿 PDF 去打印。
+   * 与「打印」是两条独立路径：这个按钮不打开打印对话框。
+   * labelPdf / jsPDF 都在点击时才下载，不进主包。
+   */
+  const exportPdf = async () => {
+    if (!code || exporting) return;
+    setExporting(true);
+    setExportFailed(false);
+    try {
+      const { exportLabelPdf } = await import("@/lib/labelPdf");
+      await exportLabelPdf({
+        code, url, name: item.name,
+        grade: item.grade, locationCode: item.locationCode, category: item.category,
+      });
+    } catch {
+      setExportFailed(true);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -65,16 +89,28 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
           <div className="break-all text-[10px] text-faint">{url}</div>
         </div>
 
-        <div className="mt-5 flex gap-2 print:hidden">
+        {exportFailed && (
+          <p data-testid="export-pdf-error" className="mt-3 rounded-lg border-l-4 border-danger bg-red-50 px-3 py-2 text-xs text-red-700 print:hidden">
+            导出失败：浏览器可能不支持画布导出，请改用「打印」或换个浏览器（Chrome / Edge）。
+          </p>
+        )}
+
+        <div className="mt-5 flex flex-wrap gap-2 print:hidden">
           <button onClick={() => window.print()}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover">
+            className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover">
             <Printer className="h-4 w-4" />打印
           </button>
+          <button type="button" onClick={() => void exportPdf()} disabled={!code || exporting}
+            data-testid="export-label-pdf"
+            title={code ? "导出 80×50mm 标签 PDF，可用精臣软件或其他打印流程出纸" : "该物料没有编码，无法导出标签"}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
+            <FileDown className="h-4 w-4" />{exporting ? "导出中…" : "导出 PDF"}
+          </button>
           <button onClick={() => void copy()} aria-label="复制短链"
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
+            className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
             {copied ? <><Check className="h-4 w-4 text-success" />已复制</> : <><Copy className="h-4 w-4" />复制短链</>}
           </button>
-          <button onClick={onClose} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">关闭</button>
+          <button onClick={onClose} className="inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">关闭</button>
         </div>
       </div>
     </div>
