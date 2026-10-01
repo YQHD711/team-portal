@@ -35,11 +35,13 @@ describe("系统设置：AI 提示词", () => {
     expect(prompt.tagName).toBe("TEXTAREA");
     expect(prompt).toHaveAttribute("placeholder", "留空 = 使用内置默认提示词");
 
-    // 模型名保持单行 + datalist 建议
+    // 模型名保持单行 + 可自由输入：改用受控下拉（原生 datalist 点箭头不可靠，见 ModelInput）
     const model = screen.getByLabelText("AI:ModelName");
     expect(model.tagName).toBe("INPUT");
     expect(model).toHaveValue("deepseek-v4-pro");
-    expect(model).toHaveAttribute("list");
+    expect(screen.getByTestId("model-input-toggle")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("model-input-toggle"));
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
 
     // 密钥仍然是密码框
     const key = screen.getByLabelText("AI:ApiKey");

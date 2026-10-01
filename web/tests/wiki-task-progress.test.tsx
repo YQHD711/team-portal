@@ -112,13 +112,17 @@ describe("Wiki 导入页", () => {
     expect(after).toBeGreaterThan(initial);
   });
 
-  it("生成模型是可自由填写的输入框（不是下拉），且提示常用名", async () => {
+  it("生成模型是可自由填写的输入框（不是下拉），且提供常用名候选", async () => {
     render(<WikiImportPage />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
     const input = screen.getByLabelText("生成模型");
     expect(input.tagName).toBe("INPUT");
-    expect(input).toHaveAttribute("list"); // datalist 建议
+
+    // 常用名走统一的受控下拉（原生 datalist 点箭头不可靠，见 ModelInput）
+    fireEvent.click(screen.getByTestId("model-input-toggle"));
+    expect(screen.getByTestId("model-option-deepseek-v4-pro")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("model-input-toggle"));
 
     fireEvent.change(input, { target: { value: "my-custom-model-7b" } });
     expect(input).toHaveValue("my-custom-model-7b");

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { Save, Server, Shield, Brain, Cloud, Settings2, Loader2, Palette, Check, RotateCcw } from "lucide-react";
 import { useBrand } from "@/lib/brand";
-import { MODEL_SUGGESTIONS } from "@/components/ui/ModelInput";
+import { MODEL_SUGGESTIONS, ModelInput } from "@/components/ui/ModelInput";
 
 interface SystemSetting {
   key: string; value: string; category: string; description: string;
@@ -26,7 +26,8 @@ const THEMES = [
   { key: "warm", name: "暖橙", dot: "linear-gradient(135deg,#9c4d10,#b25e15)" },
 ];
 
-const MODEL_SUGGESTIONS_ID = "settings-model-suggestions";
+/** 模型名字段用统一的下拉建议输入框（见 ModelInput）；其余字段仍是普通输入框 */
+const MODEL_KEY = /model/i;
 
 export default function SettingsPage() {
   const { refresh } = useBrand();
@@ -256,14 +257,21 @@ export default function SettingsPage() {
                             placeholder="留空 = 使用内置默认提示词"
                             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
+                        ) : MODEL_KEY.test(s.key) ? (
+                          // 模型名：用统一的下拉建议输入框（原生 datalist 点箭头不可靠，见 ModelInput）
+                          <ModelInput
+                            value={s.value}
+                            onChange={v => updateValue(cat, s.key, v)}
+                            label={s.key}
+                            suggestions={aiModels.length > 0 ? aiModels.map(m => m.id) : MODEL_SUGGESTIONS}
+                            className="w-full sm:w-64"
+                          />
                         ) : (
                           <input
                             type={isSecret ? "password" : "text"}
                             aria-label={s.key}
                             value={s.value}
                             onChange={e => updateValue(cat, s.key, e.target.value)}
-                            // 模型名之类的字段：给常用名建议但仍可自由输入（模型名由上游决定，不该写死）
-                            list={/model/i.test(s.key) ? MODEL_SUGGESTIONS_ID : undefined}
                             className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
                         )}
@@ -297,11 +305,6 @@ export default function SettingsPage() {
           })}
         </form>
       )}
-
-      {/* 模型名建议：优先用刚从服务商拉到的现行列表，没有则用内置候选（仍可自由输入，模型名由上游决定） */}
-      <datalist id={MODEL_SUGGESTIONS_ID}>
-        {(aiModels.length > 0 ? aiModels.map(m => m.id) : MODEL_SUGGESTIONS).map(m => <option key={m} value={m} />)}
-      </datalist>
 
       {/* 拉到的模型元信息：上下文长度/最大输出/思考档位 —— 省得再去翻官方文档 */}
       {aiModels.some(m => m.contextWindow || m.maxOutputTokens) && (
