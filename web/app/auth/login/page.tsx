@@ -8,10 +8,22 @@ import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
 
+/**
+ * 登录成功后该去哪：优先 AuthGuard 带过来的 `?next=`，否则首页。
+ *
+ * `next` 来自 URL（用户可控），所以必须**只接受站内路径**：
+ * 以 `/` 开头且不是 `//`（`//evil.com` 是协议相对地址，会被浏览器当成外站 → 开放重定向）。
+ */
+export function loginTarget(): string {
+  if (typeof window === "undefined") return "/";
+  const raw = new URLSearchParams(window.location.search).get("next");
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const { teamName, teamSubtitle } = useBrand();
-  const [username, setUsername] = useState("");
+  const { teamName, teamSubtitle } = useBrand();  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +36,7 @@ export default function LoginPage() {
     try {
       const data = await api.post<{ token: string }>("/api/auth/login", { username, password });
       setToken(data.token);
-      router.replace("/");
+      router.replace(loginTarget());
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
     } finally {

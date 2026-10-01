@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import LoginPage from "@/app/auth/login/page";
+import LoginPage, { loginTarget } from "@/app/auth/login/page";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
@@ -88,5 +88,50 @@ describe("登录页", () => {
     expect(screen.getByRole("button", { name: /登录/ })).toBeDisabled();
 
     resolveLogin({ token: "t" });
+  });
+});
+
+// 未登录扫码进 /i/<编码> 时，AuthGuard 会跳登录并带上 ?next=；
+// 登录后必须回到那一页，而不是落在首页。
+describe("登录后回到原目标", () => {
+  const original = window.location.href;
+  afterEach(() => window.history.replaceState({}, "", original));
+
+  it("带 next 时回到原页面", () => {
+    window.history.replaceState({}, "", "/auth/login?next=%2Fi%2Fu_abc123def456");
+    expect(loginTarget()).toBe("/i/u_abc123def456");
+  });
+
+  it("保留查询串", () => {
+    window.history.replaceState({}, "", "/auth/login?next=%2Fadmin%2Fprofiles%3Ftab%3Dprofiles");
+    expect(loginTarget()).toBe("/admin/profiles?tab=profiles");
+  });
+
+  it("没有 next 时回首页", () => {
+    window.history.replaceState({}, "", "/auth/login");
+    expect(loginTarget()).toBe("/");
+  });
+
+  // 安全：next 来自 URL，必须防开放重定向
+  it("拒绝协议相对地址（//evil.com）", () => {
+    window.history.replaceState({}, "", "/auth/login?next=%2F%2Fevil.com");
+    expect(loginTarget()).toBe("/");
+  });
+
+  it("拒绝外站绝对地址", () => {
+    window.history.replaceState({}, "", "/auth/login?next=https%3A%2F%2Fevil.com");
+    expect(loginTarget()).toBe("/");
+  });
+
+  it("登录成功后用的是 next 而不是写死的 /", async () => {
+    window.history.replaceState({}, "", "/auth/login?next=%2Fi%2Fu_abc123def456");
+    mockedPost.mockResolvedValueOnce({ token: "tok" });
+
+    render(<LoginPage />);
+    fireEvent.change(screen.getByPlaceholderText("请输入用户名"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByPlaceholderText("请输入密码"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /登录/ }));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/i/u_abc123def456"));
   });
 });
