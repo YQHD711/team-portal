@@ -99,10 +99,27 @@ public static class InventoryEndpoints
         });
 
         // 按物料编码查（贴在实物上的二维码短链 /i/<编码> 与手输兜底都走这里；大小写不敏感）
-        group.MapGet("/by-code/{code}", async (string code, InventoryService svc) =>
+        //
+        // 查询也要留痕：扫码/手输编码要能回答"谁、什么时候、查了哪个编码、查到没有、从哪个 IP"。
+        // **未命中的一条同样要落** —— 反复查不到正是有人在拿编码探测库里有什么的信号，
+        // 只记命中反而会把这类行为漏掉。
+        group.MapGet("/by-code/{code}", async (string code, InventoryService svc, LogService log, ClaimsPrincipal user, HttpContext ctx) =>
         {
             var item = await svc.GetByCode(code);
-            return item is not null ? Results.Ok(item) : Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
+            var actor = user.Identity?.Name ?? "unknown";
+            var ip = LogService.ClientIp(ctx);
+            if (item is null)
+            {
+                // 未命中没有物料 id 可挂，targetId 用 "miss" 占位：列表里一眼能认出是查空的
+                log.Audit("query", actor, targetType: "item", targetId: "miss",
+                    data: new { result = "miss", code, message = "未找到编码对应的物料" }, ipAddress: ip);
+                return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
+            }
+            // 只放必要的定位字段，不把整个物料对象塞进 data（审计表不是数据备份）
+            log.Audit("query", actor, targetType: "item", targetId: item.Id.ToString(),
+                data: new { result = "hit", code, itemId = item.Id, name = item.Name, locationCode = item.LocationCode },
+                ipAddress: ip);
+            return Results.Ok(item);
         });
 
         // 自动生号预览：前缀按分类、年份取采购年、序号取该池的下一个。

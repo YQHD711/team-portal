@@ -23,6 +23,8 @@ export const baseActionLabels: Record<string, string> = {
   settings: "系统设置", invite: "邀请", upload: "上传",
   purchase: "标记已购买", receive: "收货入库", "dept-approve": "部长审批", "admin-approve": "管理员审批",
   profile: "档案", complete: "标记完成", uncomplete: "取消完成",
+  // 扫码/手输编码查询物料（/api/inventory/by-code/{code}）：命中与未命中都记一条
+  query: "查询",
 };
 
 /* 按 (targetType, action) 精化的标签 */
@@ -58,6 +60,7 @@ export const actionColors: Record<string, string> = {
   stocktake: "bg-info/15 text-info", invite: "bg-info/15 text-info", "dept-approve": "bg-info/15 text-info",
   "admin-approve": "bg-info/15 text-info", receive: "bg-success/15 text-success", approve: "bg-success/15 text-success",
   complete: "bg-success/15 text-success", uncomplete: "bg-warning/15 text-warning",
+  query: "bg-info/15 text-info",
 };
 
 /** 动作中文标签: 先按 targetType 精化,否则粗粒度表 */
