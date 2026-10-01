@@ -54,7 +54,7 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
     return { groups, unlocated: loose };
   }, [filtered, elements]);
 
-  // 上报条目中心（视口坐标）：条目/搜索变化、面板滚动、窗口缩放时重测
+  // 上报条目中心（视口坐标）：条目/搜索变化、面板滚动、窗口缩放、任意祖先滚动时重测
   const report = useCallback(() => {
     if (!onItemRects) return;
     const m = new Map<number, { x: number; y: number }>();
@@ -69,11 +69,16 @@ export function MaterialsPanel({ roomCode, items, elements, selectedId, onSelect
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    el.addEventListener("scroll", report);
+    // 视口坐标锚点会被任何滚动/布局变化作废（如返回布局页后的滚动恢复），
+    // 故捕获阶段监听所有滚动，并用 ResizeObserver 兜住不触发 resize 的尺寸变化
+    window.addEventListener("scroll", report, true);
     window.addEventListener("resize", report);
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
     return () => {
-      el.removeEventListener("scroll", report);
+      window.removeEventListener("scroll", report, true);
       window.removeEventListener("resize", report);
+      ro.disconnect();
     };
   }, [report]);
 

@@ -47,9 +47,12 @@ export function useCellCenters(
     const canvas = stageRef.current?.getContent();
     const ro = canvas ? new ResizeObserver(report) : null;
     ro?.observe(canvas!);
+    // 视口坐标锚点会被滚动/缩放作废（含返回布局页后的滚动恢复），故捕获阶段监听所有滚动
+    window.addEventListener("scroll", report, true);
     window.addEventListener("resize", report);
     return () => {
       ro?.disconnect();
+      window.removeEventListener("scroll", report, true);
       window.removeEventListener("resize", report);
     };
   }, [layout, items, scale, x, y, stageRef]);
