@@ -317,7 +317,12 @@ export default function KnowledgeAdminPage() {
                     <button onClick={() => { setSplitMode(!splitMode); setPreview(false); }} className={`p-1.5 rounded text-xs ${splitMode ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="分栏编辑"><Columns className="h-3.5 w-3.5" /></button>
                     <button onClick={() => { setPreview(!preview); if (preview) setSplitMode(false); }} className={`p-1.5 rounded text-xs ${preview ? "bg-sky-100 text-sky-600" : "text-faint"}`} title="预览"><Eye className="h-3.5 w-3.5" /></button>
                     <button onClick={handleSave} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"><Save className="h-3.5 w-3.5" />{saving ? "保存中..." : "保存"}</button>
-                    <button onClick={() => handleDelete(selected)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    {/* 删除：以前是个没有名字的裸图标（挨着保存键），改成带文字的危险色按钮 + aria-label，
+                        点下去仍然先弹确认，避免误删 */}
+                    <button onClick={() => handleDelete(selected)} aria-label={`删除文档 ${selected}`} title="删除这篇文档（不可撤销）"
+                      className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 hover:border-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40">
+                      <Trash2 className="h-3.5 w-3.5" />删除
+                    </button>
                   </div>
                 )}
               </div>
