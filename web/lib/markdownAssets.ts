@@ -53,6 +53,34 @@ function normalize(path: string): string | null {
   return out.length > 0 ? out.join("/") : null;
 }
 
+/**
+ * 把文档里的**相对 .md 链接**解析成站内文档路径（相对当前文档所在目录）。
+ * 返回 null = 不拦截、按普通链接放行，交给浏览器/React 原样处理：
+ * - 外链 `http(s)://`、协议相对 `//`、`mailto:` / `tel:` / 其它协议
+ * - 纯锚点 `#xxx`
+ * - 非 `.md`（图片、pdf 附件…）
+ * - 以 `/` 开头的站内路由（`/inventory/layout` 这类 Next 路由不能拦）
+ * - 当前文档路径缺失，或 `../` 上跳越出知识库根
+ * `#锚点` 会被丢掉：跳转只是"切到那篇文档"，标题对齐由目标文档自己负责。
+ */
+export function resolveDocLink(href: string | undefined, docPath?: string): string | null {
+  const raw = (href ?? "").trim();
+  if (!raw || !docPath) return null;
+  if (raw.startsWith("#")) return null;
+  if (isExternalUrl(raw)) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return null;
+  if (raw.startsWith("/") || raw.startsWith("\\")) return null;
+
+  // 去掉 ?query / #hash；反斜杠按路径分隔符处理（有人从 Windows 里复制路径）
+  let file = raw.split("#")[0].split("?")[0].trim().replace(/\\/g, "/");
+  if (!/\.md$/i.test(file)) return null;
+  // react-markdown 会把 href 做 URL 编码（中文路径会变成 %E7%AB%A0...），先解回真实文件名
+  try { file = decodeURIComponent(file); } catch { /* 含非法 % 序列就按原样用 */ }
+
+  const dir = docPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+  return normalize(dir ? `${dir}/${file}` : file);
+}
+
 /** 带鉴权的知识库资源地址（用 api.download 取 blob 时用）。 */
 export function knowledgeAssetUrl(path: string): string {
   return `/api/knowledge/download?path=${encodeURIComponent(path)}`;
