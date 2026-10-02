@@ -9,6 +9,7 @@ import { slugify } from "@/lib/studyNav";
 import { isExternalUrl, docLinkHash, resolveDocLink } from "@/lib/markdownAssets";
 import { wrapHighlights, highlightRenderers } from "@/lib/mdHighlight";
 import { MarkdownImage } from "./MarkdownImage";
+import { PROSE_CLASS } from "./proseClass";
 
 // 性能 #9:mermaid(700KB+) + react-syntax-highlighter(200KB+ 各语言)均按需加载
 const MermaidBlock = dynamic(() => import("./MermaidBlock"), {
@@ -34,6 +35,11 @@ interface MarkdownRendererProps {
    * 不改 markdown 源文本（代码块/表格/mermaid 不受影响）。不传时渲染结果与以前完全一致。
    */
   highlight?: string;
+  /**
+   * 只渲染正文、不套 prose 容器（块级编辑用：整篇共用一个容器，避免每块各产生外边距）。
+   * 不传时与以前完全一致。
+   */
+  bare?: boolean;
 }
 
 /** 取 React 子节点里的纯文本(标题生成锚点 id 用) */
@@ -73,7 +79,7 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   return <a href={url} className={INTERNAL_LINK_CLASS}>{children}</a>;
 }
 
-export function MarkdownRenderer({ content, docPath, onNavigate, highlight }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, docPath, onNavigate, highlight, bare }: MarkdownRendererProps) {
   const [SyntaxHighlighter, setSyntaxHighlighter] = useState<any>(null);
   const [oneDark, setOneDark] = useState<any>(null);
 
@@ -112,17 +118,7 @@ export function MarkdownRenderer({ content, docPath, onNavigate, highlight }: Ma
   // 不传 highlight 时是恒等函数：标题/段落渲染结果与改动前逐字一致
   const hl = (children: ReactNode) => (highlight ? wrapHighlights(children, highlight) : children);
 
-  return (
-    <div className="prose prose-zinc dark:prose-invert max-w-none overflow-x-auto
-      prose-headings:font-semibold
-      prose-h1:text-2xl prose-h2:text-xl prose-h2:mt-8 prose-h2:pb-1.5 prose-h2:border-b prose-h2:border-border
-      prose-h3:text-base
-      prose-p:leading-7 prose-li:leading-7 prose-li:my-0.5
-      prose-table:text-sm prose-th:bg-surface-subtle prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-1.5
-      prose-table:border prose-table:border-border prose-th:border prose-th:border-border prose-td:border prose-td:border-border
-      prose-blockquote:border-l-4 prose-blockquote:border-sky-400/60 prose-blockquote:bg-sky-50/50 prose-blockquote:py-1 prose-blockquote:not-italic
-      prose-img:rounded-xl prose-img:border prose-img:border-border
-      prose-hr:my-8">
+  const body = (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -187,6 +183,9 @@ export function MarkdownRenderer({ content, docPath, onNavigate, highlight }: Ma
       >
         {content}
       </ReactMarkdown>
-    </div>
   );
+
+  // bare：不套 prose 容器（块级编辑时整篇共用一个容器，避免每块各自产生外边距）
+  if (bare) return body;
+  return <div className={PROSE_CLASS}>{body}</div>;
 }

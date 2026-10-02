@@ -84,6 +84,16 @@ export default function StudyPage() {
     return () => { cancelled = true; };
   }, [activePath]);
 
+  /**
+   * 块级就地编辑的保存：学习库正文就是知识库里同一个 .md 文件 → 复用已有的写入接口
+   * （`POST /api/admin/knowledge/write` 在 StaffOnly 下，权限判定仍是页面里的 canEdit）。
+   */
+  const saveLessonContent = async (nextContent: string) => {
+    if (!activePath) return;
+    await api.post("/api/admin/knowledge/write", { path: activePath, content: nextContent });
+    setContent(nextContent);
+  };
+
   const scope = scopes[scopeIdx];
   const lessons = scope ? flattenLessons(scope.stages) : [];
   const idx = activePath ? lessons.findIndex(l => l.path === activePath) : -1;
@@ -192,7 +202,8 @@ export default function StudyPage() {
             total={lessons.length}
             onOpen={openLesson} onBackToPath={() => setActivePath(null)}
             onToggle={completed => toggle(activeLesson.path, completed)}
-            highlight={highlight} scrollToId={scrollToId} />
+            highlight={highlight} scrollToId={scrollToId}
+            onSaveContent={activeLesson.canEdit ? saveLessonContent : undefined} />
         </div>
       ) : (
         <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} highlight={highlight} />
