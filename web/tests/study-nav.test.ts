@@ -1,9 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { applyCompletion, extractToc, flattenLessons, lessonOrdinal, percent, slugify, type StudyScope, type StudyStage } from "@/lib/studyNav";
+import { applyCompletion, extractToc, findScopeWithTerm, flattenLessons, lessonOrdinal, percent, slugify, type StudyScope, type StudyStage } from "@/lib/studyNav";
 
 const stage = (title: string, lessonTitles: string[]): StudyStage => ({
   title, path: `公共/学习库/${title}`, canEdit: false, descriptionPath: null,
   lessons: lessonTitles.map(t => ({ title: t, path: `公共/学习库/${title}/${t}.md`, canEdit: false })),
+});
+
+const scopeText = (name: string, overview: string | null, description: string | null): StudyScope => ({
+  scope: name, label: `${name}学习库`, libraryPath: `${name}/学习库`, canEdit: false,
+  overviewPath: `${name}/学习库/_学习路径.md`, overview,
+  stages: [{
+    title: "阶段", path: `${name}/学习库/阶段`, canEdit: false, descriptionPath: `${name}/学习库/阶段/_阶段说明.md`,
+    description, lessons: [],
+  }],
 });
 
 describe("学习库导航（纯逻辑）", () => {
@@ -89,5 +98,24 @@ describe("进度与完成度（纯逻辑）", () => {
     expect(percent(0, 2)).toBe(0);
     expect(percent(0, 0)).toBe(0);
     expect(percent(undefined, undefined)).toBe(0);
+  });
+});
+
+describe("说明类命中的库定位（findScopeWithTerm）", () => {
+  const scopes = [
+    scopeText("飞训部", "总览：飞行安全第一。", "阶段说明：起飞检查。"),
+    scopeText("电子部", "总览：焊接安全第一。", "阶段说明：认识 cuadc 的引脚定义。"),
+  ];
+
+  it("命中在别的部门库的正文里也能定位（后端只给了 /study，不带 scope）", () => {
+    expect(findScopeWithTerm(scopes, "cuadc")).toBe(1);
+    expect(findScopeWithTerm(scopes, "起飞检查")).toBe(0);
+  });
+
+  it("大小写不敏感；空关键词 / 谁都不含 → -1（保持当前库）", () => {
+    expect(findScopeWithTerm([scopeText("A", "See CUADC here", null)], "cuadc")).toBe(0);
+    expect(findScopeWithTerm(scopes, "   ")).toBe(-1);
+    expect(findScopeWithTerm(scopes, "不存在的词")).toBe(-1);
+    expect(findScopeWithTerm([scopeText("A", null, null)], "x")).toBe(-1);
   });
 });

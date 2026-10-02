@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { Clock, Target, Pencil, BookOpen, Sparkles, Check, Circle } from "lucide-react";
+import { HIGHLIGHT_TESTID } from "@/lib/mdHighlight";
 import { percent, type StudyLesson, type StudyScope } from "@/lib/studyNav";
 
 /**
@@ -11,17 +12,33 @@ import { percent, type StudyLesson, type StudyScope } from "@/lib/studyNav";
  * 课时可直接勾选完成 —— 这是「学习系统」和「文件浏览器」的分界线。
  */
 export function StudyPath({
-  scope, onOpenLesson, onToggle,
+  scope, onOpenLesson, onToggle, highlight,
 }: {
   scope: StudyScope;
   onOpenLesson: (path: string) => void;
   onToggle: (path: string, completed: boolean) => void;
+  /**
+   * 搜索关键词。学习库的「说明类」文档（`_学习路径.md` / `_阶段说明.md`）正文就渲染在本页，
+   * 后端给这类结果的跳转地址是光秃秃的 `/study`，所以命中只能在这里定位：
+   * 高亮 + 展开阶段说明 + 滚到第一处命中。
+   */
+  highlight?: string;
 }) {
   const total = scope.lessonCount ?? scope.stages.reduce((n, s) => n + s.lessons.length, 0);
   const done = scope.completedCount ?? 0;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // 命中可能落在默认折叠的「阶段说明」里：搜索时先全部展开，否则滚过去了也看不见
+  const [openAll, setOpenAll] = useState(false);
+
+  useEffect(() => { if (highlight) setOpenAll(true); }, [highlight]);
+
+  useEffect(() => {
+    if (!highlight) return;
+    wrapRef.current?.querySelector<HTMLElement>(`[data-testid="${HIGHLIGHT_TESTID}"]`)?.scrollIntoView?.({ block: "start" });
+  }, [highlight, openAll, scope]);
 
   return (
-    <div className="space-y-6">
+    <div ref={wrapRef} className="space-y-6">
       {(scope.overview || scope.goal || scope.duration) && (
         <section className="rounded-2xl border bg-gradient-to-br from-sky-50 to-transparent dark:from-sky-950/40 p-6">
           <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -33,7 +50,7 @@ export function StudyPath({
           </div>
           {scope.goal && <p className="text-sm text-muted mb-3">🎯 {scope.goal}</p>}
           {total > 0 && <Progress done={done} total={total} className="mb-3" />}
-          {scope.overview && <MarkdownRenderer content={scope.overview} docPath={scope.overviewPath ?? undefined} onNavigate={onOpenLesson} />}
+          {scope.overview && <MarkdownRenderer content={scope.overview} docPath={scope.overviewPath ?? undefined} onNavigate={onOpenLesson} highlight={highlight} />}
         </section>
       )}
 
@@ -61,9 +78,9 @@ export function StudyPath({
                   )}
                   {stageTotal > 0 && <Progress done={stageDone} total={stageTotal} />}
                   {stage.description && (
-                    <details className="text-sm text-muted" open={i === 0}>
+                    <details className="text-sm text-muted" open={openAll || i === 0}>
                       <summary className="cursor-pointer select-none text-xs text-faint hover:text-sky-500">阶段说明</summary>
-                      <div className="mt-2"><MarkdownRenderer content={stage.description} docPath={stage.descriptionPath ?? undefined} onNavigate={onOpenLesson} /></div>
+                      <div className="mt-2"><MarkdownRenderer content={stage.description} docPath={stage.descriptionPath ?? undefined} onNavigate={onOpenLesson} highlight={highlight} /></div>
                     </details>
                   )}
                 </div>

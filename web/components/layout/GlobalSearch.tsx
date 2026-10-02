@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, FileText, Package, GitBranch, Upload, Loader2, GraduationCap } from "lucide-react";
 import { api } from "@/lib/api";
+import { searchTargetUrl } from "@/lib/searchNav";
 
 interface SearchResult {
   knowledge: { type: string; title: string; snippet: string; path: string }[];
@@ -54,15 +55,12 @@ export function GlobalSearch() {
   ] : [];
 
   /**
-   * 跳转到结果页。学习库落在 `/study?lesson=…`，把搜索词一并带过去，
-   * 由学习库页做"高亮命中 + 滚到第一处命中"（关键词不进 markdown 源文本）。
+   * 跳转到结果页。学习库结果追加 `q=`（见 lib/searchNav），由 `/study` 做
+   * "高亮命中 + 滚到第一处命中"；`lesson=` 等原有参数必须原样保留。
    */
   const navigate = (path: string) => {
-    const term = q.trim();
-    const target = term && path.startsWith("/study")
-      ? `${path}${path.includes("?") ? "&" : "?"}q=${encodeURIComponent(term)}`
-      : path;
-    setOpen(false); setQ(""); setResults(null); window.location.href = target;
+    setOpen(false); setQ(""); setResults(null);
+    window.location.href = searchTargetUrl(path, q);
   };
 
   return (
