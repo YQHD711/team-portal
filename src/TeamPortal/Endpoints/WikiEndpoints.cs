@@ -5,7 +5,7 @@ using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
-public static class WikiEndpoints
+public static partial class WikiEndpoints
 {
     public static void MapWikiEndpoints(this WebApplication app)
     {
@@ -27,15 +27,33 @@ public static class WikiEndpoints
                 return Results.Problem("Invalid visibility", statusCode: 400);
 
             var uid = GetUserId(user);
-            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility, req.Model, req.CustomCatalogJson);
             var log = app.Services.GetRequiredService<LogService>();
+            var actor = user.Identity?.Name ?? "unknown";
+
+            // 「仅克隆」：只把源码拉下来、不跑 AI 生成（不花 token），任务以终结态入库
+            if (req.CloneOnly)
+            {
+                var cloned = await generator.SubmitCloneOnly("git", req.Url, req.ProjectName, targetFolder, uid, visibility);
+                if (!cloned.Ok)
+                {
+                    log.Warn("wiki", $"Clone-only git task failed: {req.ProjectName}");
+                    return Results.Problem(cloned.Message, statusCode: 400);
+                }
+                var t = cloned.Task!;
+                log.Info("wiki", $"Clone-only git task submitted: {req.ProjectName}");
+                log.Audit("create", actor, targetType: "wiki-task", targetId: t.Id,
+                    data: new { projectName = req.ProjectName, visibility, targetFolder, cloneOnly = true }, ipAddress: LogService.ClientIp(ctx), userId: uid);
+                return Results.Ok(new { t.Id, t.Status, t.Visibility, cloneOnly = true });
+            }
+
+            var task = await generator.SubmitGit(req.Url, req.ProjectName, targetFolder, uid, visibility, req.Model, req.CustomCatalogJson);
             log.Info("wiki", $"Git task submitted: {req.ProjectName} (visibility={visibility})");
-            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
+            log.Audit("create", actor, targetType: "wiki-task", targetId: task.Id,
                 data: new { projectName = req.ProjectName, visibility, targetFolder }, ipAddress: LogService.ClientIp(ctx), userId: uid);
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         });
 
-        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, string? model, string? customCatalogJson, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
+        wiki.MapPost("/submit-zip", async (IFormFile file, string projectName, string? targetFolder, string? visibility, string? model, string? customCatalogJson, bool? cloneOnly, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
             var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可提交", statusCode: 403);
@@ -58,10 +76,28 @@ public static class WikiEndpoints
                 await file.CopyToAsync(stream);
 
             var uid = GetUserId(user);
-            var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis, model, customCatalogJson);
             var log = app.Services.GetRequiredService<LogService>();
+            var actor = user.Identity?.Name ?? "unknown";
+
+            // 「仅克隆」：只解压源码、不跑 AI 生成（不花 token），任务以终结态入库
+            if (cloneOnly == true)
+            {
+                var cloned = await generator.SubmitCloneOnly("zip", WikiGeneratorService.EncodeZipSource(zipPath), projectName, folder, uid, vis);
+                if (!cloned.Ok)
+                {
+                    log.Warn("wiki", $"Clone-only ZIP task failed: {projectName}");
+                    return Results.Problem(cloned.Message, statusCode: 400);
+                }
+                var zt = cloned.Task!;
+                log.Info("wiki", $"Clone-only ZIP task submitted: {projectName}");
+                log.Audit("create", actor, targetType: "wiki-task", targetId: zt.Id,
+                    data: new { projectName, visibility = vis, targetFolder = folder, cloneOnly = true }, ipAddress: LogService.ClientIp(ctx), userId: uid);
+                return Results.Ok(new { zt.Id, zt.Status, zt.Visibility, cloneOnly = true });
+            }
+
+            var task = await generator.SubmitZip(zipPath, projectName, folder, uid, vis, model, customCatalogJson);
             log.Info("wiki", $"ZIP task submitted: {projectName} (visibility={vis})");
-            log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: task.Id,
+            log.Audit("create", actor, targetType: "wiki-task", targetId: task.Id,
                 data: new { projectName, visibility = vis, targetFolder = folder }, ipAddress: LogService.ClientIp(ctx), userId: uid);
             return Results.Ok(new { task.Id, task.Status, task.Visibility });
         }).DisableAntiforgery();
@@ -338,6 +374,9 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
                 data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(new { success = true });
         });
+
+        // 源码工作区恢复（重新克隆）—— 见 WikiEndpoints.Recovery.cs
+        MapWorkspaceRecoveryEndpoints(wiki);
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }
@@ -356,5 +395,5 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
         (task.Visibility == "personal" && (role == "admin" || task.UserId == userId));
 }
 
-public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null);
+public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null, bool CloneOnly = false);
 public record VisibilityRequest(string Visibility);

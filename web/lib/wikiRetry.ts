@@ -30,6 +30,27 @@ export function diagnoseTask(taskId: string): Promise<WikiDiagnostics> {
   return api.get<WikiDiagnostics>(`/api/wiki/tasks/${taskId}/diagnose`);
 }
 
+/**
+ * 克隆源码可能远超默认 30 秒超时（大仓库 clone 很慢），
+ * 所以「仅克隆 / 重新克隆」这类请求单独给 5 分钟。
+ */
+export const CLONE_TIMEOUT_MS = 300_000;
+
+/**
+ * 重新克隆：工作区丢失（部署重建容器会清空 /tmp 工作区）后按需恢复源码浏览。
+ * 只下载源码，不调用 AI、不产生费用，也不会重跑生成管线。
+ */
+export async function recloneWorkspace(taskId: string, projectName: string): Promise<string> {
+  const confirmed = window.confirm(
+    `将重新下载「${projectName}」的源码到服务器工作区。\n` +
+      "只下载源码：不调用 AI、不产生任何费用，已生成的文档不受影响。\n" +
+      "下载期间保持页面打开。确定继续？"
+  );
+  if (!confirmed) return "";
+  const res = await api.post<{ message?: string }>(`/api/wiki/tasks/${taskId}/reclone`, {}, CLONE_TIMEOUT_MS);
+  return res.message ?? "源码已重新克隆";
+}
+
 /** 从知识库 .history 的历史版本恢复缺失文档：不调用 AI、无费用。 */
 export async function restoreFromHistory(taskId: string, recoverable: number): Promise<string> {
   if (recoverable === 0) {

@@ -15,6 +15,8 @@ public class WikiTask
     public string? CatalogJson { get; set; }
     public string? Model { get; set; }
     public string? CustomCatalogJson { get; set; }
+    /// <summary>「仅克隆」任务：只把源码拉进工作区，不生成任何文档（CatalogJson 保持空）。</summary>
+    public bool CloneOnly { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 }

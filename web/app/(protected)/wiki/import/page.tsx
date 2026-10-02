@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { GitBranch, Upload, Loader2, Globe, Building2, Lock } from "lucide-react";
 import { ModelInput } from "@/components/ui/ModelInput";
-import { retryMissingDocuments } from "@/lib/wikiRetry";
+import { retryMissingDocuments, CLONE_TIMEOUT_MS } from "@/lib/wikiRetry";
 import { TaskQueue, isActiveTask, type WikiTaskInfo } from "@/components/wiki/TaskQueue";
 
 const ACTIVE_POLL_MS = 5000; // 有进行中的任务时自动刷新；全部结束后停表
@@ -27,6 +27,8 @@ export default function WikiImportPage() {
   const [message, setMessage] = useState("");
   const [model, setModel] = useState("");
   const [customCatalogJson, setCustomCatalogJson] = useState("");
+  // 「仅克隆」：只下载源码、不跑 AI 生成（不花 token）。也是工作区丢失后的恢复手段
+  const [cloneOnly, setCloneOnly] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const { user } = useCurrentUser();
   const isStaff = user?.role === "admin" || user?.role === "部长";
@@ -70,8 +72,8 @@ export default function WikiImportPage() {
     if (!gitUrl || !projectName) return;
     setSubmitting(true); setMessage("");
     try {
-      await api.post("/api/wiki/submit-git", { url: gitUrl, projectName, targetFolder: targetFolder || undefined, visibility, model: model || undefined, customCatalogJson: customCatalogJson || undefined });
-      setMessage("✅ 已提交，后台正在处理...");
+      await api.post("/api/wiki/submit-git", { url: gitUrl, projectName, targetFolder: targetFolder || undefined, visibility, model: model || undefined, customCatalogJson: customCatalogJson || undefined, cloneOnly }, cloneOnly ? CLONE_TIMEOUT_MS : undefined);
+      setMessage(cloneOnly ? "✅ 源码已克隆，可直接浏览文件（未生成文档）" : "✅ 已提交，后台正在处理...");
       setGitUrl(""); setProjectName(""); fetchTasks();
     } catch (err) { setMessage("❌ " + (err instanceof Error ? err.message : "提交失败")); }
     finally { setSubmitting(false); }
@@ -92,9 +94,10 @@ export default function WikiImportPage() {
       params.set("visibility", visibility);
       if (model) params.set("model", model);
       if (customCatalogJson) params.set("customCatalogJson", customCatalogJson);
+      if (cloneOnly) params.set("cloneOnly", "true");
       const res = await fetch(`/api/wiki/submit-zip?${params}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
       if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: "Failed" }))).detail);
-      setMessage("✅ ZIP 已提交，后台正在处理...");
+      setMessage(cloneOnly ? "✅ 源码已解压，可直接浏览文件（未生成文档）" : "✅ ZIP 已提交，后台正在处理...");
       setProjectName(""); if (fileRef.current) fileRef.current.value = ""; fetchTasks();
     } catch (err) { setMessage("❌ " + (err instanceof Error ? err.message : "提交失败")); }
     finally { setSubmitting(false); }
@@ -157,6 +160,22 @@ export default function WikiImportPage() {
           <textarea value={customCatalogJson} onChange={e => setCustomCatalogJson(e.target.value)} rows={6} placeholder='例如: [{"path":"getting-started","title":"快速开始"}]'
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
+        <label className="flex items-start gap-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={cloneOnly}
+            onChange={e => setCloneOnly(e.target.checked)}
+            aria-label="仅克隆（只下载源码，不生成文档）"
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium">仅克隆（不生成文档）</span>
+            <span className="block text-xs text-faint mt-0.5">
+              只把源码拉下来（工作区丢失后也用它恢复源码浏览），不调用 AI、不产生任何费用。
+              需要文档时再对已有任务补齐即可。
+            </span>
+          </span>
+        </label>
         <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 transition-colors shadow-sm">
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "git" ? <GitBranch className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
           {submitting ? "提交中..." : "提交任务"}

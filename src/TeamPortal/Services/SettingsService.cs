@@ -133,6 +133,8 @@ public class SettingsService
             new() { Key = "Baidu:SignKey", Value = "", Category = "百度网盘", Description = "百度开放平台 SignKey" },
             new() { Key = "Wiki:PollingIntervalSec", Value = "30", Category = "系统参数", Description = "Wiki 任务轮询间隔（秒）" },
             new() { Key = "Wiki:MaxIterations", Value = "30", Category = "系统参数", Description = "Wiki 生成最大迭代次数" },
+            new() { Key = "Wiki:WorkspaceRoot", Value = "/data/wiki-workspaces", Category = "系统参数", Description = "Wiki 源码工作区根目录。必须落在挂卷目录上（容器里是 /data），否则重建容器会清空工作区、源码浏览全部 404；清空后可用任务页的「重新克隆」恢复" },
+            new() { Key = "Wiki:WorkspaceKeep", Value = "20", Category = "系统参数", Description = "只保留最近 N 个 Wiki 工作区（按 CompletedAt ?? CreatedAt 倒序），更早的目录在生成/克隆成功后清理；任务记录保留，正在运行的任务绝不清理" },
             new() { Key = "System:LogRetentionDays", Value = "90", Category = "系统参数", Description = "日志保留天数" },
             new() { Key = "System:OperationLogRetentionDays", Value = "180", Category = "系统参数", Description = "操作日志（审计）保留天数，列表查询时惰性清理超期行" },
             new() { Key = "System:AuditDataMaxLen", Value = "2000", Category = "系统参数", Description = "操作日志 data 字段最大长度（字符），超出截断" },
