@@ -61,7 +61,7 @@ function normalize(path: string): string | null {
  * - 非 `.md`（图片、pdf 附件…）
  * - 以 `/` 开头的站内路由（`/inventory/layout` 这类 Next 路由不能拦）
  * - 当前文档路径缺失，或 `../` 上跳越出知识库根
- * `#锚点` 会被丢掉：跳转只是"切到那篇文档"，标题对齐由目标文档自己负责。
+ * `#锚点` 不参与路径解析：需要锚点时另外用 `docLinkHash` 取，切完文档再滚过去。
  */
 export function resolveDocLink(href: string | undefined, docPath?: string): string | null {
   const raw = (href ?? "").trim();
@@ -79,6 +79,19 @@ export function resolveDocLink(href: string | undefined, docPath?: string): stri
 
   const dir = docPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
   return normalize(dir ? `${dir}/${file}` : file);
+}
+
+/**
+ * 取出站内文档链接里的 `#锚点`（已解码，没写锚点返回 null）。
+ * 只在 `resolveDocLink` 判定为站内文档链接后才该调用 —— 外链的 fragment 不算文档锚点。
+ */
+export function docLinkHash(href: string | undefined): string | null {
+  const raw = (href ?? "").trim();
+  const at = raw.indexOf("#");
+  if (at < 0) return null;
+  let hash = raw.slice(at + 1);
+  try { hash = decodeURIComponent(hash); } catch { /* 非法 % 序列就按原样用 */ }
+  return hash.trim() || null;
 }
 
 /** 带鉴权的知识库资源地址（用 api.download 取 blob 时用）。 */

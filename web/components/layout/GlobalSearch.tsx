@@ -53,7 +53,17 @@ export function GlobalSearch() {
     ...results.knowledge, ...results.inventory, ...results.wiki, ...results.files
   ] : [];
 
-  const navigate = (path: string) => { setOpen(false); setQ(""); setResults(null); window.location.href = path; };
+  /**
+   * 跳转到结果页。学习库落在 `/study?lesson=…`，把搜索词一并带过去，
+   * 由学习库页做"高亮命中 + 滚到第一处命中"（关键词不进 markdown 源文本）。
+   */
+  const navigate = (path: string) => {
+    const term = q.trim();
+    const target = term && path.startsWith("/study")
+      ? `${path}${path.includes("?") ? "&" : "?"}q=${encodeURIComponent(term)}`
+      : path;
+    setOpen(false); setQ(""); setResults(null); window.location.href = target;
+  };
 
   return (
     <>
