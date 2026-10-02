@@ -7,7 +7,7 @@ import { useCurrentUser } from "@/lib/hooks";
 import { StudyPath } from "@/components/study/StudyPath";
 import { StudyLessonView } from "@/components/study/StudyLessonView";
 import { StudyStatsPanel } from "@/components/study/StudyStatsPanel";
-import { applyCompletion, flattenLessons, percent, type StudyScope } from "@/lib/studyNav";
+import { applyCompletion, findScopeWithTerm, flattenLessons, percent, type StudyScope } from "@/lib/studyNav";
 import { GraduationCap, Loader2, Pencil, BookOpen, ChevronRight, Users } from "lucide-react";
 
 /** 学习库：学习路径总览 ⇄ 课时阅读。结构与阶段说明来自 /api/study/library，正文走知识库接口。 */
@@ -38,6 +38,16 @@ export default function StudyPage() {
     const term = new URLSearchParams(window.location.search).get("q")?.trim() ?? "";
     if (term) setHighlight(term);
   }, []);
+
+  /**
+   * 说明类文档（`_学习路径.md` / `_阶段说明.md`）的命中：后端只给光秃秃的 `/study`，
+   * 不带 scope —— 这里按关键词出现在哪个库的正文里，切到那个库（别的部门的资料也能落到）。
+   */
+  useEffect(() => {
+    if (!highlight || activePath || scopes.length === 0) return;
+    const i = findScopeWithTerm(scopes, highlight);
+    if (i > 0) setScopeIdx(i);
+  }, [highlight, activePath, scopes]);
 
   useEffect(() => {
     api.get<{ scopes: StudyScope[] }>("/api/study/library")
@@ -185,7 +195,7 @@ export default function StudyPage() {
             highlight={highlight} scrollToId={scrollToId} />
         </div>
       ) : (
-        <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} />
+        <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} highlight={highlight} />
       )}
     </div>
   );

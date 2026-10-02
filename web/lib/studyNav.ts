@@ -42,6 +42,24 @@ export function lessonOrdinal(stages: StudyStage[], path: string): number {
   return flattenLessons(stages).findIndex(l => l.path === path) + 1;
 }
 
+/** 文本里有没有这个关键词（大小写不敏感）。 */
+function hasTerm(text: string | null | undefined, term: string): boolean {
+  const t = term.trim().toLowerCase();
+  return !!t && !!text && text.toLowerCase().includes(t);
+}
+
+/**
+ * 「说明类」文档（`_学习路径.md` / `_阶段说明.md`）的命中落在哪个库。
+ *
+ * 后端给这类搜索结果的跳转地址是光秃秃的 `/study`（不带 scope，也不带文档路径），
+ * 而它们的正文渲染在学习库总览页上 —— 所以要靠关键词在**哪个库的正文里**出现来判断。
+ * 找不到返回 -1（调用方保持当前库不变）。
+ */
+export function findScopeWithTerm(scopes: StudyScope[], term: string): number {
+  return scopes.findIndex(s => hasTerm(s.overview, term)
+    || s.stages.some(st => hasTerm(st.description, term)));
+}
+
 /**
  * 勾选/取消后就地更新结构（不改后端返回的原对象）。
  * 计数字段一并重算 —— 否则进度条会和勾选状态对不上。
