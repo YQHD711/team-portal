@@ -37,6 +37,7 @@ public class AppDbContext : DbContext
     public DbSet<DepartmentExam> DepartmentExams => Set<DepartmentExam>();
     public DbSet<DepartmentExamResult> DepartmentExamResults => Set<DepartmentExamResult>();
     public DbSet<StudyProgress> StudyProgresses => Set<StudyProgress>();
+    public DbSet<WikiDocEdit> WikiDocEdits => Set<WikiDocEdit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,15 @@ public class AppDbContext : DbContext
         {
             entity.Property(t => t.ProjectName).HasMaxLength(100);
             entity.Property(t => t.Status).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<WikiDocEdit>(entity =>
+        {
+            entity.Property(m => m.Path).HasMaxLength(400);
+            entity.Property(m => m.Lang).HasMaxLength(8);
+            entity.Property(m => m.Editor).HasMaxLength(100);
+            // 同一任务同一语言的同一篇文档只留一条标记（写接口按此三列 upsert）
+            entity.HasIndex(m => new { m.TaskId, m.Lang, m.Path }).IsUnique();
         });
 
         modelBuilder.Entity<Department>(entity =>

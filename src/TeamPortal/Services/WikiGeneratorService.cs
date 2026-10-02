@@ -243,6 +243,8 @@ public partial class WikiGeneratorService
         // Clean up workspace
         if (!string.IsNullOrEmpty(task.WorkspacePath) && Directory.Exists(task.WorkspacePath))
             try { Directory.Delete(task.WorkspacePath, true); } catch { }
+        // 人工修改标记跟着任务一起清，避免留下查不到任务的孤儿行
+        _db.WikiDocEdits.RemoveRange(_db.WikiDocEdits.Where(m => m.TaskId == id));
         _db.WikiTasks.Remove(task);
         await _db.SaveChangesAsync();
         return true;

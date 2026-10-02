@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
+import { BlockEditor } from "@/components/knowledge/BlockEditor";
 import { ChevronLeft, ChevronRight, List, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
 import { findAnchorTarget } from "@/lib/docAnchor";
 import { HIGHLIGHT_TESTID } from "@/lib/mdHighlight";
@@ -10,7 +11,7 @@ import { extractToc, lessonOrdinal, type StudyLesson, type StudyScope } from "@/
 /** 课时阅读页：面包屑 + 正文 + 右侧大纲 + 上一课/下一课 + 完成勾选。 */
 export function StudyLessonView({
   scope, stageTitle, lesson, content, loading, prev, next, total, onOpen, onBackToPath, onToggle,
-  highlight, scrollToId,
+  highlight, scrollToId, onSaveContent,
 }: {
   scope: StudyScope;
   stageTitle: string;
@@ -27,6 +28,8 @@ export function StudyLessonView({
   highlight?: string;
   /** 链接带来的 #锚点：正文到位后滚到那一节 */
   scrollToId?: string | null;
+  /** 有写权限时传入：块级就地编辑保存整篇新内容（未编辑的块逐字不变） */
+  onSaveContent?: (nextContent: string) => Promise<void> | void;
 }) {
   const toc = extractToc(content);
   const articleRef = useRef<HTMLElement>(null);
@@ -81,7 +84,11 @@ export function StudyLessonView({
           {loading
             ? <div className="text-center text-faint py-16 text-sm">加载中…</div>
             : content
-              ? <MarkdownRenderer content={content} docPath={lesson.path} onNavigate={onOpen} highlight={highlight} />
+              // 有写权限时才启用块级就地编辑（权限判定在页面侧，沿用 canEdit，不新增放宽）
+              ? (onSaveContent
+                  ? <BlockEditor content={content} docPath={lesson.path} onNavigate={onOpen} highlight={highlight}
+                      onSave={onSaveContent} label="课时" />
+                  : <MarkdownRenderer content={content} docPath={lesson.path} onNavigate={onOpen} highlight={highlight} />)
               : <div className="text-center text-faint py-16 text-sm">这份文档还是空的</div>}
         </article>
 

@@ -8,6 +8,7 @@ import { WikiDocRecovery } from "@/components/wiki/WikiDocRecovery";
 import { WikiWorkspaceBanner } from "@/components/wiki/WikiWorkspaceBanner";
 import { useCurrentUser } from "@/lib/hooks";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
+import { BlockEditor } from "@/components/knowledge/BlockEditor";
 import { ChevronRight, ChevronLeft, BookOpen, ArrowLeft, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -101,6 +102,34 @@ export default function WikiViewerPage() {
       })
       .finally(() => setLoading(false));
   }, [activePath, taskId, lang]);
+
+  /** 块级就地编辑保存：写回该任务目录里**同一份**知识库 .md（StaffOnly 由后端硬拦） */
+  const saveWikiDoc = async (nextContent: string) => {
+    await api.put(`/api/wiki/tasks/${taskId}/doc`, { path: activePath, lang, content: nextContent });
+    setContent(nextContent);
+  };
+
+  /**
+   * 「检查修正」：先问一下哪些文档被人工改过（方案 c）。
+   * 有修改 → 用户确认后才带 force=true；没有 → 行为与以前一致（不带 force）。
+   * 查询失败就不带 force：后端 409 会返回明确提示，不会静默覆盖。
+   */
+  const runCheckAndFix = async () => {
+    setUpdating(true);
+    try {
+      let force = false;
+      try {
+        const edits = await api.get<{ count: number }>(`/api/wiki/tasks/${taskId}/edits`);
+        if (edits.count > 0) {
+          if (!confirm(`该任务有 ${edits.count} 处文档已被人工修改，重新生成会覆盖这些修改。确认继续？`)) return;
+          force = true;
+        }
+      } catch { /* 查不到就交给后端兜底（409 + needConfirm 的提示文案） */ }
+      await api.post(`/api/wiki/tasks/${taskId}/update${force ? "?force=true" : ""}`, {});
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "更新失败");
+    } finally { setUpdating(false); }
+  };
 
   const findFirstLeaf = (items: CatalogItem[]): string | null => {
     for (const item of items) {
@@ -224,14 +253,9 @@ export default function WikiViewerPage() {
           <div className="sticky top-0 z-10 flex flex-wrap items-center justify-end gap-1 border-b border-border bg-surface/95 px-4 py-2 backdrop-blur">
             <button
               disabled={updating}
-              onClick={async () => {
-                setUpdating(true);
-                try { await api.post(`/api/wiki/tasks/${taskId}/update`, {}); }
-                catch { alert("更新失败"); }
-                finally { setUpdating(false); }
-              }}
+              onClick={() => void runCheckAndFix()}
               className="flex items-center gap-1 rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-600 transition-colors hover:bg-sky-100 disabled:opacity-50 dark:bg-sky-950"
-              title="AI 审查并修正文档中的问题"
+              title="AI 审查并修正文档中的问题（若有人工修改会先确认）"
             >
               <RefreshCw className={cn("h-3 w-3", updating && "animate-spin")} />
               {updating ? "更新中..." : "检查修正"}
@@ -288,7 +312,18 @@ export default function WikiViewerPage() {
                 <div className="h-64 bg-surface-subtle rounded mt-6" />
               </div>
             ) : content ? (
-              <MarkdownRenderer content={content} />
+              <div>
+                {isStaff && (
+                  <p data-testid="wiki-manual-edit-notice"
+                    className="not-prose mb-4 rounded-lg border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:bg-amber-950/20 dark:text-amber-300">
+                    ⚠️ 这是 AI 生成的文档：这里的修改会写回知识库里的同一份 <code>.md</code>；
+                    点「检查修正」重新生成前，若检测到人工修改会先让你确认。
+                  </p>
+                )}
+                {isStaff
+                  ? <BlockEditor content={content} onSave={saveWikiDoc} label="Wiki 文档" />
+                  : <MarkdownRenderer content={content} />}
+              </div>
             ) : docError ? (
               <WikiDocRecovery
                 taskId={taskId}

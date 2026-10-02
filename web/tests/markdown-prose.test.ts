@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { render } from "@testing-library/react";
+import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 
 /**
  * Markdown 排版守卫。
@@ -35,10 +38,13 @@ describe("Markdown 排版（prose）配置", () => {
   });
 
   it("Markdown 渲染器真的挂了 prose 类（否则装了也白装）", () => {
-    const src = read("components/knowledge/MarkdownRenderer.tsx");
+    // 改成渲染后断言容器类名：类字符串现在集中在 components/knowledge/proseClass.ts，
+    // 断言运行时 DOM 比断言某个文件里的字符串更结实（重构也不怕）。
+    const { container } = render(createElement(MarkdownRenderer, { content: "# 标题\n\n正文" }));
+    const root = container.firstElementChild as HTMLElement;
 
-    expect(src).toMatch(/className="prose/);
-    expect(src).toContain("dark:prose-invert");
+    expect(root.className).toContain("prose");
+    expect(root.className).toContain("dark:prose-invert");
   });
 
   it("去掉了 typography 默认给行内代码注入的反引号", () => {
@@ -59,9 +65,10 @@ describe("Markdown 排版（prose）配置", () => {
   });
 
   it("表格有显式样式 —— 学习文档大量用表格，默认样式最显挤", () => {
-    const src = read("components/knowledge/MarkdownRenderer.tsx");
+    const { container } = render(createElement(MarkdownRenderer, { content: "| a | b |\n| --- | --- |\n| 1 | 2 |" }));
+    const root = container.firstElementChild as HTMLElement;
 
-    expect(src).toContain("prose-th:bg-surface-subtle");
-    expect(src).toContain("prose-table:border");
+    expect(root.className).toContain("prose-th:bg-surface-subtle");
+    expect(root.className).toContain("prose-table:border");
   });
 });

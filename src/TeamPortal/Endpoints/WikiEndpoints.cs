@@ -163,18 +163,34 @@ public static partial class WikiEndpoints
             return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
         });
 
-        // Update/review existing documents
-        wiki.MapPost("/tasks/{id}/update", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
+        // Update/review existing documents.
+        // force=true 表示"用户已确认覆盖人工修改"；不带 force 且存在人工修改标记时返回 409，绝不直接覆盖。
+        wiki.MapPost("/tasks/{id}/update", async (string id, bool? force, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {
             var (role, _) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可更新", statusCode: 403);
-            var ok = await generator.UpdateDocuments(id);
             var log = app.Services.GetRequiredService<LogService>();
-            if (ok) log.Info("wiki", $"Wiki task {id} document review started by {user.Identity?.Name}");
+
+            var edits = await generator.GetEditMarks(id);
+            if (edits.Count > 0 && force != true)
+            {
+                log.Warn("wiki", $"Wiki task {id} update blocked: {edits.Count} manually edited document(s) need confirmation");
+                return Results.Json(new
+                {
+                    detail = $"有 {edits.Count} 处文档已人工修改，重新生成会覆盖这些修改",
+                    needConfirm = true,
+                    modifiedCount = edits.Count,
+                    paths = edits.Select(e => e.Path).Distinct().ToList(),
+                }, statusCode: 409);
+            }
+
+            var ok = await generator.UpdateDocuments(id);
+            var cleared = ok && force == true ? await generator.ClearEditMarks(id) : 0;
+            if (ok) log.Info("wiki", $"Wiki task {id} document review started by {user.Identity?.Name} (cleared {cleared} manual-edit marks)");
             else log.Warn("wiki", $"Wiki task {id} update failed (not found or incomplete) by {user.Identity?.Name}");
             log.Audit("update", user.Identity?.Name ?? "unknown", targetType: "wiki-task", targetId: id,
-                data: new { success = ok, reason = ok ? null : "任务不存在或未完成" }, ipAddress: LogService.ClientIp(ctx));
-            return ok ? Results.Ok(new { success = true, message = "文档审查已启动，完成后自动更新" })
+                data: new { success = ok, forced = force == true, clearedEdits = cleared, reason = ok ? null : "任务不存在或未完成" }, ipAddress: LogService.ClientIp(ctx));
+            return ok ? Results.Ok(new { success = true, message = "文档审查已启动，完成后自动更新", clearedEdits = cleared })
                       : Results.Problem("任务不存在或未完成", statusCode: 400);
         });
 
@@ -279,8 +295,8 @@ public static partial class WikiEndpoints
             var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
-            var projName = lang == "en" ? $"{task.ProjectName}_EN" : task.ProjectName;
-            var kbPath = $"{task.TargetFolder}/{projName}/{path}.md".Replace("//", "/");
+            // 与写接口共用 DocKbPath（见 WikiEndpoints.DocWrite.cs），保证读写的是同一份文件
+            var kbPath = DocKbPath(task, path, lang);
             // path 完全由客户端控制:必须过 CanAccess,否则可用 ../../../他部门/secret 读任意知识库文件
             if (!knowledge.CanAccess(kbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             var content = knowledge.GetContent(kbPath);
@@ -308,8 +324,7 @@ public static partial class WikiEndpoints
                 return Results.Ok(new { path, content });
             }
             // Fallback: try the other language
-            var fallbackName = lang == "en" ? task.ProjectName : $"{task.ProjectName}_EN";
-            var fbPath = $"{task.TargetFolder}/{fallbackName}/{path}.md".Replace("//", "/");
+            var fbPath = DocKbPath(task, path, lang == "en" ? "zh" : "en");
             if (!knowledge.CanAccess(fbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             var fbContent = knowledge.GetContent(fbPath);
             return fbContent is not null ? Results.Ok(new { path, content = fbContent }) : Results.Problem("Document not found", statusCode: 404);
@@ -377,6 +392,8 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
 
         // 源码工作区恢复（重新克隆）—— 见 WikiEndpoints.Recovery.cs
         MapWorkspaceRecoveryEndpoints(wiki);
+        // 文档写接口 + 人工修改标记 —— 见 WikiEndpoints.DocWrite.cs
+        MapDocWriteEndpoints(wiki);
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }
