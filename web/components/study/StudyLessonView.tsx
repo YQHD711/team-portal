@@ -68,7 +68,7 @@ export function StudyLessonView({
           {loading
             ? <div className="text-center text-faint py-16 text-sm">加载中…</div>
             : content
-              ? <MarkdownRenderer content={content} docPath={lesson.path} />
+              ? <MarkdownRenderer content={content} docPath={lesson.path} onNavigate={onOpen} />
               : <div className="text-center text-faint py-16 text-sm">这份文档还是空的</div>}
         </article>
 

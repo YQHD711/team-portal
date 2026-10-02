@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { slugify } from "@/lib/studyNav";
-import { isExternalUrl } from "@/lib/markdownAssets";
+import { isExternalUrl, resolveDocLink } from "@/lib/markdownAssets";
 import { MarkdownImage } from "./MarkdownImage";
 
 // 性能 #9:mermaid(700KB+) + react-syntax-highlighter(200KB+ 各语言)均按需加载
@@ -15,10 +15,18 @@ const MermaidBlock = dynamic(() => import("./MermaidBlock"), {
   loading: () => <div className="mermaid my-4 text-sm text-muted">图表加载中...</div>,
 });
 
+/** 站内链接样式（锚点与可点击的文档引用共用，保证两种渲染结果看起来一致） */
+const INTERNAL_LINK_CLASS = "text-sky-600 underline decoration-sky-400/40 underline-offset-2 hover:text-sky-500 dark:text-sky-400";
+
 interface MarkdownRendererProps {
   content: string;
   /** 当前文档在知识库里的相对路径 —— 用来把 `![](相对图.png)` 解析到知识库 */
   docPath?: string;
+  /**
+   * 站内相对 `.md` 链接的跳转回调（知识库/学习库传自己的"打开文档"逻辑）。
+   * **不传时行为与以前完全一致**：按普通链接渲染，不做任何拦截。
+   */
+  onNavigate?: (path: string) => void;
 }
 
 /** 取 React 子节点里的纯文本(标题生成锚点 id 用) */
@@ -55,10 +63,10 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
       </a>
     );
   }
-  return <a href={url} className="text-sky-600 underline decoration-sky-400/40 underline-offset-2 hover:text-sky-500 dark:text-sky-400">{children}</a>;
+  return <a href={url} className={INTERNAL_LINK_CLASS}>{children}</a>;
 }
 
-export function MarkdownRenderer({ content, docPath }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, docPath, onNavigate }: MarkdownRendererProps) {
   const [SyntaxHighlighter, setSyntaxHighlighter] = useState<any>(null);
   const [oneDark, setOneDark] = useState<any>(null);
 
@@ -78,6 +86,22 @@ export function MarkdownRenderer({ content, docPath }: MarkdownRendererProps) {
     })();
   }, [content, activated]);
 
+  /**
+   * 站内相对 `.md` 链接：拦下来走 onNavigate 切文档，而不是让浏览器真的导航走
+   * （跳到 `/study/xxx.md` 只会 404）。解析不出来的（外链/锚点/图片附件/路由）
+   * 一律原样交给 MarkdownLink —— 不传 onNavigate 时整条分支都不存在，行为与改动前一致。
+   */
+  const link = ({ href, children }: { href?: string; children?: ReactNode }) => {
+    const target = onNavigate ? resolveDocLink(href, docPath) : null;
+    if (!target) return <MarkdownLink href={href}>{children}</MarkdownLink>;
+    return (
+      <a href={href} data-testid="internal-doc-link" className={INTERNAL_LINK_CLASS}
+        onClick={e => { e.preventDefault(); onNavigate?.(target); }}>
+        {children}
+      </a>
+    );
+  };
+
   return (
     <div className="prose prose-zinc dark:prose-invert max-w-none overflow-x-auto
       prose-headings:font-semibold
@@ -95,7 +119,7 @@ export function MarkdownRenderer({ content, docPath }: MarkdownRendererProps) {
           h1: heading(1),
           h2: heading(2),
           h3: heading(3),
-          a: MarkdownLink,
+          a: link,
           img: ({ src, alt }) => <MarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} docPath={docPath} />,
           /**
            * 表格外面套一层可横向滚动的容器：宽表格以前会把整个阅读区撑破
