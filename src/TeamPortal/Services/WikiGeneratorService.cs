@@ -100,9 +100,13 @@ public partial class WikiGeneratorService
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
+    /// <summary>ZIP 源码在 SourceUrl 里的编码形式（base64 后加前缀，避免路径里的分隔符/中文出问题）。</summary>
+    internal static string EncodeZipSource(string zipPath) =>
+        "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath));
+
     public async Task<WikiTask> SubmitZip(string zipPath, string projectName, string targetFolder, int userId, string visibility = "public", string? model = null, string? customCatalogJson = null)
     {
-        var task = new WikiTask { Type = "zip", SourceUrl = "archive::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(zipPath)), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
+        var task = new WikiTask { Type = "zip", SourceUrl = EncodeZipSource(zipPath), ProjectName = projectName, TargetFolder = targetFolder, UserId = userId, Visibility = visibility, Model = model, CustomCatalogJson = customCatalogJson };
         _db.WikiTasks.Add(task); await _db.SaveChangesAsync(); return task;
     }
 
@@ -268,6 +272,16 @@ public partial class WikiGeneratorService
             _currentCatalogModel = task.Model ?? _options.CatalogModel;
             _customCatalogJson = task.CustomCatalogJson;
 
+            // 「仅克隆」任务：只准备源码，绝不进入 AI 生成管线（一分钱都不花、也不写文档）。
+            // 正常提交时端点内已同步克隆完成、直接以终结态入库；这里是兜底——
+            // 库里一旦存在非终结态的仅克隆任务（worker 取到它），也不能让它落进昂贵的生成管线。
+            if (task.CloneOnly)
+            {
+                _progress.Set(task.Id, "preparing", 0, 0, "准备源码工作区（仅克隆）");
+                await CloneWorkspaceOnly(task.Id);
+                return;
+            }
+
             // Step 1: Prepare workspace
             task.Status = "preparing"; await _db.SaveChangesAsync();
             _progress.Set(task.Id, "preparing", 0, 0, "准备工作区");
@@ -326,6 +340,9 @@ public partial class WikiGeneratorService
             task.CompletedAt = DateTime.UtcNow;
             _progress.Set(task.Id, "completed", written, total, task.ErrorMessage);
             await _db.SaveChangesAsync();
+
+            // 生成成功即执行一次保留策略：工作区已持久化，不清理会无限占磁盘
+            await CleanupWorkspacesAsync(task.Id);
         }
         catch (Exception ex)
         {

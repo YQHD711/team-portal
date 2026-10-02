@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { retryMissingDocuments } from "@/lib/wikiRetry";
 import { WikiDocRecovery } from "@/components/wiki/WikiDocRecovery";
+import { WikiWorkspaceBanner } from "@/components/wiki/WikiWorkspaceBanner";
 import { useCurrentUser } from "@/lib/hooks";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { ChevronRight, ChevronLeft, BookOpen, ArrowLeft, Loader2, RefreshCw } from "lucide-react";
@@ -212,6 +213,8 @@ export default function WikiViewerPage() {
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto">
+        {/* 工作区丢失（部署重建容器清空 /tmp）时提示 + 提供「重新克隆」恢复源码浏览 */}
+        <WikiWorkspaceBanner taskId={taskId} projectName={task?.projectName ?? ""} />
         {/*
           任务级操作放在内容区顶部，而不是左侧目录栏里：
           侧栏只有 16rem 宽，三个控件加起来放不下 → 最右边的「可见性」下拉被挤出容器、

@@ -72,7 +72,8 @@ public class WikiProcessingWorker : BackgroundService
                     if (task.Status == "completed")
                     {
                         log.Info("wiki", $"Task completed: {task.ProjectName}");
-                        await NotifyCompletedAsync(notify, db, task);
+                        // 「仅克隆」任务没有生成任何文档，不能通知「文档已生成」
+                        if (!task.CloneOnly) await NotifyCompletedAsync(notify, db, task);
                     }
                     else
                     {

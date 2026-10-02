@@ -5,8 +5,9 @@ using TeamPortal.Data.Models;
 namespace TeamPortal.Services;
 
 /// <summary>
-/// WikiGeneratorService 的工作区准备部分：克隆/解压源码、项目复杂度检测与参数自动调整、
+/// WikiGeneratorService 的工作区准备部分：克隆/解压源码（失败时清理半成品目录）、
 /// 项目类型识别、目录树构建、README 与入口文件收集。
+/// 复杂度检测见 WikiGeneratorService.Complexity.cs。
 /// </summary>
 public partial class WikiGeneratorService
 {
@@ -16,47 +17,65 @@ public partial class WikiGeneratorService
 
     private async Task<string> PrepareWorkspace(WikiTask task)
     {
-        var baseDir = Path.Combine(Path.GetTempPath(), "teamportal-wiki", task.Id);
+        // 根目录取自设置 Wiki:WorkspaceRoot（默认 /data/wiki-workspaces，容器里是挂卷目录），
+        // 不再是 /tmp —— 那正是「重建容器后源码浏览全 404」的根因。见 WikiGeneratorService.Retention.cs
+        var baseDir = await WorkspaceDirAsync(task.Id);
         Directory.CreateDirectory(baseDir);
 
-        if (task.Type == "git")
+        try
         {
-            var cloneDir = Path.Combine(baseDir, "repo");
-            if (Directory.Exists(cloneDir)) Directory.Delete(cloneDir, true);
-
-            var cloneUrl = ValidateCloneUrl(task.SourceUrl);
-            var psi = new ProcessStartInfo("git")
+            if (task.Type == "git")
             {
-                RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
-            };
-            // 用 ArgumentList 传参而非拼命令行字符串:仓库 URL 来自用户输入,
-            // 拼接会允许 `--upload-pack=...` 之类选项注入,而 ext::/file:// 协议会在
-            // git 解析仓库地址时触发命令执行或本地文件读取。
-            psi.ArgumentList.Add("clone");
-            psi.ArgumentList.Add("--depth");
-            psi.ArgumentList.Add("1");
-            psi.ArgumentList.Add("--");
-            psi.ArgumentList.Add(cloneUrl);
-            psi.ArgumentList.Add(cloneDir);
-            var proc = Process.Start(psi)!;
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
-            var stderr = await proc.StandardError.ReadToEndAsync();
-            await proc.WaitForExitAsync();
+                var cloneDir = Path.Combine(baseDir, "repo");
+                if (Directory.Exists(cloneDir)) Directory.Delete(cloneDir, true);
 
-            if (proc.ExitCode != 0)
-                throw new InvalidOperationException($"Git clone failed: {stderr}");
+                var cloneUrl = ValidateCloneUrl(task.SourceUrl);
+                var psi = new ProcessStartInfo("git")
+                {
+                    RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
+                };
+                // 用 ArgumentList 传参而非拼命令行字符串:仓库 URL 来自用户输入,
+                // 拼接会允许 `--upload-pack=...` 之类选项注入,而 ext::/file:// 协议会在
+                // git 解析仓库地址时触发命令执行或本地文件读取。
+                psi.ArgumentList.Add("clone");
+                psi.ArgumentList.Add("--depth");
+                psi.ArgumentList.Add("1");
+                psi.ArgumentList.Add("--");
+                psi.ArgumentList.Add(cloneUrl);
+                psi.ArgumentList.Add(cloneDir);
+                var proc = Process.Start(psi)!;
+                var stdout = await proc.StandardOutput.ReadToEndAsync();
+                var stderr = await proc.StandardError.ReadToEndAsync();
+                await proc.WaitForExitAsync();
 
-            return cloneDir;
+                if (proc.ExitCode != 0)
+                    throw new InvalidOperationException($"Git clone failed: {stderr}");
+
+                return cloneDir;
+            }
+            else // zip
+            {
+                var zipPath = Encoding.UTF8.GetString(Convert.FromBase64String(task.SourceUrl.Replace("archive::", "")));
+                if (!File.Exists(zipPath)) throw new FileNotFoundException("ZIP file not found", zipPath);
+
+                var extractDir = Path.Combine(baseDir, "repo");
+                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
+                return extractDir;
+            }
         }
-        else // zip
+        catch
         {
-            var zipPath = Encoding.UTF8.GetString(Convert.FromBase64String(task.SourceUrl.Replace("archive::", "")));
-            if (!File.Exists(zipPath)) throw new FileNotFoundException("ZIP file not found", zipPath);
-
-            var extractDir = Path.Combine(baseDir, "repo");
-            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
-            return extractDir;
+            // 克隆/解压中途失败绝不能留下半个目录:
+            // 半成品目录会让「工作区是否存在」的诊断说谎,用户点开源码浏览只会看到残缺的文件树。
+            CleanupWorkspace(baseDir);
+            throw;
         }
+    }
+
+    /// <summary>尽力删除工作区目录；失败也不抛（调用方正在处理真正的错误）。</summary>
+    private static void CleanupWorkspace(string dir)
+    {
+        try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { /* best effort */ }
     }
 
     // ════════════════════════════════════════
@@ -151,82 +170,5 @@ public partial class WikiGeneratorService
             }
         }
         return string.Join("\n", entries.Distinct().Take(10).Select(e => $"- {e}"));
-    }
-
-    // ════════════════════════════════════════
-    //  Complexity Detection — 复杂度检测与参数调整
-    // ════════════════════════════════════════
-
-    /// <summary>Project complexity score used to auto-tune generation parameters.</summary>
-    private record ComplexityInfo(int Score, int FileCount, int DirCount, int LinesOfCode);
-
-    /// <summary>
-    /// Analyze workspace to determine project complexity (1-5 scale).
-    /// Simple: <30 files, <5 dirs, <2000 LOC → score 1-2
-    /// Moderate: 30-100 files, 5-15 dirs, 2000-10000 LOC → score 3
-    /// Complex: >100 files, >15 dirs, >10000 LOC → score 4-5
-    /// </summary>
-    private static ComplexityInfo DetectProjectComplexity(string workspacePath)
-    {
-        var srcDir = Path.Combine(workspacePath, "repo");
-        if (!Directory.Exists(srcDir)) return new ComplexityInfo(1, 0, 0, 0);
-
-        var codeExts = new HashSet<string> { ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".go", ".rs", ".cpp", ".c", ".h", ".vue", ".svelte", ".swift", ".kt", ".rb", ".php", ".css", ".scss", ".json", ".yaml", ".yml", ".xml", ".csproj", ".sln", ".toml" };
-        var files = Directory.GetFiles(srcDir, "*.*", SearchOption.AllDirectories);
-        var codeFiles = files.Where(f => codeExts.Contains(Path.GetExtension(f).ToLowerInvariant())).ToArray();
-        var dirs = Directory.GetDirectories(srcDir, "*", SearchOption.AllDirectories).Length;
-
-        int totalLines = 0;
-        foreach (var f in codeFiles.Take(200)) // Sample first 200 files for speed
-        {
-            try { totalLines += File.ReadLines(f).Take(500).Count(); } catch { }
-        }
-
-        // Compute score
-        int score;
-        if (codeFiles.Length < 20 && dirs < 5 && totalLines < 1500) score = 1;
-        else if (codeFiles.Length < 50 && dirs < 10 && totalLines < 5000) score = 2;
-        else if (codeFiles.Length < 120 && dirs < 20 && totalLines < 15000) score = 3;
-        else if (codeFiles.Length < 250 && totalLines < 50000) score = 4;
-        else score = 5;
-
-        return new ComplexityInfo(score, codeFiles.Length, dirs, totalLines);
-    }
-
-    /// <summary>
-    /// Auto-adjust generation parameters based on project complexity score.
-    /// Simple projects get fewer iterations, smaller tokens, Flash model to avoid over-documentation.
-    /// Complex projects get Pro model and more iterations for thorough coverage.
-    /// </summary>
-    private void AutoAdjustParameters(ComplexityInfo c)
-    {
-        // Model selection based on complexity — simple projects use flash (cheaper/faster)
-        var model = c.Score <= 2 ? "deepseek-v4-flash" : "deepseek-v4-pro";
-        _options.ContentModel = model;
-        _options.CatalogModel = model;
-
-        // Directory depth: shallow for simple projects, unlimited for complex
-        _options.DirectoryTreeMaxDepth = c.Score switch
-        {
-            1 => 2,
-            2 => 3,
-            _ => -1,
-        };
-
-        // Parallelism: fewer concurrent docs for simple, more for complex
-        _options.ParallelCount = c.Score <= 2 ? 2 : c.Score >= 4 ? 5 : 3;
-
-        // Timeout scales with complexity
-        _options.DocumentGenerationTimeoutMinutes = c.Score switch
-        {
-            1 => 30,
-            2 => 60,
-            3 => 90,
-            4 => 120,
-            _ => 180,
-        };
-
-        // Thinking mode only for complex projects
-        _options.ThinkingMode = c.Score >= 4 ? "thinking" : "non-thinking";
     }
 }
