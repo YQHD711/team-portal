@@ -23,6 +23,21 @@ export default function StudyPage() {
   const isStaff = user?.role === "admin" || user?.role === "部长";
   const deepLinkApplied = useRef(false);
   const [deepLinkMiss, setDeepLinkMiss] = useState("");
+  /** 搜索结果带过来的关键词（?q=）：正文高亮 + 滚到第一处命中 */
+  const [highlight, setHighlight] = useState("");
+  /** 链接里的 #锚点：正文到位后滚到那一节 */
+  const [scrollToId, setScrollToId] = useState<string | null>(null);
+
+  /** 打开课时（可带 #锚点）：同时清掉上一次的锚点定位 */
+  const openLesson = (path: string, hash?: string) => {
+    setActivePath(path);
+    setScrollToId(hash ?? null);
+  };
+
+  useEffect(() => {
+    const term = new URLSearchParams(window.location.search).get("q")?.trim() ?? "";
+    if (term) setHighlight(term);
+  }, []);
 
   useEffect(() => {
     api.get<{ scopes: StudyScope[] }>("/api/study/library")
@@ -148,7 +163,7 @@ export default function StudyPage() {
                   <ul className="space-y-0.5">
                     {stage.lessons.map(l => (
                       <li key={l.path}>
-                        <button onClick={() => setActivePath(l.path)}
+                        <button onClick={() => openLesson(l.path)}
                           className={`w-full text-left rounded px-2 py-1 text-xs truncate transition-colors ${l.path === activePath ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium" : "text-faint hover:bg-surface-hover"}`}>
                           {l.completed ? "✓ " : ""}{l.title}
                         </button>
@@ -165,11 +180,12 @@ export default function StudyPage() {
             prev={idx > 0 ? lessons[idx - 1] : null}
             next={idx < lessons.length - 1 ? lessons[idx + 1] : null}
             total={lessons.length}
-            onOpen={setActivePath} onBackToPath={() => setActivePath(null)}
-            onToggle={completed => toggle(activeLesson.path, completed)} />
+            onOpen={openLesson} onBackToPath={() => setActivePath(null)}
+            onToggle={completed => toggle(activeLesson.path, completed)}
+            highlight={highlight} scrollToId={scrollToId} />
         </div>
       ) : (
-        <StudyPath scope={scope} onOpenLesson={setActivePath} onToggle={toggle} />
+        <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} />
       )}
     </div>
   );

@@ -6,7 +6,8 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { slugify } from "@/lib/studyNav";
-import { isExternalUrl, resolveDocLink } from "@/lib/markdownAssets";
+import { isExternalUrl, docLinkHash, resolveDocLink } from "@/lib/markdownAssets";
+import { wrapHighlights, highlightRenderers } from "@/lib/mdHighlight";
 import { MarkdownImage } from "./MarkdownImage";
 
 // 性能 #9:mermaid(700KB+) + react-syntax-highlighter(200KB+ 各语言)均按需加载
@@ -24,9 +25,15 @@ interface MarkdownRendererProps {
   docPath?: string;
   /**
    * 站内相对 `.md` 链接的跳转回调（知识库/学习库传自己的"打开文档"逻辑）。
+   * 第二个参数是链接里的 `#锚点`（已解码），调用方切完文档后滚过去。
    * **不传时行为与以前完全一致**：按普通链接渲染，不做任何拦截。
    */
-  onNavigate?: (path: string) => void;
+  onNavigate?: (path: string, hash?: string) => void;
+  /**
+   * 搜索命中的关键词：在**渲染后的文本节点**上包 <mark data-testid="md-highlight">，
+   * 不改 markdown 源文本（代码块/表格/mermaid 不受影响）。不传时渲染结果与以前完全一致。
+   */
+  highlight?: string;
 }
 
 /** 取 React 子节点里的纯文本(标题生成锚点 id 用) */
@@ -44,10 +51,10 @@ function nodeText(node: ReactNode): string {
  * 带 id 的标题 —— 右侧大纲(学习库课时页等)靠它做锚点跳转。
  * id 规则与 lib/studyNav.ts 的 slugify 必须一致，改一处要改两处。
  */
-function heading(level: 1 | 2 | 3) {
+function heading(level: 1 | 2 | 3, hl: (c: ReactNode) => ReactNode) {
   const Tag = `h${level}` as "h1" | "h2" | "h3";
   return function Heading({ children }: { children?: ReactNode }) {
-    return <Tag id={slugify(nodeText(children))} className="scroll-mt-24">{children}</Tag>;
+    return <Tag id={slugify(nodeText(children))} className="scroll-mt-24">{hl(children)}</Tag>;
   };
 }
 
@@ -66,7 +73,7 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   return <a href={url} className={INTERNAL_LINK_CLASS}>{children}</a>;
 }
 
-export function MarkdownRenderer({ content, docPath, onNavigate }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, docPath, onNavigate, highlight }: MarkdownRendererProps) {
   const [SyntaxHighlighter, setSyntaxHighlighter] = useState<any>(null);
   const [oneDark, setOneDark] = useState<any>(null);
 
@@ -96,11 +103,14 @@ export function MarkdownRenderer({ content, docPath, onNavigate }: MarkdownRende
     if (!target) return <MarkdownLink href={href}>{children}</MarkdownLink>;
     return (
       <a href={href} data-testid="internal-doc-link" className={INTERNAL_LINK_CLASS}
-        onClick={e => { e.preventDefault(); onNavigate?.(target); }}>
+        onClick={e => { e.preventDefault(); const hash = docLinkHash(href); if (hash) onNavigate?.(target, hash); else onNavigate?.(target); }}>
         {children}
       </a>
     );
   };
+
+  // 不传 highlight 时是恒等函数：标题/段落渲染结果与改动前逐字一致
+  const hl = (children: ReactNode) => (highlight ? wrapHighlights(children, highlight) : children);
 
   return (
     <div className="prose prose-zinc dark:prose-invert max-w-none overflow-x-auto
@@ -116,10 +126,12 @@ export function MarkdownRenderer({ content, docPath, onNavigate }: MarkdownRende
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: heading(1),
-          h2: heading(2),
-          h3: heading(3),
+          h1: heading(1, hl),
+          h2: heading(2, hl),
+          h3: heading(3, hl),
           a: link,
+          // 搜索命中高亮：只在传了 highlight 时覆盖正文元素，代码块/mermaid 不受影响
+          ...(highlight ? highlightRenderers(highlight) : {}),
           img: ({ src, alt }) => <MarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} docPath={docPath} />,
           /**
            * 表格外面套一层可横向滚动的容器：宽表格以前会把整个阅读区撑破

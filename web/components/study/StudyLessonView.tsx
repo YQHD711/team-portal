@@ -3,11 +3,14 @@
 import { useEffect, useRef } from "react";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 import { ChevronLeft, ChevronRight, List, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
+import { findAnchorTarget } from "@/lib/docAnchor";
+import { HIGHLIGHT_TESTID } from "@/lib/mdHighlight";
 import { extractToc, lessonOrdinal, type StudyLesson, type StudyScope } from "@/lib/studyNav";
 
 /** 课时阅读页：面包屑 + 正文 + 右侧大纲 + 上一课/下一课 + 完成勾选。 */
 export function StudyLessonView({
   scope, stageTitle, lesson, content, loading, prev, next, total, onOpen, onBackToPath, onToggle,
+  highlight, scrollToId,
 }: {
   scope: StudyScope;
   stageTitle: string;
@@ -17,21 +20,31 @@ export function StudyLessonView({
   prev: StudyLesson | null;
   next: StudyLesson | null;
   total: number;
-  onOpen: (path: string) => void;
+  onOpen: (path: string, hash?: string) => void;
   onBackToPath: () => void;
   onToggle: (completed: boolean) => void;
+  /** 搜索关键词：正文命中处高亮，并滚到第一处命中 */
+  highlight?: string;
+  /** 链接带来的 #锚点：正文到位后滚到那一节 */
+  scrollToId?: string | null;
 }) {
   const toc = extractToc(content);
   const articleRef = useRef<HTMLElement>(null);
 
   /**
-   * 换课时（含上一篇/下一篇）要回到正文开头。
-   * 以前只换内容不动滚动位置：上一篇读到末尾再点「下一课」，浏览器沿用同一个 scrollY，
-   * 新课时更短时会被夹到它的文末 —— 表现就是"点下一课跳到了下一篇的结尾"。
+   * 决定滚动落点：① 锚点 → ② 第一处搜索命中 → ③ 正文开头。
+   *
+   * 以前只在 lesson.path 变化时滚到开头：那一刻渲染的还是**上一篇**的正文（或"加载中"占位），
+   * 等新正文（可能更短）替换进来后，浏览器把滚动位置钳到新的最大值 —— 这就是
+   * "点进去落在文末"。所以这里必须等 content 也到位再滚。
    */
   useEffect(() => {
-    articleRef.current?.scrollIntoView({ block: "start" });
-  }, [lesson.path]);
+    const article = articleRef.current;
+    if (!article) return;
+    const anchor = scrollToId ? findAnchorTarget(article, scrollToId) : null;
+    const hit = !anchor && highlight ? article.querySelector<HTMLElement>(`[data-testid="${HIGHLIGHT_TESTID}"]`) : null;
+    (anchor ?? hit ?? article).scrollIntoView({ block: "start" });
+  }, [lesson.path, content, scrollToId, highlight]);
 
   return (
     <div className="space-y-5">
@@ -68,7 +81,7 @@ export function StudyLessonView({
           {loading
             ? <div className="text-center text-faint py-16 text-sm">加载中…</div>
             : content
-              ? <MarkdownRenderer content={content} docPath={lesson.path} onNavigate={onOpen} />
+              ? <MarkdownRenderer content={content} docPath={lesson.path} onNavigate={onOpen} highlight={highlight} />
               : <div className="text-center text-faint py-16 text-sm">这份文档还是空的</div>}
         </article>
 

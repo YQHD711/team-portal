@@ -7,6 +7,7 @@ import { getToken, isStaff } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/hooks";
 import DOMPurify from "dompurify";
 import { ancestorFolders, findFirstFile, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
+import { findAnchorTarget } from "@/lib/docAnchor";
 import { KnowledgeTree } from "@/components/knowledge/KnowledgeTree";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 
@@ -52,6 +53,8 @@ export default function KnowledgeAdminPage() {
   const [imageMsg, setImageMsg] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
   const deepLinkApplied = useRef(false);
+  /** 待定位的锚点（跟着某篇文档一起记）：等那篇正文渲染出来再滚过去 */
+  const [pendingAnchor, setPendingAnchor] = useState<{ path: string; hash: string } | null>(null);
 
   const { user } = useCurrentUser();
   const canEdit = isStaff();
@@ -131,10 +134,28 @@ export default function KnowledgeAdminPage() {
     }
   };
   /** 打开树上的节点 / Markdown 里的站内文档引用：文本文件进编辑器，其余走下载 */
-  const openPath = (path: string) => {
-    if (isTextFile(path)) loadFile(path);
-    else window.open(`/api/knowledge/download?path=${encodeURIComponent(path)}`, "_blank");
+  const openPath = (path: string, hash?: string) => {
+    if (!isTextFile(path)) { window.open(`/api/knowledge/download?path=${encodeURIComponent(path)}`, "_blank"); return; }
+    // 链接里的 #锚点要等目标文档的正文到位后再滚（正文是异步来的）
+    setPendingAnchor(hash ? { path, hash } : null);
+    loadFile(path);
   };
+
+  // 切文档要回到开头：编辑框与预览区都是**可滚动容器**，会保留上一篇的 scrollTop；
+  // 新文档更短时浏览器把它钳到新的最大值 —— 看起来就是"点目录进去落在文末"。
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.scrollTop = 0;
+    if (previewRef.current) previewRef.current.scrollTop = 0;
+  }, [selected]);
+
+  // 站内引用带 #锚点：等目标文档的正文渲染出来再滚到那一节（没找到就等下一次 content 变化）
+  useEffect(() => {
+    if (!pendingAnchor || pendingAnchor.path !== selected) return;
+    const target = findAnchorTarget(previewRef.current, pendingAnchor.hash);
+    if (!target) return;
+    target.scrollIntoView?.({ block: "start" });
+    setPendingAnchor(null);
+  }, [pendingAnchor, selected, content]);
 
   const handleSave = async () => {
     if (!selected) return; setSaving(true);
@@ -310,13 +331,13 @@ export default function KnowledgeAdminPage() {
                   */}
                   {searchKw
                     ? <div ref={previewRef} className="flex-1 overflow-y-auto p-4 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-                    : <div className="flex-1 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} onNavigate={openPath} /></div>}
+                    : <div ref={previewRef} className="flex-1 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} onNavigate={openPath} /></div>}
                 </>
               ) : splitMode && canEdit ? (
                 <div className="flex-1 flex flex-col sm:flex-row">
                   {cssContent && <style dangerouslySetInnerHTML={{ __html: cssContent }} />}
                   <textarea ref={editorRef} value={content} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[40vh] sm:min-h-0 sm:w-1/2 p-4 resize-none font-mono text-sm bg-transparent border-b sm:border-b-0 sm:border-r border-border focus:outline-none" placeholder="编辑 Markdown..." spellCheck={false} />
-                  <div className="flex-1 w-full sm:w-1/2 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} onNavigate={openPath} /></div>
+                  <div ref={previewRef} className="flex-1 w-full sm:w-1/2 overflow-y-auto p-4"><MarkdownRenderer content={content} docPath={selected ?? undefined} onNavigate={openPath} /></div>
                 </div>
               ) : (
                 <textarea ref={editorRef} value={content} readOnly={!canEdit} onChange={e => { setContent(e.target.value); setDirty(e.target.value !== original); }} className="flex-1 w-full min-h-[60vh] lg:min-h-0 p-4 resize-none font-mono text-sm bg-transparent focus:outline-none" placeholder={canEdit ? "编辑 Markdown 内容..." : "知识库文档（只读）"} spellCheck={false} />
