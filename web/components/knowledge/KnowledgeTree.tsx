@@ -5,6 +5,14 @@ import { cn } from "@/lib/utils";
 import { allFolderKeys, nodeKey, type TreeNode } from "@/lib/knowledgeTree";
 
 /**
+ * 行内操作的两种外观（删除入口曾经只在 hover 时才 opacity-100，触屏与键盘用户根本看不到）：
+ * - 重命名：仍以 hover 为主，但聚焦到它时要显形（group-focus-within / focus-visible）
+ * - 删除：**常态可见**（但保持 muted 的危险色，配确认对话框，避免手滑）
+ */
+const ROW_ACTION_CLS = "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 p-1 rounded text-faint hover:text-primary hover:bg-surface-hover shrink-0";
+const DELETE_CLS = "p-1 rounded text-danger/70 hover:text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 shrink-0";
+
+/**
  * 可折叠的知识库目录树。
  *
  * 展开态由父组件持有 —— 这样「?path= 深链接自动展开父链」和这里的点击展开
@@ -63,8 +71,10 @@ export function KnowledgeTree({
                   </button>
                   {canEdit && (
                     <>
-                      <button onClick={() => onRename(n)} className="opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>
-                      <button onClick={() => onDelete(n.path ?? n.name)} className="opacity-0 group-hover:opacity-100 p-0.5 text-danger/70 hover:text-danger shrink-0" title="删除文件夹"><Trash2 className="h-3 w-3" /></button>
+                      <button onClick={() => onRename(n)} aria-label={`重命名文件夹 ${n.name}`}
+                        className={ROW_ACTION_CLS} title="重命名文件夹"><Pencil className="h-3 w-3" /></button>
+                      <button onClick={() => onDelete(n.path ?? n.name)} aria-label={`删除文件夹 ${n.name}`}
+                        className={DELETE_CLS} title="删除文件夹"><Trash2 className="h-3.5 w-3.5" /></button>
                     </>
                   )}
                 </>
@@ -74,8 +84,8 @@ export function KnowledgeTree({
                   className="flex items-center gap-1.5 min-w-0 flex-1 text-left text-sm">
                   <FileText className="h-3.5 w-3.5 shrink-0 text-faint" />
                   <span className="truncate">{n.name}</span>
-                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onRename(n); }} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 text-faint hover:text-primary shrink-0" title="重命名"><Pencil className="h-3 w-3" /></button>}
-                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onDelete(n.path ?? n.name); }} className="opacity-0 group-hover:opacity-100 p-0.5 text-danger/70 hover:text-danger shrink-0" title="删除"><Trash2 className="h-3 w-3" /></button>}
+                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onRename(n); }} aria-label={`重命名 ${n.name}`} className={`ml-auto ${ROW_ACTION_CLS}`} title="重命名"><Pencil className="h-3 w-3" /></button>}
+                  {canEdit && <button onClick={(e) => { e.stopPropagation(); onDelete(n.path ?? n.name); }} aria-label={`删除 ${n.name}`} className={DELETE_CLS} title="删除此文档"><Trash2 className="h-3.5 w-3.5" /></button>}
                 </div>
               )}
             </div>
