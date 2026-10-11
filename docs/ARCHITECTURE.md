@@ -297,6 +297,7 @@ DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计�
 |---|---|---|
 | 覆盖写入的历史版本 | `data/knowledge/.history/<相同相对目录>/<文件名>.<yyyyMMdd-HHmmss>.bak` | `KnowledgeService.WriteFile` 每次覆盖前自动备份，**免费的恢复来源** |
 | 源码工作区 | `<Wiki:WorkspaceRoot>/<taskId>/repo`（容器内默认 `/data/wiki-workspaces`，设置项可改） | 必须落在挂卷目录（`./data:/data`），否则重建容器会清空工作区、源码浏览全 404；路径记在 `WikiTask.WorkspacePath`，存在时补写文档会复用，不重新 clone/上传。只保留最近 `Wiki:WorkspaceKeep`（默认 20）个，丢失后可用「重新克隆」恢复 |
+| 中英桥接 sidecar | `data/knowledge/<原文路径>.zhidx.json`（英文文档旁） | 英文文档的中文摘要（`KnowledgeBridgingIndexService` 生成：每日增量 + `POST /api/admin/knowledge/bridging/run` 手动触发，单次上限 300 篇）。**内部衍生文件**：不进知识库树、不可被 content/download/MCP 读取，只由 `KnowledgeSearchService` 并入原文索引，让中文提问能命中英文原文（返回的仍是原文） |
 | 任务与目录 JSON | SQLite `WikiTasks` 表（`CatalogJson` / `WorkspacePath` / `ErrorMessage`） | 目录决定"应该有哪些文档" |
 | 每日备份 | `/opt/backups/team-portal/*.tar.gz`（`deploy/backup.sh`） | 已排除 `firmware/`、`log-archive/` |
 

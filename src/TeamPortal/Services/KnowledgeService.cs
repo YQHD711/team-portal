@@ -82,6 +82,7 @@ public partial class KnowledgeService
 
     public string? GetContent(string relativePath)
     {
+        if (IsInternalFile(relativePath)) return null;
         var fullPath = ResolvePath(relativePath);
         if (fullPath is null || !File.Exists(fullPath)) return null;
         return File.ReadAllText(fullPath);
@@ -89,9 +90,16 @@ public partial class KnowledgeService
 
     public bool FileExists(string relativePath)
     {
+        if (IsInternalFile(relativePath)) return false;
         var fullPath = ResolvePath(relativePath);
         return fullPath is not null && File.Exists(fullPath);
     }
+
+    /// <summary>
+    /// 内部衍生文件（中英桥接 sidecar 等）：只供检索索引用，不进知识库树、不可被读取或下载。
+    /// 集中成一个判据，树/内容/下载/MCP 读取都走它，避免漏一处就从界面上冒出来。
+    /// </summary>
+    public static bool IsInternalFile(string relativePath) => KnowledgeBridge.IsSidecar(relativePath);
 
     public void WriteFile(string relativePath, string content)
     {
@@ -156,6 +164,7 @@ public partial class KnowledgeService
 
     public byte[]? GetBinaryContent(string relativePath)
     {
+        if (IsInternalFile(relativePath)) return null;
         var fullPath = ResolvePath(relativePath);
         if (fullPath is null || !File.Exists(fullPath)) return null;
         return File.ReadAllBytes(fullPath);
@@ -267,7 +276,7 @@ public partial class KnowledgeService
                 nodes.Add(new TreeNode { Name = dirName, Type = "folder", Path = relPath, Children = ScanDirectory(subDir, invisibleProjects) });
             }
         }
-        foreach (var file in Directory.GetFiles(dir).Where(f => !f.EndsWith(".gitkeep")).OrderBy(Path.GetFileName))
+        foreach (var file in Directory.GetFiles(dir).Where(f => !f.EndsWith(".gitkeep") && !KnowledgeBridge.IsSidecar(f)).OrderBy(Path.GetFileName))
         {
             var ext = Path.GetExtension(file).ToLowerInvariant();
             var relPath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
