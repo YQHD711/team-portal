@@ -1,49 +1,40 @@
 /**
- * 物料标签 PDF 导出：单页 80×50mm，内容与 ItemLabelModal 一致（二维码 + 编码 + 名称 + 等级/库位/分类 + 短链）。
+ * 物料标签 PDF 导出（**模板驱动**）：标签尺寸/DPI/背景/每个元素都由 `LabelTemplate` 决定，
+ * 不传模板则用内置默认模板（= 改造前那份写死的 80×50 版式）。
  *
  * 为什么整张标签栅格化成一张图，而不是用 jsPDF 画矢量文字：
  * jsPDF 内置的 14 个标准字体只覆盖 Latin-1，物料名称/分类是中文，矢量文字会印成空白或乱码；
  * 嵌入 CJK 字体又要额外塞几 MB 字体进仓库。所以用 canvas 按系统字体绘制（中文正常），
- * 再以 600 DPI 满版嵌进 PDF。二维码取「模块矩阵」后逐个画方块（react-qr-code 用的同一个
+ * 再以模板 DPI 满版嵌进 PDF。二维码取「模块矩阵」后逐个画方块（react-qr-code 用的同一个
  * qrcode-generator），是纯计算、不依赖 DOM，能在单测里用 jsQR 解码验证可扫。
+ *
+ * 设计器预览与导出**共用**这里的 drawLabel/renderLabelPng —— 没有第二套渲染。
  */
 
-/** 标签物理尺寸：对齐用户精臣软件里的 T80*50-560白 标签 */
-export const LABEL_WIDTH_MM = 80;
-export const LABEL_HEIGHT_MM = 50;
+import { DEFAULT_TEMPLATE, resolveElementText, type LabelData, type LabelElement, type LabelTemplate } from "./labelTemplate";
+
+export type { LabelData, LabelElement, LabelTemplate };
+
+/** 默认模板的物理尺寸：对齐用户精臣软件里的 T80*50-560白 标签 */
+export const LABEL_WIDTH_MM = DEFAULT_TEMPLATE.widthMm;
+export const LABEL_HEIGHT_MM = DEFAULT_TEMPLATE.heightMm;
 
 /** 栅格化 DPI：热敏标签机多为 203~300 DPI，源图 600 DPI 让二维码单模块留足余量 */
-export const LABEL_DPI = 600;
-export const PX_PER_MM = LABEL_DPI / 25.4;
+export const LABEL_DPI = DEFAULT_TEMPLATE.dpi;
 
-/** 二维码方框边长（含静区）与静区宽度（mm） */
+/** 默认模板的二维码方框与静区（导出的兼容常量，测试与调用方仍按 80×50 版式取用） */
 export const QR_BOX_MM = 30;
 export const QR_QUIET_MM = 3;
 
-const PAGE_MARGIN_MM = 3;
-/** 二维码方框左上角（垂直居中） */
-const QR_X_MM = PAGE_MARGIN_MM;
-const QR_Y_MM = (LABEL_HEIGHT_MM - QR_BOX_MM) / 2;
-/** 右侧文字栏 */
-const TEXT_X_MM = QR_X_MM + QR_BOX_MM + 3;
-const TEXT_RIGHT_MM = LABEL_WIDTH_MM - PAGE_MARGIN_MM;
-const TEXT_CENTER_MM = (TEXT_X_MM + TEXT_RIGHT_MM) / 2;
-const TEXT_WIDTH_MM = TEXT_RIGHT_MM - TEXT_X_MM;
+/** 默认模板里二维码的位置（mm）：导出便于测试裁剪验证 */
+const defaultQr = DEFAULT_TEMPLATE.elements.find(e => e.type === "qr")!;
+export const QR_RECT_MM = { x: defaultQr.x, y: defaultQr.y, size: defaultQr.w } as const;
 
-/** 二维码在标签页上的位置（mm）：导出便于测试裁剪验证 */
-export const QR_RECT_MM = { x: QR_X_MM, y: QR_Y_MM, size: QR_BOX_MM } as const;
+const PX_PER_MM_DEFAULT = LABEL_DPI / 25.4;
+export const PX_PER_MM = PX_PER_MM_DEFAULT;
 
 const FONT_SANS = '"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif';
 const FONT_MONO = '"Consolas","DejaVu Sans Mono","Courier New",monospace';
-
-export interface LabelData {
-  code: string;
-  url: string;
-  name: string;
-  grade?: string | null;
-  locationCode?: string | null;
-  category?: string | null;
-}
 
 export interface QrMatrix {
   count: number;
@@ -60,11 +51,10 @@ export interface QrFactory {
   };
 }
 
-const mm = (v: number) => v * PX_PER_MM;
-const pt = (v: number) => (v * LABEL_DPI) / 72;
-
-export function labelPixelSize(): { width: number; height: number } {
-  return { width: Math.round(mm(LABEL_WIDTH_MM)), height: Math.round(mm(LABEL_HEIGHT_MM)) };
+/** 某个模板下的像素尺寸（px = mm × dpi/25.4） */
+export function labelPixelSize(template: LabelTemplate = DEFAULT_TEMPLATE): { width: number; height: number } {
+  const perMm = template.dpi / 25.4;
+  return { width: Math.round(template.widthMm * perMm), height: Math.round(template.heightMm * perMm) };
 }
 
 /** 短链 → 模块矩阵（纯计算，不碰 DOM） */
@@ -76,24 +66,46 @@ export function createQrMatrix(url: string, makeQr: QrFactory): QrMatrix {
   return { count, isDark: (row, col) => qr.isDark(row, col) };
 }
 
-/** 文字按栏宽自动缩号，避免长名称/长编码溢出标签 */
-function fitFont(ctx: CanvasRenderingContext2D, text: string, weight: number, startPt: number, minPt: number, family: string): void {
+/** pt → px：canvas 是 `dpi` 分辨率，1pt = dpi/72 px = perMm × 25.4/72 */
+const ptToPx = (ptValue: number, perMm: number) => (ptValue * perMm * 25.4) / 72;
+
+/** 文本元素水平锚点（对齐方式决定） */
+export function textX(el: LabelElement, perMm: number): number {
+  const align = el.align ?? "center";
+  if (align === "left") return el.x * perMm;
+  if (align === "right") return (el.x + el.w) * perMm;
+  return (el.x + el.w / 2) * perMm;
+}
+
+/** 文本元素基线：盒子 (y, h) 内**垂直居中**（基线 ≈ 中心 + 0.35×字高） */
+export function textBaseline(el: LabelElement, fontPx: number, perMm: number): number {
+  return (el.y + el.h / 2) * perMm + fontPx * 0.35;
+}
+
+/** 文字按元素宽度自动缩号，避免长名称/长编码溢出；autoShrink=false 时不缩 */
+function pickFont(ctx: CanvasRenderingContext2D, el: LabelElement, text: string, perMm: number, family: string): number {
+  const startPt = el.fontSizePt ?? 10;
+  if (el.autoShrink === false) return startPt;
+  const maxWidthPx = el.w * perMm;
+  const minPt = Math.max(3, startPt * 0.4);
   let size = startPt;
   for (;;) {
-    ctx.font = `${weight} ${pt(size)}px ${family}`;
-    if (size <= minPt || ctx.measureText(text).width <= mm(TEXT_WIDTH_MM)) return;
+    ctx.font = `${el.fontWeight ?? 400} ${ptToPx(size, perMm)}px ${family}`;
+    if (size <= minPt || ctx.measureText(text).width <= maxWidthPx) return size;
     size -= 0.5;
   }
 }
 
-function drawQr(ctx: CanvasRenderingContext2D, matrix: QrMatrix): void {
-  const x0 = mm(QR_X_MM);
-  const y0 = mm(QR_Y_MM);
-  const inset = mm(QR_QUIET_MM);
-  const cell = mm(QR_BOX_MM - 2 * QR_QUIET_MM) / matrix.count;
+function drawQr(ctx: CanvasRenderingContext2D, matrix: QrMatrix, el: LabelElement, perMm: number): void {
+  const side = Math.min(el.w, el.h);
+  const quiet = Math.min(el.quietMm ?? 3, side / 4);
+  const x0 = el.x * perMm;
+  const y0 = el.y * perMm;
+  const inset = quiet * perMm;
+  const cell = ((side - 2 * quiet) * perMm) / matrix.count;
   // 静区必须是纯白：底衬/背景色会干扰识读
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x0, y0, mm(QR_BOX_MM), mm(QR_BOX_MM));
+  ctx.fillRect(x0, y0, el.w * perMm, el.h * perMm);
   ctx.fillStyle = "#000000";
   for (let row = 0; row < matrix.count; row++) {
     for (let col = 0; col < matrix.count; col++) {
@@ -102,56 +114,62 @@ function drawQr(ctx: CanvasRenderingContext2D, matrix: QrMatrix): void {
   }
 }
 
-/** 把整张标签画到 2D 上下文（纯函数：给定 ctx + 数据 + 矩阵，输出确定） */
-export function drawLabel(ctx: CanvasRenderingContext2D, data: LabelData, matrix: QrMatrix): void {
-  const { width, height } = labelPixelSize();
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
-  drawQr(ctx, matrix);
-
-  ctx.textAlign = "center";
+/** 画一个文本元素（纯函数：给定 ctx/元素/数据，输出确定） */
+export function drawTextElement(ctx: CanvasRenderingContext2D, el: LabelElement, data: LabelData, perMm: number): void {
+  const text = resolveElementText(el, data);
+  if (!text) return;
+  const family = el.fontFamily === "mono" ? FONT_MONO : FONT_SANS;
+  const pt = pickFont(ctx, el, text, perMm, family);
+  const fontPx = ptToPx(pt, perMm);
+  ctx.font = `${el.fontWeight ?? 400} ${fontPx}px ${family}`;
+  ctx.textAlign = el.align ?? "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "#111111";
-  fitFont(ctx, data.code, 700, 12, 7, FONT_MONO);
-  ctx.fillText(data.code, mm(TEXT_CENTER_MM), mm(17.5));
-  ctx.fillStyle = "#111111";
-  fitFont(ctx, data.name, 600, 10, 6, FONT_SANS);
-  ctx.fillText(data.name, mm(TEXT_CENTER_MM), mm(25.5));
-  ctx.fillStyle = "#444444";
-  const meta = `${data.grade || "-"} 级 · ${data.locationCode || "库位未指定"} · ${data.category || "未分类"}`;
-  fitFont(ctx, meta, 400, 8, 5, FONT_SANS);
-  ctx.fillText(meta, mm(TEXT_CENTER_MM), mm(31.5));
-  ctx.fillStyle = "#666666";
-  fitFont(ctx, data.url, 400, 6.5, 4, FONT_SANS);
-  ctx.fillText(data.url, mm(TEXT_CENTER_MM), mm(37));
+  ctx.fillStyle = el.color ?? "#111111";
+  ctx.fillText(text, textX(el, perMm), textBaseline(el, fontPx, perMm));
 }
 
-/** 渲染成 PNG data URL（600 DPI，整张标签） */
-export function renderLabelPng(data: LabelData, matrix: QrMatrix): string {
-  const { width, height } = labelPixelSize();
+/** 把整张标签画到 2D 上下文（纯函数：给定 ctx + 数据 + 矩阵 + 模板，输出确定） */
+export function drawLabel(
+  ctx: CanvasRenderingContext2D, data: LabelData, matrix: QrMatrix, template: LabelTemplate = DEFAULT_TEMPLATE,
+): void {
+  const perMm = template.dpi / 25.4;
+  const { width, height } = labelPixelSize(template);
+  ctx.fillStyle = template.background || "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  for (const el of template.elements) {
+    if (el.type === "qr") drawQr(ctx, matrix, el, perMm);
+    else drawTextElement(ctx, el, data, perMm);
+  }
+}
+
+/** 渲染成 PNG data URL（整张标签，模板 DPI） */
+export function renderLabelPng(data: LabelData, matrix: QrMatrix, template: LabelTemplate = DEFAULT_TEMPLATE): string {
+  const { width, height } = labelPixelSize(template);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("浏览器不支持 canvas，无法导出标签 PDF");
-  drawLabel(ctx, data, matrix);
+  drawLabel(ctx, data, matrix, template);
   return canvas.toDataURL("image/png");
 }
 
 /**
  * 导出标签 PDF 并触发下载（文件名 `{code}.pdf`）。
  * jsPDF 与 qrcode-generator 都在这里动态 import：只有用户点「导出 PDF」时才下载这两个包。
+ * 不传 template 用内置默认模板（与改造前版式一致）。
  */
-export async function exportLabelPdf(data: LabelData): Promise<void> {
+export async function exportLabelPdf(data: LabelData, template: LabelTemplate = DEFAULT_TEMPLATE): Promise<void> {
   const [pdfMod, qrMod] = await Promise.all([import("jspdf"), import("qrcode-generator")]);
-  const png = renderLabelPng(data, createQrMatrix(data.url, qrMod.default));
+  const png = renderLabelPng(data, createQrMatrix(data.url, qrMod.default), template);
   const doc = new pdfMod.jsPDF({
     unit: "mm",
-    format: [LABEL_WIDTH_MM, LABEL_HEIGHT_MM],
-    orientation: "landscape",
+    format: [template.widthMm, template.heightMm],
+    orientation: template.widthMm >= template.heightMm ? "landscape" : "portrait",
     compress: true,
   });
   // 满版铺满，无页边距
-  doc.addImage(png, "PNG", 0, 0, LABEL_WIDTH_MM, LABEL_HEIGHT_MM);
+  doc.addImage(png, "PNG", 0, 0, template.widthMm, template.heightMm);
   doc.save(`${data.code}.pdf`);
 }
