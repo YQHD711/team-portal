@@ -25,9 +25,9 @@ public class KnowledgeBridgeSearchTests : IDisposable
         File.WriteAllText(Path.Combine(_kbDir, "公共", "plane.md"),
             "TECS circle radius is determined by bank angle and groundspeed. " +
             new string('x', 200) + "\nThe navigation controller limits bank angle to protect the airframe.");
+        // 已有 sidecar（生成能力已移除，这里手工造一份线上"已生成"的成果）
         File.WriteAllText(Path.Combine(_kbDir, "公共", "plane.md.zhidx.json"),
-            KnowledgeBridge.BuildJson("公共/plane.md", "导航TECS：盘旋半径",
-                ["盘旋半径", "TECS", "滚转角", "地速", "导航"], "说明盘旋半径由滚转角与地速决定"));
+            """{"src":"公共/plane.md","t":"导航TECS：盘旋半径","k":["盘旋半径","TECS","滚转角","地速","导航"],"d":"说明盘旋半径由滚转角与地速决定"}""");
         File.WriteAllText(Path.Combine(_kbDir, "公共", "中文.md"), "盘旋半径由滚转角和地速决定，这是中文文档。");
 
         var connection = new SqliteConnection("Data Source=:memory:");

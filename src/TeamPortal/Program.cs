@@ -202,9 +202,6 @@ builder.Services.AddScoped<RagStatsService>();
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
-// 中英桥接索引：单例持有运行状态/并发闸门，AI 调用按需在 scope 里取（避免 captive scoped 依赖）
-builder.Services.AddSingleton<KnowledgeBridgingIndexService>();
-builder.Services.AddHostedService<KnowledgeBridgingWorker>();
 builder.Services.AddSingleton<LogService>();
 // LogArchiver 依赖 scoped 的 BaiduNetdiskService，但自身只在 scope 内被解析（worker 建 scope / 端点 scope）
 builder.Services.AddScoped<LogArchiver>();
@@ -374,7 +371,6 @@ app.MapGet("/", () => Results.Ok(new { status = "ok", service = "TeamPortal API"
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
-app.MapKnowledgeBridgingEndpoints();
 app.MapStudyEndpoints();
 app.MapInventoryEndpoints();
 app.MapAiEndpoints();
