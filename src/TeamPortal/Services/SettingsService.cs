@@ -104,6 +104,13 @@ public class SettingsService
     /// </summary>
     private static readonly string[] ObsoleteKeys = ["AI:DeepSeekKey", "AI:DeepSeekBaseUrl"];
 
+    /// <summary>
+    /// 默认值变更的一次性迁移：(键, 旧默认, 新默认)。
+    /// AI:Temperature 在 P1-1 从 0.7 降到 0.3 —— 老库里那一行还是旧默认，不迁移的话线上永远拿不到新默认；
+    /// 只匹配"恰好等于旧默认值"，用户手动调过的温度一律不动。
+    /// </summary>
+    private static readonly (string Key, string From, string To)[] LegacyDefaultValues = [("AI:Temperature", "0.7", "0.3")];
+
     /// <summary>Ensure all default settings exist. Missing keys are added, existing ones left untouched.</summary>
     public async Task SeedDefaults()
     {
@@ -122,7 +129,7 @@ public class SettingsService
             new() { Key = "AI:ModelName", Value = "deepseek-flash", Category = "AI 服务", Description = "模型名称。可在设置页点「获取可用模型」从服务端拉取现行列表（DeepSeek 现行为 deepseek-flash / deepseek-v4-pro）" },
             new() { Key = "AI:SystemPrompt", Value = "", Category = "AI 服务", Description = "AI 助手系统提示词（留空用内置默认；内置默认已要求纯文本、不用 Markdown 装饰与 emoji）" },
             new() { Key = "AI:MaxIterations", Value = "25", Category = "AI 服务", Description = "AI Agent 最大迭代次数" },
-            new() { Key = "AI:Temperature", Value = "0.7", Category = "AI 服务", Description = "温度参数（0-2）。注意：**思考模式下官方不生效**，该模式用 top_p" },
+            new() { Key = "AI:Temperature", Value = "0.3", Category = "AI 服务", Description = "非思考模式的温度（0-2），默认 0.3（知识问答要收敛）。**思考模式下官方不生效**：该模式固定发 top_p=1.0" },
             new() { Key = "AI:AgentTimeoutMinutes", Value = "20", Category = "AI 服务", Description = "AI Agent 单次任务总超时（分钟）" },
             new() { Key = "AI:MaxTokens", Value = "8192", Category = "AI 服务", Description = "单次最大输出 token。官方默认：非思考 8K、思考 64K，上限 384K" },
             new() { Key = "AI:RequestTimeoutSeconds", Value = "300", Category = "AI 服务", Description = "AI 单次 HTTP 请求超时（秒）" },
@@ -176,6 +183,14 @@ public class SettingsService
             db.SystemSettings.AddRange(toAdd);
             changed = true;
         }
+        // 旧默认值 → 新默认值：只在值恰好等于旧默认时改写（见 LegacyDefaultValues 注释）
+        foreach (var (key, from, to) in LegacyDefaultValues)
+            if (byKey.TryGetValue(key, out var legacyRow) && legacyRow.Value == from)
+            {
+                legacyRow.Value = to;
+                _cache[key] = to;
+                changed = true;
+            }
         // 清理已废弃的设置项。只从 defaults 里删掉是不够的：老库里那一行还在，
         // 设置页照旧会把它列出来，看起来像还能用。
         foreach (var staleKey in ObsoleteKeys)

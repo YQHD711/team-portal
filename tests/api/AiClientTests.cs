@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using TeamPortal.Data;
+using TeamPortal.Data.Models;
 using TeamPortal.Services;
 
 namespace api;
@@ -229,4 +232,40 @@ public class AiClientTests
         Assert.Contains("API Key", error);
         Assert.Null(handler.LastUrl); // 不该白跑一趟网络
     }
+}
+
+/// <summary>
+/// P1-1：聊天默认温度 1.0 → 0.3。注意它只在**非思考模式**下有意义 ——
+/// 思考模式 BuildChatPayload 只发 top_p（官方文档：该模式 temperature 无效），那部分由上面的
+/// Thinking_DeepSeek_EnablesThinkingAndSendsTopPNotTemperature 钉住。
+/// </summary>
+public class AiTemperatureDefaultTests
+{
+    private static async Task<AiOptions> ResolveAsync(string? storedTemperature)
+    {
+        var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options);
+        db.Database.EnsureCreated();
+        if (storedTemperature is not null)
+        {
+            db.SystemSettings.Add(new SystemSetting
+            {
+                Key = "AI:Temperature", Value = storedTemperature, Category = "AI 服务", Description = "",
+            });
+            db.SaveChanges();
+        }
+        var settings = new SettingsService(new TestScopeFactory(db));
+        var ai = new AiClient(new HttpClient(),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build(), settings);
+        return await ai.ResolveAsync();
+    }
+
+    [Fact]
+    public async Task UnsetTemperature_DefaultsTo03()
+        => Assert.Equal(0.3, (await ResolveAsync(null)).Temperature, 3);
+
+    [Fact]
+    public async Task StoredTemperature_Wins()
+        => Assert.Equal(0.9, (await ResolveAsync("0.9")).Temperature, 3);
 }
