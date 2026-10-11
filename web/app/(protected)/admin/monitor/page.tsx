@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { RagStatsCard } from "@/components/admin/RagStatsCard";
 import { Activity, Cpu, MemoryStick, HardDrive, Server, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 
 interface RuntimeStats {
@@ -190,6 +191,10 @@ export default function RuntimeMonitorPage() {
           </div>
         </>
       )}
+
+      {/* AI 检索（RAG）统计：空转率 + 空结果提问。
+          刻意放在 {stats && …} 之外：运行指标拉不到时这块仍要能看（它是独立接口）。 */}
+      <RagStatsCard />
     </div>
   );
 }

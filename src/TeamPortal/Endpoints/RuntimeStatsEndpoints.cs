@@ -96,5 +96,9 @@ public static class RuntimeStatsEndpoints
                 timestamp = DateTime.UtcNow,
             });
         }).RequireAuthorization("StaffOnly");
+
+        // RAG 空转率：近 7 天检索次数 / 空结果次数 / 空转率 / 最近空结果 query（解析 SystemLogs 里的 ai 日志）
+        app.MapGet("/api/admin/rag-stats", async (RagStatsService stats) =>
+            Results.Ok(await stats.GetAsync())).RequireAuthorization("StaffOnly");
     }
 }
