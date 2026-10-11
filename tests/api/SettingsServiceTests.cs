@@ -148,6 +148,45 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public async Task SeedDefaults_SeedsNewTemperatureDefault_AndMigratesTheLegacyOne()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+
+        // P1-1：AI:Temperature 默认 0.7 → 0.3
+        Assert.Equal("0.3", db.SystemSettings.Single(s => s.Key == "AI:Temperature").Value);
+
+        var row = db.SystemSettings.Single(s => s.Key == "AI:Temperature");
+        row.Value = "0.7";                       // 模拟老库：还是旧默认值（没人改过）
+        await db.SaveChangesAsync();
+
+        await svc.SeedDefaults();
+
+        Assert.Equal("0.3", db.SystemSettings.Single(s => s.Key == "AI:Temperature").Value);
+    }
+
+    [Fact]
+    public async Task SeedDefaults_KeepsUserSetTemperature()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+
+        var row = db.SystemSettings.Single(s => s.Key == "AI:Temperature");
+        row.Value = "0.9";                       // 用户显式调过
+        var tokens = db.SystemSettings.Single(s => s.Key == "AI:MaxTokens");
+        tokens.Value = "4096";
+        await db.SaveChangesAsync();
+
+        await svc.SeedDefaults();
+
+        // 值属于运维配置，迁移只认"恰好等于旧默认值"的行，用户设过的一律不动
+        Assert.Equal("0.9", db.SystemSettings.Single(s => s.Key == "AI:Temperature").Value);
+        Assert.Equal("4096", db.SystemSettings.Single(s => s.Key == "AI:MaxTokens").Value);
+    }
+
+    [Fact]
     public async Task SeedDefaults_RemovesObsoleteKeys()
     {
         var db = CreateContext();

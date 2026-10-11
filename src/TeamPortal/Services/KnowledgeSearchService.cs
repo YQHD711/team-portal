@@ -1,16 +1,15 @@
-using System.Collections.Concurrent;
-using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 
 namespace TeamPortal.Services;
 
 /// <summary>
-/// TF-IDF full-text search over knowledge base with inverted index.
+/// TF-IDF/BM25 full-text search over knowledge base with inverted index.
 /// Auto-rebuilds on file changes via FileSystemWatcher.
+/// P1-1：索引改为**分块**索引、打分改为 **BM25(k1=1.5, b=0.75)**，同文档多分块取 max，snippet 取命中分块。
+/// 索引结构/分词/分块见 KnowledgeSearchService.Index.cs，摘要提取见 KnowledgeSearchService.Snippets.cs。
 /// </summary>
-public class KnowledgeSearchService : IDisposable
+public partial class KnowledgeSearchService : IDisposable
 {
     private readonly string _basePath;
     private readonly ILogger<KnowledgeSearchService> _logger;
@@ -18,17 +17,6 @@ public class KnowledgeSearchService : IDisposable
     private readonly LogService _log;
     private readonly FileSystemWatcher? _watcher;
     private readonly object _lock = new();
-
-    // Inverted index: token → list of (relativePath, termFrequency)
-    private ConcurrentDictionary<string, List<DocEntry>> _index = new(StringComparer.OrdinalIgnoreCase);
-    // Document lengths for TF-IDF normalization
-    private ConcurrentDictionary<string, int> _docLengths = new();
-    // Total document count
-    private int _docCount;
-
-    private static readonly string[] TextPatterns = { "*.md", "*.txt", "*.json", "*.csv", "*.xml" };
-
-    private record DocEntry(string Path, int TermFreq);
 
     public KnowledgeSearchService(IConfiguration config, ILogger<KnowledgeSearchService> logger,
         IServiceScopeFactory scopeFactory, LogService log)
@@ -60,7 +48,7 @@ public class KnowledgeSearchService : IDisposable
             catch { _logger.LogWarning("FileSystemWatcher could not be initialized for knowledge base"); }
         }
 
-        _logger.LogInformation("KnowledgeSearchService initialized with {Count} documents", _docCount);
+        _logger.LogInformation("KnowledgeSearchService initialized with {Count} chunks", _snapshot.ChunkCount);
     }
 
     private CancellationTokenSource? _debounceCts;
@@ -74,63 +62,17 @@ public class KnowledgeSearchService : IDisposable
         }, TaskContinuationOptions.NotOnCanceled);
     }
 
-    private void RebuildIndex()
-    {
-        lock (_lock)
-        {
-            var newIndex = new ConcurrentDictionary<string, List<DocEntry>>(StringComparer.OrdinalIgnoreCase);
-            var newDocLengths = new ConcurrentDictionary<string, int>();
-            var count = 0;
-
-            foreach (var pattern in TextPatterns)
-            {
-                foreach (var file in Directory.GetFiles(_basePath, pattern, SearchOption.AllDirectories))
-                {
-                    try
-                    {
-                        // 中英桥接 sidecar 不单独成为一篇文档：它的中文内容并入原文的索引文本，
-                        // 于是中文 query 命中 sidecar 时，返回的仍是原文（path/snippet 都来自原文）。
-                        if (KnowledgeBridge.IsSidecar(file)) continue;
-                        var text = File.ReadAllText(file);
-                        if (string.IsNullOrWhiteSpace(text)) continue;
-                        var bridge = KnowledgeBridge.TryReadIndexText(KnowledgeBridge.SidecarPathFor(file));
-                        var indexText = bridge is null ? text : text + "\n" + bridge;
-                        var relPath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
-                        var tokens = Tokenize(indexText);
-                        var tokenCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var t in tokens)
-                        {
-                            tokenCounts.TryGetValue(t, out var c);
-                            tokenCounts[t] = c + 1;
-                        }
-                        newDocLengths[relPath] = tokens.Count;
-                        foreach (var (token, tf) in tokenCounts)
-                        {
-                            newIndex.AddOrUpdate(token,
-                                _ => new List<DocEntry> { new(relPath, tf) },
-                                (_, list) => { lock (list) list.Add(new(relPath, tf)); return list; });
-                        }
-                        count++;
-                    }
-                    catch (Exception ex) { _logger.LogWarning(ex, "Failed to index file: {File}", file); }
-                }
-            }
-
-            _index = newIndex;
-            _docLengths = newDocLengths;
-            _docCount = count;
-            _logger.LogInformation("Knowledge index rebuilt: {Count} docs, {Terms} terms", count, newIndex.Count);
-        }
-    }
-
     /// <summary>
-    /// Search with TF-IDF scoring. Returns top K results with snippets.
-    /// 索引覆盖全部部门目录,因此**必须在计分前按调用者角色/部门过滤**
+    /// BM25 检索。索引覆盖全部部门目录,因此**必须在计分前按调用者角色/部门过滤**
     /// (放到 Take(topK) 之后再过滤会让有权文档被无权文档挤掉,同时也没堵住泄露)。
+    ///
+    /// 打分：每个**分块**先累加各 query token 的 BM25 分；同一文档的多个分块只保留最高分那块，
+    /// snippet 也从那块取（长文档答案在后半段时不会退化成文档开头）。
     /// </summary>
     public List<KbResult> Search(string query, int topK, string? role, string? department, int userId = 0)
     {
-        if (_docCount == 0)
+        var snap = _snapshot;   // 一次取快照：重建期间也不会读到半新半旧的索引
+        if (snap.ChunkCount == 0)
         {
             LogSearch(query, hits: 0, returned: 0);
             return new List<KbResult>();
@@ -148,47 +90,52 @@ public class KnowledgeSearchService : IDisposable
             KnowledgeAcl.CanAccess(path, role, department) &&
             !KnowledgeAcl.IsInvisibleWikiProject(path, invisibleProjects);
 
-        // TF-IDF scoring per document
-        var scores = new Dictionary<string, double>();
+        var chunkScores = new Dictionary<int, double>();
         foreach (var token in queryTokens)
         {
-            if (!_index.TryGetValue(token, out var postings)) continue;
-            var idf = Math.Log(1.0 + (double)_docCount / postings.Count); // IDF
-
-            foreach (var entry in postings)
+            if (!snap.Index.TryGetValue(Hash(token), out var packed)) continue;
+            var (offset, count) = Unpack(packed);
+            var idf = Bm25Idf(snap.ChunkCount, count);
+            for (var i = 0; i < count; i++)
             {
-                if (!Allowed(entry.Path)) continue;
-                var docLen = _docLengths.GetValueOrDefault(entry.Path, 1);
-                var tf = (double)entry.TermFreq / docLen; // normalized TF
-                scores.TryGetValue(entry.Path, out var existing);
-                scores[entry.Path] = existing + tf * idf;
+                var at = offset + i;
+                var chunkId = snap.PostingChunks[at];
+                var chunk = snap.Chunks[chunkId];
+                if (!Allowed(chunk.Path)) continue;
+                var score = idf * Bm25Tf(snap.PostingTfs[at], chunk.TokenCount, snap.AvgChunkLength);
+                chunkScores.TryGetValue(chunkId, out var existing);
+                chunkScores[chunkId] = existing + score;
             }
+        }
+
+        // 同一文档多分块取 max（规格要求）；命中分块同时用于取 snippet
+        var best = new Dictionary<string, (double Score, int Chunk)>(StringComparer.Ordinal);
+        foreach (var (chunkId, score) in chunkScores)
+        {
+            var path = snap.Chunks[chunkId].Path;
+            if (!best.TryGetValue(path, out var current) || score > current.Score)
+                best[path] = (score, chunkId);
         }
 
         var results = new List<KbResult>();
-        foreach (var (path, score) in scores.OrderByDescending(x => x.Value).Take(topK))
+        foreach (var (path, hit) in best.OrderByDescending(x => x.Value.Score).Take(topK))
         {
-            var fullPath = Path.Combine(_basePath, path);
-            string snippet = "";
-            try
+            results.Add(new KbResult
             {
-                var content = File.ReadAllText(fullPath);
-                // 找 query 与文档的最长公共连续子串（如"管理委员会"）作锚点，精准定位；
-                // 若只取最先命中的 bigram（"管理"/"委员"等泛词），摘要会被无关出现干扰甚至截断。
-                var anchor = FindBestAnchor(query, content);
-                snippet = ExtractSnippet(content, string.IsNullOrEmpty(anchor) ? queryTokens[0] : anchor, 1500);
-            }
-            catch { /* snippet extraction failure is non-critical */ }
-            results.Add(new KbResult { Path = path, Snippet = snippet, Score = score });
+                Path = path,
+                Snippet = SnippetForChunk(snap.Chunks[hit.Chunk], query, queryTokens),
+                Score = hit.Score,
+            });
         }
 
-        LogSearch(query, scores.Count, results.Count);
+        LogSearch(query, chunkScores.Count, results.Count);
         return results;
     }
 
     /// <summary>
     /// RAG 可观测性：每次检索留一行统计（Category=ai）。空转判据是**返回条数为 0**
-    /// （即没有任何可注入的文档）；真正注入了几篇由 AiProxyService 的 "RAG context: used=" 记录。
+    /// （即没有任何可注入的文档）；hits 是命中的**分块数**（分块索引下 scores 字典按分块计）。
+    /// 真正注入了几篇由 AiProxyService 的 "RAG context: used=" 记录。
     /// </summary>
     private void LogSearch(string query, int hits, int returned) =>
         _log.Info(RagLog.Category, RagLog.SearchLine(query, hits, returned, returned == 0));
@@ -220,99 +167,6 @@ public class KnowledgeSearchService : IDisposable
             return new HashSet<string>(StringComparer.Ordinal);
         }
     }
-
-    // Chinese-friendly tokenization for indexing
-    private static List<string> Tokenize(string text)
-    {
-        var tokens = new List<string>();
-        var lower = text.ToLowerInvariant();
-
-        // English/alphanumeric words
-        foreach (Match m in Regex.Matches(lower, @"[a-z0-9][a-z0-9_-]*"))
-            tokens.Add(m.Value);
-
-        // Chinese characters: character unigrams + common bigrams
-        var chinese = Regex.Replace(lower, @"[^\p{IsCJKUnifiedIdeographs}]", "");
-        for (int i = 0; i < chinese.Length; i++)
-            tokens.Add(chinese[i].ToString());
-        for (int i = 0; i < chinese.Length - 1; i++)
-            tokens.Add(chinese.Substring(i, 2));
-
-        return tokens;
-    }
-
-    // Query tokenization: extract meaningful terms
-    private static string[] TokenizeQuery(string query)
-    {
-        var tokens = new List<string>();
-        var lower = query.ToLowerInvariant().Trim();
-
-        // English/alphanumeric words
-        foreach (Match m in Regex.Matches(lower, @"[a-z0-9][a-z0-9_-]*"))
-            tokens.Add(m.Value);
-
-        // Chinese: full string + character bigrams
-        var chinese = Regex.Replace(lower, @"[^\p{IsCJKUnifiedIdeographs}]", "");
-        if (chinese.Length > 0)
-        {
-            tokens.Add(chinese); // full string as one term
-            for (int i = 0; i < chinese.Length - 1; i++)
-                tokens.Add(chinese.Substring(i, 2));
-        }
-
-        return tokens.Distinct().ToArray();
-    }
-
-    private static string ExtractSnippet(string content, string keyword, int maxLen)
-    {
-        if (string.IsNullOrEmpty(keyword))
-            return content.Length > maxLen ? content[..maxLen] + "\n..." : content;
-
-        // 聚合关键词的所有出现位置，避免只取第一处（如关键词首次出现在目录、
-        // 而正文答案在后面，导致检索摘要与问题无关）。
-        var sb = new StringBuilder();
-        var searchFrom = 0;
-        var found = 0;
-        while (sb.Length < maxLen)
-        {
-            var idx = content.IndexOf(keyword, searchFrom, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) break;
-            found++;
-            var start = Math.Max(0, idx - 120);
-            var end = Math.Min(content.Length, idx + keyword.Length + 160);
-            if (sb.Length > 0) sb.Append("\n···\n");
-            sb.Append(NormalizeWhitespace(content[start..end]));
-            searchFrom = idx + Math.Max(1, keyword.Length);
-        }
-
-        if (found == 0)
-            return content.Length > maxLen ? content[..maxLen] + "\n..." : content;
-
-        var result = sb.ToString();
-        return result.Length > maxLen ? result[..maxLen] + "\n..." : result;
-    }
-
-    /// <summary>在 query 中寻找与文档内容的最长公共连续子串（如人名、机构全称），用于精准定位摘要锚点。</summary>
-    private static string FindBestAnchor(string query, string content)
-    {
-        string? best = null;
-        foreach (Match seg in Regex.Matches(query, @"[\p{IsCJKUnifiedIdeographs}a-z0-9]+"))
-        {
-            var s = seg.Value;
-            for (int i = 0; i < s.Length; i++)
-            {
-                var j = i;
-                while (j < s.Length && content.Contains(s[i..(j + 1)], StringComparison.OrdinalIgnoreCase))
-                    j++;
-                if (j - i >= 2 && (best is null || j - i > best.Length))
-                    best = s[i..j];
-            }
-        }
-        return best ?? "";
-    }
-
-    /// <summary>把连续空白（含换行）压成单个空格，修复文档中因换行被拆断的内容（如"张宝\n庭"）。</summary>
-    private static string NormalizeWhitespace(string text) => Regex.Replace(text, @"\s+", " ");
 
     public void Dispose()
     {

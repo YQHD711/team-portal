@@ -75,13 +75,9 @@ public class AiProxyService
             foreach (var (role, content) in history)
                 messages.Add(new { role, content });
 
-        if (!string.IsNullOrEmpty(context))
-        {
-            messages.Add(new { role = "system", content = $@"知识库参考资料（按相关度排序）：
-请优先使用这些资料回答；与问题无关的直接忽略；若都不相关则基于通用知识回答并注明。
-
-{context}" });
-        }
+        // 无论有没有命中都注入 RAG 段：空结果时必须让模型先声明"未检索到队内资料"，
+        // 否则检索空转时用户根本分不清答案是队内资料还是通用知识（见 RagInjectionFor）。
+        messages.Add(new { role = "system", content = RagInjectionFor(context) });
 
         messages.Add(new { role = "user", content = question });
 
@@ -121,6 +117,20 @@ public class AiProxyService
 
         return new { sources = results.Select(r => new { r.Path, r.Snippet, r.Score }), answer };
     }
+
+    /// <summary>
+    /// RAG 注入段（P1-1 起**始终注入**）。空结果必须显式声明：检索为空时模型很容易直接拿通用知识作答，
+    /// 看起来像"知识库答的"，队员无法分辨资料来源 —— 规格要求空结果时在回答开头先说明。
+    /// </summary>
+    internal static string RagInjectionFor(string context) =>
+        string.IsNullOrEmpty(context)
+            ? "知识库检索结果：没有检索到相关资料。回答开头必须先明确告知用户「知识库中未检索到相关队内资料」，"
+              + "再基于通用知识回答，并提醒以队内最新规范为准；不要编造队内资料或来源。"
+            : $@"知识库参考资料（按相关度排序）：
+请优先使用这些资料回答；与问题无关的直接忽略。
+若这些资料都不能回答该问题，必须先在回答开头说明「知识库中未检索到相关队内资料」，再基于通用知识回答并注明。
+
+{context}";
 
     /// <summary>拼装知识库上下文。刻意不用 emoji/## 装饰：这些符号会被模型照抄进回答里。</summary>
     internal static string BuildContext(List<KbResult> sources)

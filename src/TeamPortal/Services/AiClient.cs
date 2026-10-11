@@ -54,7 +54,9 @@ public class AiClient
             Model: model.Trim(),
             Thinking: (await _settings.Get("AI:EnableThinking", "false")).Equals("true", StringComparison.OrdinalIgnoreCase),
             ReasoningEffort: await _settings.Get("AI:ReasoningEffort", "high"),
-            Temperature: await _settings.GetDouble("AI:Temperature", 1.0),
+            // P1-1：默认温度 1.0 → 0.3（知识问答要收敛、少发挥）。注意**思考模式下该参数不生效**
+            // （BuildChatPayload 在思考模式改发 top_p=1.0），所以它只影响非思考模式的回答。
+            Temperature: await _settings.GetDouble("AI:Temperature", 0.3),
             MaxTokens: await _settings.GetInt("AI:MaxTokens", 8192),
             RequestTimeoutSeconds: await _settings.GetInt("AI:RequestTimeoutSeconds", 300));
     }

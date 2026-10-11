@@ -70,4 +70,29 @@ public class AiPromptTests
 
     [Fact]
     public void BuildContext_EmptySources_ReturnsEmpty() => Assert.Equal("", AiProxyService.BuildContext([]));
+
+    // ── P1-1：RAG 注入段（空结果必须显式声明"没检索到队内资料"） ──
+
+    [Fact]
+    public void RagInjection_EmptyContext_MandatesNoMaterialNotice()
+    {
+        var message = AiProxyService.RagInjectionFor("");
+
+        Assert.Contains("没有检索到相关资料", message);
+        Assert.Contains("知识库中未检索到相关队内资料", message);
+        Assert.Contains("回答开头", message);
+        Assert.Contains("不要编造", message);
+    }
+
+    [Fact]
+    public void RagInjection_WithContext_KeepsRuleAndCarriesTheContext()
+    {
+        var message = AiProxyService.RagInjectionFor("来源：公共/a.md（相关度 0.90）\n正文");
+
+        Assert.Contains("知识库参考资料", message);
+        Assert.Contains("来源：公共/a.md", message);
+        // 有资料但都不相关时也要声明（同一句话，避免两个分支口径不一致）
+        Assert.Contains("知识库中未检索到相关队内资料", message);
+        Assert.DoesNotContain("没有检索到相关资料", message);
+    }
 }
