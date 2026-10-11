@@ -201,6 +201,8 @@ builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<MaterialService>();
 builder.Services.AddScoped<StudyProgressService>();
 builder.Services.AddScoped<RagStatsService>();
+// 标签导出模板（task-17）：管理员维护、全队共用
+builder.Services.AddScoped<LabelTemplateService>();
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<WikiProcessingWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
@@ -256,6 +258,9 @@ using (var scope = app.Services.CreateScope())
     var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
     await auth.SeedAdmin();
     await settings.SeedDefaults();
+
+    // 标签模板种子：库里一个模板都没有时建内置默认版式（幂等；响应导出的兜底）
+    await scope.ServiceProvider.GetRequiredService<LabelTemplateService>().SeedDefaultIfEmptyAsync();
 
     // Seed default departments if empty
     if (!db.Departments.Any())
@@ -398,6 +403,7 @@ app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
+app.MapLabelTemplateEndpoints();
 app.MapBackupEndpoints();
 app.MapMcp("/mcp").RequireAuthorization();
 app.MapRuntimeStats();

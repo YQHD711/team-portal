@@ -562,6 +562,50 @@ namespace TeamPortal.Migrations
                     b.ToTable("InviteCodes");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.LabelTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Background")
+                        .IsRequired()
+                        .HasMaxLength(9)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Dpi")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ElementsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("HeightMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("WidthMm")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LabelTemplates");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.Notification", b =>
                 {
                     b.Property<long>("Id")

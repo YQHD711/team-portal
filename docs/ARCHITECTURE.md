@@ -302,6 +302,7 @@ DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计�
 | 实时库存/货位注入 | `LiveInventoryContext` → `AiProxyService.ChatStream`（**不进索引**） | 聊天每次提问现查 `StorageLayout`/`InventoryItem`，把「[系统实时查询结果]」块注入上下文。**刻意不写进 RAG 索引**：数量随时在变而索引只在知识库文件变动时重建，写进去必然答过期数字。只在问题确实像在问库存/库位时才查，匹配要求完整物料名或编码（≥6 字符前缀），宁可少给也不给错；KB 空但有实时结果时不要求模型声明"未检索到队内资料" |
 | 聊天的自主多轮检索（工具调用） | `AiProxyService.Agent.cs` + `KnowledgeToolSession`（只读） | 单次 top-k 分块检索答不了"整篇 45k 字的总结讲了什么"（只看得到 0.8%），于是给模型两个**只读**工具：`search_knowledge(query, top_k?)` 换词再检索、`read_document(path, offset?, length?)` 分页读正文（单页 ≤8000 字符）。工具轮 `stream:false` 带 tools，**最后一轮**才 `stream:true` 不带 tools → SSE 协议与前端不变。硬上限：`AI:MaxToolRounds`（默认 4，钳 1..8）轮 × 单轮 3 个调用、工具返回总量 ≤48000 字符（必须 ≥ 那份 45k 字总结，否则"用工具也读不完"）。ACL 复用 `KnowledgeService.GetTree` 的可见路径快照，`..`/绝对路径/盘符一律拒绝；每轮写 `RAG tools:` 统计日志（不记正文） |
 | 任务与目录 JSON | SQLite `WikiTasks` 表（`CatalogJson` / `WorkspacePath` / `ErrorMessage`） | 目录决定"应该有哪些文档" |
+| 标签导出模板 | SQLite `LabelTemplates` 表（`ElementsJson` 原样存元素数组） | task-17：**管理员维护、全队共用**的打印规范（冻结契约：`GET /api/label-templates` 任意登录可读，供导出；POST/PUT/DELETE/`{id}/default` 全部 AdminOnly）。服务端先校验后改库（尺寸 10..300、dpi ∈ {203,300,600}、元素 ≤50、越界/重复 id/字段白名单 7 个/字号 4..72/#RRGGBB 等），拒绝时不动已有模板；删掉默认模板会自动把最早的另一个提升为默认（保证"有模板就一定有默认"）。元素渲染与组合字段 `meta`（`${grade||"-"} 级 · ${locationCode||"库位未指定"} · ${category||"未分类"}`）的拼接都在前端 |
 | 每日备份 | `/opt/backups/team-portal/*.tar.gz`（`deploy/backup.sh`） | 已排除 `firmware/`、`log-archive/` |
 
 **文档缺失时怎么恢复**（诊断接口会告诉你缺哪些、能免费恢复哪些）：
