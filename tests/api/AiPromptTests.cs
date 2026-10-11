@@ -117,4 +117,45 @@ public class AiPromptTests
         Assert.DoesNotContain("/study", message);
         Assert.Contains("没有检索到相关资料", message);
     }
+
+    // ── task-14 B：实时查询结果与两种"空" ──
+
+    [Fact]
+    public void RagInjection_LiveOnly_DoesNotMandateNoMaterialNotice()
+    {
+        var live = LiveInventoryContext.Header + "\n- 碳纤维管：当前可用数量 7，库位 1030-A-1-01";
+
+        var message = AiProxyService.RagInjectionFor("", live);
+
+        Assert.Contains(LiveInventoryContext.Header, message);
+        Assert.Contains("碳纤维管", message);
+        Assert.Contains("当前值", message);
+        Assert.Contains("严禁编造数量或货位", message);
+        // KB 空但有实时数据：不能再要求模型声明"没检索到队内资料"
+        Assert.DoesNotContain("知识库中未检索到相关队内资料", message);
+        Assert.DoesNotContain("没有检索到相关资料", message);
+    }
+
+    [Fact]
+    public void RagInjection_KbAndLive_KeepsBothAndTheKbRules()
+    {
+        var message = AiProxyService.RagInjectionFor("来源：公共/物料管理规范.md（相关度 0.9）", LiveInventoryContext.Header + "\n- 锂电池：当前可用数量 12");
+
+        Assert.Contains("知识库参考资料", message);
+        Assert.Contains("来源：公共/物料管理规范.md", message);
+        Assert.Contains("知识库中未检索到相关队内资料", message);      // KB 规则还在（P1-1 回归）
+        Assert.Contains(LiveInventoryContext.Header, message);
+        Assert.Contains("锂电池", message);
+        Assert.Contains("当前值", message);
+    }
+
+    [Fact]
+    public void RagInjection_NeitherKbNorLive_KeepsP11Mandate()
+    {
+        var message = AiProxyService.RagInjectionFor("", null);
+
+        Assert.Contains("没有检索到相关资料", message);
+        Assert.Contains("知识库中未检索到相关队内资料", message);
+        Assert.DoesNotContain(LiveInventoryContext.Header, message);
+    }
 }

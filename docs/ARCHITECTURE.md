@@ -298,6 +298,8 @@ DELETE /api/firmware/cache[/item]         → 清理缓存（AdminOnly，审计�
 | 覆盖写入的历史版本 | `data/knowledge/.history/<相同相对目录>/<文件名>.<yyyyMMdd-HHmmss>.bak` | `KnowledgeService.WriteFile` 每次覆盖前自动备份，**免费的恢复来源** |
 | 源码工作区 | `<Wiki:WorkspaceRoot>/<taskId>/repo`（容器内默认 `/data/wiki-workspaces`，设置项可改） | 必须落在挂卷目录（`./data:/data`），否则重建容器会清空工作区、源码浏览全 404；路径记在 `WikiTask.WorkspacePath`，存在时补写文档会复用，不重新 clone/上传。只保留最近 `Wiki:WorkspaceKeep`（默认 20）个，丢失后可用「重新克隆」恢复 |
 | 中英桥接 sidecar（历史遗留） | `data/knowledge/<原文路径>.zhidx.json`（英文文档旁） | 英文文档的中文摘要。**生成能力已于 task-13 整体移除**（英文文档太多，逐篇调 AI 太费 token）：没有定时任务、没有手动端点、没有开关，服务器不会再产生新的 sidecar。**只保留读取/索引路径**：已有的 sidecar 仍会被 `KnowledgeSearchService` 并入原文索引（已有文档的中英桥接依然有效），且仍是**内部衍生文件**（不进知识库树、不可被 content/download/MCP 读取） |
+| 聊天建议问题 | `GET /api/ai/suggestions`（任意登录用户） | 空会话时下发的 4 条题，`kind ∈ doc`（文档真实 `##`/`###` 小节）/ `study`（`<部门>怎么学？`）/ `inventory`（真实房间/物料）。全部来自该用户有权访问的真实数据（文档题走 `KnowledgeService.GetTree` 的同一套 ACL），按 (role, dept, uid, 知识库路径) 缓存 10 分钟；库存物料少于 3 件时不出物料题；失败返回空数组 |
+| 实时库存/货位注入 | `LiveInventoryContext` → `AiProxyService.ChatStream`（**不进索引**） | 聊天每次提问现查 `StorageLayout`/`InventoryItem`，把「[系统实时查询结果]」块注入上下文。**刻意不写进 RAG 索引**：数量随时在变而索引只在知识库文件变动时重建，写进去必然答过期数字。只在问题确实像在问库存/库位时才查，匹配要求完整物料名或编码（≥6 字符前缀），宁可少给也不给错；KB 空但有实时结果时不要求模型声明"未检索到队内资料" |
 | 任务与目录 JSON | SQLite `WikiTasks` 表（`CatalogJson` / `WorkspacePath` / `ErrorMessage`） | 目录决定"应该有哪些文档" |
 | 每日备份 | `/opt/backups/team-portal/*.tar.gz`（`deploy/backup.sh`） | 已排除 `firmware/`、`log-archive/` |
 

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using TeamPortal.Data;
 
 namespace TeamPortal.Services;
 
@@ -13,6 +14,7 @@ public class AiProxyService
     private readonly SettingsService _settings;
     private readonly KnowledgeSearchService _search;
     private readonly LogService _log;
+    private readonly AppDbContext _db;
 
     /// <summary>
     /// 内置默认提示词。前端是纯文本渲染（whitespace-pre-wrap），所以这里明确要求模型不要输出
@@ -45,12 +47,13 @@ public class AiProxyService
     private async Task<string> ResolveSystemPrompt() =>
         SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
-    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search, LogService log)
+    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search, LogService log, AppDbContext db)
     {
         _ai = ai;
         _settings = settings;
         _search = search;
         _log = log;
+        _db = db;
     }
 
     /// <summary>调用者身份,用于把知识库检索限制在其有权查看的范围内(跨部门/他人私人 wiki 不参与检索)。</summary>
@@ -69,6 +72,10 @@ public class AiProxyService
         // RAG 可观测性：真正注入了多少文档/多少字（空转率另由 KnowledgeSearchService 的检索行统计）
         _log.Info(RagLog.Category, RagLog.ContextLine(context.Length, relevant.Count));
 
+        // 实时库存/货位：每次提问现查数据库（数量随时在变，写进索引会答过期数字）。不相关时返回 null。
+        var live = await LiveInventoryContext.BuildAsync(question, _db);
+        if (live is not null) _log.Info(RagLog.Category, $"RAG live: chars={live.Length}");
+
         var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };
 
         if (history != null && history.Count > 0)
@@ -77,7 +84,8 @@ public class AiProxyService
 
         // 无论有没有命中都注入 RAG 段：空结果时必须让模型先声明"未检索到队内资料"，
         // 否则检索空转时用户根本分不清答案是队内资料还是通用知识（见 RagInjectionFor）。
-        messages.Add(new { role = "system", content = RagInjectionFor(context) });
+        // 有实时查询结果时那条声明要让位（不能"KB 空 + 有实时数据"还叫模型说没资料）。
+        messages.Add(new { role = "system", content = RagInjectionFor(context, live) });
 
         messages.Add(new { role = "user", content = question });
 
@@ -119,20 +127,44 @@ public class AiProxyService
     }
 
     /// <summary>
-    /// RAG 注入段（P1-1 起**始终注入**）。空结果必须显式声明：检索为空时模型很容易直接拿通用知识作答，
-    /// 看起来像"知识库答的"，队员无法分辨资料来源 —— 规格要求空结果时在回答开头先说明。
-    /// P1-2 只补一条规则（学习库按阶段顺序给路径），不改上面那段的其它文案。
+    /// RAG 注入段（P1-1 起**始终注入**）。三种组合：
+    ///   - KB 空 + 无实时数据 → P1-1 原文：回答开头必须先声明「知识库中未检索到相关队内资料」；
+    ///   - 有 KB 资料（±实时数据）→ 原有 KB 段 + 学习库规则（P1-2）+ 实时数据规则；
+    ///   - **KB 空但有实时数据** → 不再要求声明"没检索到资料"（明明查到了实时库存），直接按实时结果回答。
+    /// 实时块里的数字是当前值，模型必须直接用；查不到要明说去「零件库存 / 物料布局」看，严禁编。
     /// </summary>
-    internal static string RagInjectionFor(string context) =>
-        string.IsNullOrEmpty(context)
-            ? "知识库检索结果：没有检索到相关资料。回答开头必须先明确告知用户「知识库中未检索到相关队内资料」，"
-              + "再基于通用知识回答，并提醒以队内最新规范为准；不要编造队内资料或来源。"
-            : $@"知识库参考资料（按相关度排序）：
-请优先使用这些资料回答；与问题无关的直接忽略。
-若这些资料都不能回答该问题，必须先在回答开头说明「知识库中未检索到相关队内资料」，再基于通用知识回答并注明。
-若资料里包含学习库（某部门的学习路径、阶段与课时），按阶段顺序给出学习路径（阶段名与课时名要具体），并提醒可在 /study 页面查看完整内容与打勾进度。
+    internal static string RagInjectionFor(string context, string? liveContext = null)
+    {
+        var hasKb = !string.IsNullOrEmpty(context);
+        var hasLive = !string.IsNullOrEmpty(liveContext);
+        if (!hasKb && !hasLive)
+            return "知识库检索结果：没有检索到相关资料。回答开头必须先明确告知用户「知识库中未检索到相关队内资料」，"
+                   + "再基于通用知识回答，并提醒以队内最新规范为准；不要编造队内资料或来源。";
 
-{context}";
+        var sb = new System.Text.StringBuilder();
+        if (hasKb)
+        {
+            sb.AppendLine("知识库参考资料（按相关度排序）：");
+            sb.AppendLine("请优先使用这些资料回答；与问题无关的直接忽略。");
+            sb.AppendLine("若这些资料都不能回答该问题，必须先在回答开头说明「知识库中未检索到相关队内资料」，再基于通用知识回答并注明。");
+            sb.AppendLine("若资料里包含学习库（某部门的学习路径、阶段与课时），按阶段顺序给出学习路径（阶段名与课时名要具体），并提醒可在 /study 页面查看完整内容与打勾进度。");
+            sb.AppendLine();
+            sb.AppendLine(context);
+        }
+        else
+        {
+            sb.AppendLine("知识库没有匹配到文档；下面是系统实时查询结果，直接按它回答，不需要再声明\"没有资料\"。");
+        }
+
+        if (hasLive)
+        {
+            sb.AppendLine();
+            sb.AppendLine(liveContext);
+            sb.AppendLine("关于「系统实时查询结果」：其中的数量、库位、状态是**当前值**，直接采用，不要用通用知识推测。");
+            sb.AppendLine("如果用户问的物料或房间没有出现在实时结果里，明确说明「系统里没有查到该物料（或房间），请到「零件库存 / 物料布局」页面确认」，严禁编造数量或货位。");
+        }
+        return sb.ToString().TrimEnd();
+    }
 
     /// <summary>拼装知识库上下文。刻意不用 emoji/## 装饰：这些符号会被模型照抄进回答里。</summary>
     internal static string BuildContext(List<KbResult> sources)
