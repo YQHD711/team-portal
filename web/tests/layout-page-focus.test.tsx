@@ -100,13 +100,18 @@ describe("物料布局页：库位跳转的查询参数", () => {
     expect(props.focusItem).toBeNull();
   });
 
-  it("房间对不上时退回房间网格；只有元素对不上时仍进房间但不定位", async () => {
+  // 这两条必须**分开**：一条用例里 render() 两次会有两棵页面树同时挂载，
+  // 第一棵的懒加载查看器若晚于 URL 变更才挂上，就会同时出现两个 viewer-stub →
+  // getByTestId 抛 "Found multiple elements"（CI 上偶发，约 1/N）。
+  it("房间对不上时退回房间网格", async () => {
     setSearch("?room=9999&element=9999-Z&item=1");
     await renderPage();
 
     expect(screen.getByText("1F")).toBeInTheDocument();
     expect(screen.queryByTestId("viewer-stub")).not.toBeInTheDocument();
+  });
 
+  it("只有元素对不上时仍进房间但不定位", async () => {
     setSearch("?room=1012&element=9999-Z");
     await renderPage();
 
