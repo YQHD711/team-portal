@@ -12,7 +12,7 @@ namespace TeamPortal.Services;
 /// - 本类是纯函数，不碰 IO/DB；阶段说明的**正文**由调用方（Endpoint）读文件后用 <c>with</c> 补上，
 ///   便于单测覆盖权限矩阵与结构解析。
 /// </summary>
-public static class StudyLibraryService
+public static partial class StudyLibraryService
 {
     /// <summary>学习库的约定目录名：公共/学习库、&lt;部门&gt;/学习库。</summary>
     public const string FolderName = "学习库";
