@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import { Printer, X, Copy, Check, FileDown } from "lucide-react";
+import { api } from "@/lib/api";
+import { DEFAULT_TEMPLATE, normalizeTemplates, type LabelTemplate } from "@/lib/labelTemplate";
 import type { InventoryItem } from "./inventoryTypes";
 
 interface Props {
@@ -27,8 +29,26 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
+  /** 模板列表：接口没上线/失败/返回空 → 只剩内置兜底模板，导出照旧可用 */
+  const [templates, setTemplates] = useState<LabelTemplate[]>([DEFAULT_TEMPLATE]);
+  const [templateId, setTemplateId] = useState<number>(DEFAULT_TEMPLATE.id);
   const code = item.code ?? "";
   const url = `${baseUrl.replace(/\/+$/, "")}/i/${encodeURIComponent(code)}`;
+  const selectedTemplate = templates.find(t => t.id === templateId) ?? templates[0] ?? DEFAULT_TEMPLATE;
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<unknown>("/api/label-templates")
+      .then(raw => {
+        if (cancelled) return;
+        const list = normalizeTemplates(raw);
+        if (list.length === 0) return;   // 空列表 → 保持内置兜底
+        setTemplates(list);
+        setTemplateId((list.find(t => t.isDefault) ?? list[0]).id);
+      })
+      .catch(() => { /* 接口不可用：用内置模板导出，不弹错、不禁用按钮 */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const copy = async () => {
     try {
@@ -55,7 +75,7 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
       await exportLabelPdf({
         code, url, name: item.name,
         grade: item.grade, locationCode: item.locationCode, category: item.category,
-      });
+      }, selectedTemplate);
     } catch {
       setExportFailed(true);
     } finally {
@@ -94,6 +114,18 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
             导出失败：浏览器可能不支持画布导出，请改用「打印」或换个浏览器（Chrome / Edge）。
           </p>
         )}
+
+        {/* 标签模板：默认选中默认模板，可临时换一个再导（接口挂了就只剩内置默认模板） */}
+        <label className="mt-4 flex items-center gap-2 text-xs text-muted print:hidden">
+          标签模板
+          <select data-testid="label-template-select" value={selectedTemplate.id}
+            onChange={e => setTemplateId(Number(e.target.value))}
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs">
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.name}{t.isDefault ? "（默认）" : ""}</option>
+            ))}
+          </select>
+        </label>
 
         <div className="mt-5 flex flex-wrap gap-2 print:hidden">
           <button onClick={() => window.print()}

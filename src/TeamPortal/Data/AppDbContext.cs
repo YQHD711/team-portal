@@ -38,6 +38,7 @@ public class AppDbContext : DbContext
     public DbSet<DepartmentExamResult> DepartmentExamResults => Set<DepartmentExamResult>();
     public DbSet<StudyProgress> StudyProgresses => Set<StudyProgress>();
     public DbSet<WikiDocEdit> WikiDocEdits => Set<WikiDocEdit>();
+    public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -376,6 +377,15 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(u => u.InvitedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── 标签导出模板（task-17，管理员维护、全队共用）──
+        modelBuilder.Entity<LabelTemplate>(entity =>
+        {
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.Background).IsRequired().HasMaxLength(9);
+            entity.Property(t => t.ElementsJson).IsRequired();
+            entity.Property(t => t.UpdatedBy).HasMaxLength(100);
         });
     }
 }
