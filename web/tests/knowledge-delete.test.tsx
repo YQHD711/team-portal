@@ -55,7 +55,9 @@ afterEach(() => { confirmSpy.mockRestore(); });
 async function openTree() {
   render(<KnowledgeAdminPage />);
   fireEvent.click(await screen.findByRole("button", { name: "全部展开" }));
-  return screen.getByLabelText(`删除 01-认识航模`);
+  // 必须 findBy（异步等待）而不是 getBy：目录树数据是异步拉取的，
+  // 点「全部展开」时文件节点可能还没渲染出来，同步 getBy 会间歇性失败（约 1/5）。
+  return await screen.findByLabelText(`删除 01-认识航模`);
 }
 
 describe("知识库删除入口", () => {
