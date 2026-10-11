@@ -180,6 +180,8 @@ builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<AiProxyService>();
+// 聊天空会话的建议问题（task-14）：doc/study/inventory 三类，纯本地查库+读文件，不调 AI
+builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
 builder.Services.AddHttpClient<AiClient>();
 builder.Services.AddScoped<FlightLogService>();

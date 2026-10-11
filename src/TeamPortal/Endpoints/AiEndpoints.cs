@@ -5,7 +5,7 @@ using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
 
-public static class AiEndpoints
+public static partial class AiEndpoints
 {
     /// <summary>把调用者身份传给 AI 检索层:知识库检索必须限定在其有权查看的范围内。
     /// 身份**查库取当前值** —— token 活 7 天且没有失效机制，读声明会把旧部门/旧角色带进检索范围。</summary>
@@ -99,6 +99,9 @@ public static class AiEndpoints
             log.Info("ai", $"Search: {userName} query={req.Query}");
             return Results.Ok(result);
         });
+
+        // 聊天空会话的建议问题（task-14）—— 见 AiEndpoints.Suggestions.cs
+        MapSuggestionEndpoints(group);
     }
 }
 
