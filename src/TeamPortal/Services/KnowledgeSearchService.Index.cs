@@ -28,28 +28,35 @@ public partial class KnowledgeSearchService
     private const int TfCap = 255;
     /// <summary>postings 下标存在低 32 位，count 在高 16 位。</summary>
     private const int CountShift = 32;
+    /// <summary>桥接伪块：内容来自 sidecar，原文文件里没有对应区间（摘要退回整篇找锚点）。</summary>
+    private const int BridgeChunkStart = -1;
+    /// <summary>虚拟文档分块：正文不在磁盘上（如 P1-2 的学习库索引文档），摘要取自身文本。</summary>
+    private const int VirtualChunkStart = -2;
 
     private static readonly string[] TextPatterns = { "*.md", "*.txt", "*.json", "*.csv", "*.xml" };
 
-    /// <summary>分块元数据。<c>Start &lt; 0</c> 表示"桥接伪块"（内容来自 sidecar，原文里没有对应区间）。</summary>
+    /// <summary>分块元数据。<c>Start &lt; 0</c> 表示非文件分块（桥接伪块 / 虚拟文档）。</summary>
     private readonly record struct ChunkInfo(string Path, int Start, int Length, int TokenCount);
 
     /// <summary>
     /// 一次重建后的只读索引快照：检索只读它，重建整体替换 —— 读者永远看到自洽的一组数据。
     /// <c>Index</c> 的值是打包的 <c>offset | count &lt;&lt; 32</c>（构建期还会用高 16 位记写入游标），
-    /// 解码统一走 <see cref="Unpack"/>。
+    /// 解码统一走 <see cref="Unpack"/>；<c>VirtualTexts</c> 是虚拟文档分块的下标 → 正文（出 snippet 用）。
     /// </summary>
     private sealed record IndexSnapshot(
         Dictionary<ulong, long> Index, int[] PostingChunks, byte[] PostingTfs, ChunkInfo[] Chunks,
+        Dictionary<int, string> VirtualTexts,
         int ChunkCount, int DocumentCount, double AvgChunkLength, int PrunedTerms, long PostingCount);
 
-    private static readonly IndexSnapshot EmptySnapshot = new(new(), [], [], [], 0, 0, 1, 0, 0);
+    private static readonly IndexSnapshot EmptySnapshot = new(new(), [], [], [], [], 0, 0, 1, 0, 0);
 
     private volatile IndexSnapshot _snapshot = EmptySnapshot;
 
     /// <summary>已索引的分块数（IDF 的 N；旧代码里这个数是文档数）。</summary>
     internal int IndexedChunkCount => _snapshot.ChunkCount;
     internal int IndexedDocumentCount => _snapshot.DocumentCount;
+    /// <summary>虚拟文档分块数（P1-2 学习库；诊断/单测用）。</summary>
+    internal int IndexedVirtualCount => _snapshot.VirtualTexts.Count;
     /// <summary>postings 总条数（内存实测/诊断用）。</summary>
     internal long IndexedPostingCount => _snapshot.PostingCount;
     /// <summary>词典条数（内存实测/诊断用）。</summary>
@@ -74,6 +81,10 @@ public partial class KnowledgeSearchService
     {
         lock (_lock)
         {
+            // 学习库虚拟文档（P1-2）：只在索引里存在，不落盘；两遍扫描共用同一份，保证分块下标对齐
+            var virtualDocs = BuildStudyDocs();
+            var virtualTexts = new Dictionary<int, string>();
+
             // ── 第一遍：分词、统计 df（token 出现在几个分块里）、记录分块元数据 ──
             var stats = new Dictionary<ulong, long>(1 << 16);
             var chunks = new List<ChunkInfo>();
@@ -81,12 +92,14 @@ public partial class KnowledgeSearchService
             long totalTokens = 0;
             string? lastPath = null;
 
-            foreach (var (path, start, length, text) in EnumerateChunks())
+            foreach (var (path, start, length, text) in AllChunks(virtualDocs))
             {
                 if (path != lastPath) { docs++; lastPath = path; }
                 var counts = CountTokens(text, out var tokenTotal);
                 if (tokenTotal == 0) continue;
+                var id = chunks.Count;
                 chunks.Add(new ChunkInfo(path, start, length, tokenTotal));
+                if (start == VirtualChunkStart) virtualTexts[id] = text;   // 虚拟文档正文要留着出 snippet
                 totalTokens += tokenTotal;
                 foreach (var token in counts.Keys)
                 {
@@ -114,7 +127,7 @@ public partial class KnowledgeSearchService
             var postingChunks = new int[postingCount];
             var postingTfs = new byte[postingCount];
             var chunkId = 0;
-            foreach (var (_, _, _, text) in EnumerateChunks())
+            foreach (var (_, _, _, text) in AllChunks(virtualDocs))
             {
                 var counts = CountTokens(text, out var tokenTotal);
                 if (tokenTotal == 0) continue;
@@ -132,68 +145,13 @@ public partial class KnowledgeSearchService
                 chunkId++;
             }
 
-            var snapshot = new IndexSnapshot(stats, postingChunks, postingTfs, chunks.ToArray(),
+            var snapshot = new IndexSnapshot(stats, postingChunks, postingTfs, chunks.ToArray(), virtualTexts,
                 chunks.Count, docs, chunks.Count == 0 ? 1 : (double)totalTokens / chunks.Count,
                 pruned, postingCount);
             _snapshot = snapshot;
             _logger.LogInformation(
-                "Knowledge index rebuilt: {Docs} docs / {Chunks} chunks, {Terms} terms / {Postings} postings (pruned {Pruned}), avg {Avg:F1} tokens",
-                docs, chunks.Count, stats.Count, postingCount, pruned, snapshot.AvgChunkLength);
+                "Knowledge index rebuilt: {Docs} docs / {Chunks} chunks ({Virtual} virtual), {Terms} terms / {Postings} postings (pruned {Pruned}), avg {Avg:F1} tokens",
+                docs, chunks.Count, virtualTexts.Count, stats.Count, postingCount, pruned, snapshot.AvgChunkLength);
         }
-    }
-
-    /// <summary>逐分块枚举（按文件、按顺序）。两遍扫描必须拿到完全一致的顺序，否则分块下标会错位。</summary>
-    private IEnumerable<(string Path, int Start, int Length, string Text)> EnumerateChunks()
-    {
-        foreach (var pattern in TextPatterns)
-        {
-            foreach (var file in Directory.GetFiles(_basePath, pattern, SearchOption.AllDirectories))
-            {
-                // 中英桥接 sidecar 不单独成为一篇文档：它的中文内容作为"桥接伪块"并入原文索引，
-                // 于是中文 query 命中 sidecar 时，返回的仍是原文路径。
-                if (KnowledgeBridge.IsSidecar(file)) continue;
-                string text;
-                try { text = File.ReadAllText(file); } catch { continue; }
-                if (string.IsNullOrWhiteSpace(text)) continue;
-                var relPath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
-
-                foreach (var (start, length) in ChunkRanges(text.Length))
-                    yield return (relPath, start, length, text.Substring(start, length));
-
-                var bridge = KnowledgeBridge.TryReadIndexText(KnowledgeBridge.SidecarPathFor(file));
-                if (bridge is not null) yield return (relPath, -1, 0, bridge);
-            }
-        }
-    }
-
-    /// <summary>一个分块内各 token 的词频（键是 token 的 64 位哈希）。</summary>
-    private static Dictionary<ulong, int> CountTokens(string text, out int total)
-    {
-        var counts = new Dictionary<ulong, int>();
-        total = 0;
-        foreach (var token in Tokenize(text))
-        {
-            total++;
-            var hash = Hash(token);
-            counts.TryGetValue(hash, out var count);
-            counts[hash] = count + 1;
-        }
-        return counts;
-    }
-
-    /// <summary>解包 <c>offset | count &lt;&lt; 32</c>（高 16 位是构建期游标，查询时忽略）。</summary>
-    private static (int Offset, int Count) Unpack(long packed) =>
-        ((int)(packed & 0xFFFFFFFF), (int)((packed >> CountShift) & 0xFFFF));
-
-    /// <summary>64 位 FNV-1a：用哈希而不是 token 字符串做键，省掉几百万个词条的字符串与比较开销。</summary>
-    private static ulong Hash(string token)
-    {
-        var hash = 14695981039346656037UL;
-        foreach (var ch in token)
-        {
-            hash ^= ch;
-            hash *= 1099511628211UL;
-        }
-        return hash;
     }
 }

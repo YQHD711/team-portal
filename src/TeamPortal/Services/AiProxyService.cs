@@ -121,6 +121,7 @@ public class AiProxyService
     /// <summary>
     /// RAG 注入段（P1-1 起**始终注入**）。空结果必须显式声明：检索为空时模型很容易直接拿通用知识作答，
     /// 看起来像"知识库答的"，队员无法分辨资料来源 —— 规格要求空结果时在回答开头先说明。
+    /// P1-2 只补一条规则（学习库按阶段顺序给路径），不改上面那段的其它文案。
     /// </summary>
     internal static string RagInjectionFor(string context) =>
         string.IsNullOrEmpty(context)
@@ -129,6 +130,7 @@ public class AiProxyService
             : $@"知识库参考资料（按相关度排序）：
 请优先使用这些资料回答；与问题无关的直接忽略。
 若这些资料都不能回答该问题，必须先在回答开头说明「知识库中未检索到相关队内资料」，再基于通用知识回答并注明。
+若资料里包含学习库（某部门的学习路径、阶段与课时），按阶段顺序给出学习路径（阶段名与课时名要具体），并提醒可在 /study 页面查看完整内容与打勾进度。
 
 {context}";
 

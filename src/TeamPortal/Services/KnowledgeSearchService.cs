@@ -12,6 +12,7 @@ namespace TeamPortal.Services;
 public partial class KnowledgeSearchService : IDisposable
 {
     private readonly string _basePath;
+    private readonly IConfiguration _config;
     private readonly ILogger<KnowledgeSearchService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly LogService _log;
@@ -24,6 +25,7 @@ public partial class KnowledgeSearchService : IDisposable
         _logger = logger;
         _scopeFactory = scopeFactory;
         _log = log;
+        _config = config;
         _basePath = config.GetValue<string>("Knowledge:BasePath")
                     ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
 
@@ -123,7 +125,7 @@ public partial class KnowledgeSearchService : IDisposable
             results.Add(new KbResult
             {
                 Path = path,
-                Snippet = SnippetForChunk(snap.Chunks[hit.Chunk], query, queryTokens),
+                Snippet = SnippetForChunk(snap, hit.Chunk, query, queryTokens),
                 Score = hit.Score,
             });
         }

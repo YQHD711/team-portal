@@ -95,4 +95,26 @@ public class AiPromptTests
         Assert.Contains("知识库中未检索到相关队内资料", message);
         Assert.DoesNotContain("没有检索到相关资料", message);
     }
+
+    // ── P1-2：学习库命中时按阶段顺序给路径 ──
+
+    [Fact]
+    public void RagInjection_WithContext_IncludesStudyPathRule()
+    {
+        var message = AiProxyService.RagInjectionFor("来源：工程部/学习库/_学习路径.md（相关度 3.20）\n阶段 1：工程基础");
+
+        Assert.Contains("按阶段顺序", message);
+        Assert.Contains("/study", message);
+        // P1-1 的空结果规则不能被这次改动碰掉
+        Assert.Contains("知识库中未检索到相关队内资料", message);
+    }
+
+    [Fact]
+    public void RagInjection_EmptyContext_DoesNotClaimStudyData()
+    {
+        var message = AiProxyService.RagInjectionFor("");
+
+        Assert.DoesNotContain("/study", message);
+        Assert.Contains("没有检索到相关资料", message);
+    }
 }

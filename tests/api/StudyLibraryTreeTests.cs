@@ -105,7 +105,7 @@ public class StudyLibraryTreeTests : IDisposable
         // 用户写了「阶段目标/时长/自检清单」却一个字都看不到。
         var scope = StudyLibraryService.Build(_svc.GetTree("member", "飞训部"), "member", "飞训部")[0];
 
-        var enriched = StudyEndpoints.Enrich(scope, _svc);
+        var enriched = StudyLibraryService.Enrich(scope, _svc);
         var stage = Assert.Single(enriched.Stages);
 
         Assert.Equal("2-3 周", stage.Duration);

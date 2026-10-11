@@ -6,12 +6,20 @@ namespace TeamPortal.Services;
 /// <summary>
 /// 命中分块的摘要提取：**只在命中的那一块里**找锚点/关键词再截窗口。
 /// 这是分块索引的核心价值 —— 长文档的答案在后半段时，摘要也落在后半段，而不是文档开头。
-/// 桥接伪块（原文里没有对应中文区间）退回"整篇找锚点"（P0-1 的行为）。
+/// 虚拟文档（P1-2 学习库）用自己的正文出摘要；桥接伪块（原文里没有对应中文区间）退回"整篇找锚点"。
 /// </summary>
 public partial class KnowledgeSearchService
 {
-    private string SnippetForChunk(ChunkInfo chunk, string query, string[] queryTokens)
+    private string SnippetForChunk(IndexSnapshot snapshot, int chunkId, string query, string[] queryTokens)
     {
+        // 虚拟文档（P1-2 学习库）：正文不在磁盘上，直接用它自己的文本出摘要
+        if (snapshot.VirtualTexts.TryGetValue(chunkId, out var virtualText))
+        {
+            var virtualAnchor = FindBestAnchor(query, virtualText);
+            return ExtractSnippet(virtualText, string.IsNullOrEmpty(virtualAnchor) ? queryTokens[0] : virtualAnchor, 1500);
+        }
+
+        var chunk = snapshot.Chunks[chunkId];
         string content;
         try { content = File.ReadAllText(Path.Combine(_basePath, chunk.Path)); }
         catch { return ""; }   // 摘要失败不算检索失败

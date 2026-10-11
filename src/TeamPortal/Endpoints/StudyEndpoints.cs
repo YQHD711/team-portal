@@ -34,7 +34,7 @@ public static class StudyEndpoints
             var completed = await progress.GetCompletedPaths(uid);
             var tree = knowledge.GetTree(role, dept, uid);
             var scopes = StudyLibraryService.Build(tree, role, dept)
-                .Select(s => WithProgress(Enrich(s, knowledge), completed))
+                .Select(s => WithProgress(StudyLibraryService.Enrich(s, knowledge), completed))
                 .ToList();
             return Results.Ok(new { scopes });
         });
@@ -86,35 +86,6 @@ public static class StudyEndpoints
            || (role == "部长" && (scope == StudyLibraryService.PublicScope
                                   || (dept is not null && scope == dept)));
 
-    /// <summary>
-    /// 读入「_学习路径.md」「_阶段说明.md」的正文与 front matter 元信息。
-    /// 这些路径全部来自**已按 ACL 过滤**的树，因此不会越权读取；
-    /// 且统一走 KnowledgeService.GetContent（内含 ResolvePath 的路径安全校验）。
-    /// </summary>
-    internal static StudyScope Enrich(StudyScope scope, KnowledgeService knowledge)
-    {
-        var (scopeMeta, scopeBody) = StudyLibraryService.ParseDoc(
-            scope.OverviewPath is null ? null : knowledge.GetContent(scope.OverviewPath));
-
-        return scope with
-        {
-            Overview = Blank(scopeBody),
-            Duration = StudyLibraryService.MetaValue(scopeMeta, "时长", "duration"),
-            Goal = StudyLibraryService.MetaValue(scopeMeta, "目标", "goal"),
-            Stages = scope.Stages.Select(stage =>
-            {
-                var (meta, body) = StudyLibraryService.ParseDoc(
-                    stage.DescriptionPath is null ? null : knowledge.GetContent(stage.DescriptionPath));
-                return stage with
-                {
-                    Description = Blank(body),
-                    Duration = StudyLibraryService.MetaValue(meta, "时长", "duration"),
-                    Goal = StudyLibraryService.MetaValue(meta, "目标", "goal"),
-                };
-            }).ToList()
-        };
-    }
-
     /// <summary>把本人进度映射进结构（纯函数，便于单测）。</summary>
     internal static StudyScope WithProgress(StudyScope scope, HashSet<string> completed)
     {
@@ -131,8 +102,6 @@ public static class StudyEndpoints
             LessonCount = stages.Sum(s => s.Lessons.Count),
         };
     }
-
-    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 }
 
 public record StudyProgressReq(string Path, bool Completed);
