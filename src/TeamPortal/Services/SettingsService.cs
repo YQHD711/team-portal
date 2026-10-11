@@ -102,7 +102,9 @@ public class SettingsService
     /// 旧键是 AI:DeepSeekKey / AI:DeepSeekBaseUrl —— 已由 AI:ApiKey / AI:BaseUrl 取代
     /// （支持任意 OpenAI 兼容服务，名字不该再写死 DeepSeek）。
     /// </summary>
-    private static readonly string[] ObsoleteKeys = ["AI:DeepSeekKey", "AI:DeepSeekBaseUrl"];
+    private static readonly string[] ObsoleteKeys = ["AI:DeepSeekKey", "AI:DeepSeekBaseUrl", "AI:BridgingAutoRun"];
+    // 说明：AI:BridgingAutoRun 是 task-13 中途加过的"自动摘要开关"，能力整体移除后一并废弃
+    // （见下方 ObsoleteKeys 清理，老库里若已有这一行会被删掉，不留在设置页上）。
 
     /// <summary>
     /// 默认值变更的一次性迁移：(键, 旧默认, 新默认)。

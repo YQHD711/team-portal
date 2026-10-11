@@ -196,14 +196,17 @@ public class SettingsServiceTests
         // 模拟老库：还留着被 AI:ApiKey / AI:BaseUrl 取代的旧键
         db.SystemSettings.Add(new SystemSetting { Key = "AI:DeepSeekKey", Value = "sk-old", Category = "AI 服务", Description = "旧" });
         db.SystemSettings.Add(new SystemSetting { Key = "AI:DeepSeekBaseUrl", Value = "https://old", Category = "AI 服务", Description = "旧" });
+        // task-13 中途加过、随后整体移除的"自动摘要开关"：留着它会在设置页显示一个永远用不上的开关
+        db.SystemSettings.Add(new SystemSetting { Key = "AI:BridgingAutoRun", Value = "true", Category = "AI 服务", Description = "旧" });
         await db.SaveChangesAsync();
 
         await svc.SeedDefaults();
 
-        // 只从 defaults 里删掉是不够的：老库里那两行还在，设置页照旧会列出来，
+        // 只从 defaults 里删掉是不够的：老库里那几行还在，设置页照旧会列出来，
         // 看起来像还能用 —— 必须真的从库里清掉
         Assert.DoesNotContain(db.SystemSettings, s => s.Key == "AI:DeepSeekKey");
         Assert.DoesNotContain(db.SystemSettings, s => s.Key == "AI:DeepSeekBaseUrl");
+        Assert.DoesNotContain(db.SystemSettings, s => s.Key == "AI:BridgingAutoRun");
         // 新键不受影响
         Assert.Contains(db.SystemSettings, s => s.Key == "AI:ApiKey");
         Assert.Contains(db.SystemSettings, s => s.Key == "AI:BaseUrl");
