@@ -15,6 +15,7 @@ public class KnowledgeSearchService : IDisposable
     private readonly string _basePath;
     private readonly ILogger<KnowledgeSearchService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly LogService _log;
     private readonly FileSystemWatcher? _watcher;
     private readonly object _lock = new();
 
@@ -29,10 +30,12 @@ public class KnowledgeSearchService : IDisposable
 
     private record DocEntry(string Path, int TermFreq);
 
-    public KnowledgeSearchService(IConfiguration config, ILogger<KnowledgeSearchService> logger, IServiceScopeFactory scopeFactory)
+    public KnowledgeSearchService(IConfiguration config, ILogger<KnowledgeSearchService> logger,
+        IServiceScopeFactory scopeFactory, LogService log)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _log = log;
         _basePath = config.GetValue<string>("Knowledge:BasePath")
                     ?? Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "data", "knowledge");
 
@@ -85,10 +88,15 @@ public class KnowledgeSearchService : IDisposable
                 {
                     try
                     {
+                        // 中英桥接 sidecar 不单独成为一篇文档：它的中文内容并入原文的索引文本，
+                        // 于是中文 query 命中 sidecar 时，返回的仍是原文（path/snippet 都来自原文）。
+                        if (KnowledgeBridge.IsSidecar(file)) continue;
                         var text = File.ReadAllText(file);
                         if (string.IsNullOrWhiteSpace(text)) continue;
+                        var bridge = KnowledgeBridge.TryReadIndexText(KnowledgeBridge.SidecarPathFor(file));
+                        var indexText = bridge is null ? text : text + "\n" + bridge;
                         var relPath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
-                        var tokens = Tokenize(text);
+                        var tokens = Tokenize(indexText);
                         var tokenCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                         foreach (var t in tokens)
                         {
@@ -122,10 +130,18 @@ public class KnowledgeSearchService : IDisposable
     /// </summary>
     public List<KbResult> Search(string query, int topK, string? role, string? department, int userId = 0)
     {
-        if (_docCount == 0) return new List<KbResult>();
+        if (_docCount == 0)
+        {
+            LogSearch(query, hits: 0, returned: 0);
+            return new List<KbResult>();
+        }
 
         var queryTokens = TokenizeQuery(query);
-        if (queryTokens.Length == 0) return new List<KbResult>();
+        if (queryTokens.Length == 0)
+        {
+            LogSearch(query, hits: 0, returned: 0);
+            return new List<KbResult>();
+        }
 
         var invisibleProjects = InvisibleProjectNames(role, department, userId);
         bool Allowed(string path) =>
@@ -166,8 +182,16 @@ public class KnowledgeSearchService : IDisposable
             results.Add(new KbResult { Path = path, Snippet = snippet, Score = score });
         }
 
+        LogSearch(query, scores.Count, results.Count);
         return results;
     }
+
+    /// <summary>
+    /// RAG 可观测性：每次检索留一行统计（Category=ai）。空转判据是**返回条数为 0**
+    /// （即没有任何可注入的文档）；真正注入了几篇由 AiProxyService 的 "RAG context: used=" 记录。
+    /// </summary>
+    private void LogSearch(string query, int hits, int returned) =>
+        _log.Info(RagLog.Category, RagLog.SearchLine(query, hits, returned, returned == 0));
 
     /// <summary>
     /// 按 wiki 任务的 Visibility 计算对调用者不可见的项目名(与知识库树的规则一致):

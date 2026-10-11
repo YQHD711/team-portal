@@ -12,6 +12,7 @@ public class AiProxyService
     private readonly AiClient _ai;
     private readonly SettingsService _settings;
     private readonly KnowledgeSearchService _search;
+    private readonly LogService _log;
 
     /// <summary>
     /// 内置默认提示词。前端是纯文本渲染（whitespace-pre-wrap），所以这里明确要求模型不要输出
@@ -44,11 +45,12 @@ public class AiProxyService
     private async Task<string> ResolveSystemPrompt() =>
         SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
-    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search)
+    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search, LogService log)
     {
         _ai = ai;
         _settings = settings;
         _search = search;
+        _log = log;
     }
 
     /// <summary>调用者身份,用于把知识库检索限制在其有权查看的范围内(跨部门/他人私人 wiki 不参与检索)。</summary>
@@ -64,6 +66,8 @@ public class AiProxyService
         var topScore = results.FirstOrDefault()?.Score ?? 0;
         var relevant = results.Where(r => r.Score >= topScore * 0.05).Take(5).ToList();
         var context = BuildContext(relevant);
+        // RAG 可观测性：真正注入了多少文档/多少字（空转率另由 KnowledgeSearchService 的检索行统计）
+        _log.Info(RagLog.Category, RagLog.ContextLine(context.Length, relevant.Count));
 
         var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };
 

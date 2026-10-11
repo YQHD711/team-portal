@@ -42,7 +42,7 @@ public class KnowledgeSearchAclTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Knowledge:BasePath"] = _kbDir })
             .Build();
-        _search = new KnowledgeSearchService(config, NullLogger<KnowledgeSearchService>.Instance, new TestScopeFactory(_db));
+        _search = new KnowledgeSearchService(config, NullLogger<KnowledgeSearchService>.Instance, new TestScopeFactory(_db), new NullLogService(new TestScopeFactory(_db)));
     }
 
     [Fact]
