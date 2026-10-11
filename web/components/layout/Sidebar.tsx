@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
@@ -64,6 +64,8 @@ const adminNavStaff = [
 /** 仅管理员可见(系统级,部长不显示也不可访问) */
 const adminNavOnly = [
   { href: "/admin/settings", label: "系统设置", icon: Settings },
+  // 标签模板 = 全队共用的打印规范，与系统设置同级 → 只给管理员（非管理员看不到入口）
+  { href: "/admin/label-templates", label: "标签模板", icon: Tags },
   { href: "/admin/logs", label: "系统日志", icon: FileText },
   { href: "/admin/trash", label: "回收站", icon: Trash2 },
   { href: "/admin/backup", label: "备份恢复", icon: HardDrive },
