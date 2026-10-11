@@ -13,6 +13,8 @@ internal static class RagLog
     public const string Category = "ai";
     public const string SearchPrefix = "RAG search: ";
     public const string ContextPrefix = "RAG context: ";
+    /// <summary>工具轮统计（task-16）：迭代了几轮、调了几个工具、返回多少字符、都调了什么。</summary>
+    public const string ToolsPrefix = "RAG tools: ";
     private const int QueryMaxChars = 40;
 
     /// <summary>
@@ -32,6 +34,18 @@ internal static class RagLog
 
     /// <summary>上下文统计行：chars=注入的上下文长度，used=实际注入的文档数。</summary>
     public static string ContextLine(int chars, int used) => $"{ContextPrefix}chars={chars} used={used}";
+
+    /// <summary>
+    /// 工具轮统计行：rounds=跑了几轮工具请求，calls=实际执行了几个工具，chars=工具返回总字符（预算），
+    /// tools=各工具名计数。**不记录任何文档正文**（只记名字，避免把知识库内容写进日志）。
+    /// </summary>
+    public static string ToolsLine(int rounds, int calls, int chars, IEnumerable<string> toolNames)
+    {
+        var summary = toolNames.GroupBy(n => n, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}×{g.Count()}")
+            .DefaultIfEmpty("none");
+        return $"{ToolsPrefix}rounds={rounds} calls={calls} chars={chars} tools={string.Join(",", summary)}";
+    }
 
     /// <summary>换行会破坏日志行、也让"前 40 字"失去意义；统一压成空格并截断。</summary>
     private static string Sanitize(string? query)

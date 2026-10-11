@@ -61,9 +61,10 @@ public class RagObservabilityTests : IDisposable
         var settings = new SettingsService(_scopes);
         var log = new LogService(_scopes, NullLogger<LogService>.Instance, settings);
         using var search = new KnowledgeSearchService(config, NullLogger<KnowledgeSearchService>.Instance, _scopes, log);
+        var knowledge = new KnowledgeService(config, log, _scopes);
         var ai = new AiClient(new HttpClient(new StubHttpHandler(_ => ChatReply())), config, settings);
         using var db = new AppDbContext(Options());
-        var proxy = new AiProxyService(ai, settings, search, log, db);
+        var proxy = new AiProxyService(ai, settings, search, knowledge, log, db);
 
         var stream = await proxy.ChatStream("盘旋半径由什么决定", new AiProxyService.SearchScope("admin", null, 0));
         Assert.NotNull(stream);   // RAG 链路真的跑完了（假 AI 返回 200）

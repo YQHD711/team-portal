@@ -62,7 +62,7 @@ beforeEach(() => {
 describe("学习库：块级就地编辑", () => {
   it("改一段 → 写回同一个知识库文件，其余内容（mermaid/表格/标题）逐字符不变", async () => {
     render(<StudyPage />);
-    await screen.findAllByTestId("md-block", {}, { timeout: 5000 });
+    await screen.findAllByTestId("md-block", {}, { timeout: 15000 });
 
     const block = screen.getAllByTestId("md-block").find(b => b.textContent?.includes("机翼产生升力"))!;
     fireEvent.click(within(block).getByTestId("md-block-edit"));
@@ -78,8 +78,8 @@ describe("学习库：块级就地编辑", () => {
     expect(body.content.slice(body.content.indexOf("```mermaid"))).toBe(DOC.slice(DOC.indexOf("```mermaid")));
     expect(body.content).toContain("升力来自机翼上下压力差");
     // 保存后立即显示新内容
-    expect(await screen.findByText(/升力来自机翼上下压力差/)).toBeInTheDocument();
-  });
+    expect(await screen.findByText(/升力来自机翼上下压力差/, {}, { timeout: 15000 })).toBeInTheDocument();
+  }, 25000);
 
   it("canEdit=false：只读，没有任何编辑入口（不放宽权限）", async () => {
     mockedGet.mockImplementation(async (endpoint: string) => {
@@ -88,9 +88,11 @@ describe("学习库：块级就地编辑", () => {
       return {};
     });
     render(<StudyPage />);
-    await screen.findByText(/机翼产生升力/, {}, { timeout: 5000 });
+    // 内层等待必须给足：它若与「外层 5s 默认超时」相等，超时永远由外层先触发，
+    // 报出来的就是 "Test timed out in 5000ms"（并发跑全量时偶发），而不是有用的断言信息。
+    await screen.findByText(/机翼产生升力/, {}, { timeout: 15000 });
 
     expect(screen.queryByTestId("md-block-edit")).not.toBeInTheDocument();
     expect(screen.queryByTestId("md-block-editor")).not.toBeInTheDocument();
-  });
+  }, 25000);
 });
