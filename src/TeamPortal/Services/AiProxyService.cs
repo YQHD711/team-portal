@@ -8,11 +8,12 @@ namespace TeamPortal.Services;
 /// AI service — DeepSeek V4 Pro with knowledge base RAG.
 /// Uses TF-IDF indexed search for fast, relevant knowledge retrieval.
 /// </summary>
-public class AiProxyService
+public partial class AiProxyService
 {
     private readonly AiClient _ai;
     private readonly SettingsService _settings;
     private readonly KnowledgeSearchService _search;
+    private readonly KnowledgeService _knowledge;
     private readonly LogService _log;
     private readonly AppDbContext _db;
 
@@ -47,11 +48,13 @@ public class AiProxyService
     private async Task<string> ResolveSystemPrompt() =>
         SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
-    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search, LogService log, AppDbContext db)
+    public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search,
+        KnowledgeService knowledge, LogService log, AppDbContext db)
     {
         _ai = ai;
         _settings = settings;
         _search = search;
+        _knowledge = knowledge;
         _log = log;
         _db = db;
     }
@@ -59,39 +62,17 @@ public class AiProxyService
     /// <summary>调用者身份,用于把知识库检索限制在其有权查看的范围内(跨部门/他人私人 wiki 不参与检索)。</summary>
     public readonly record struct SearchScope(string? Role, string? Department, int UserId);
 
+    /// <summary>
+    /// 聊天主入口（task-16 起是"模型自主多轮检索"）：先按原逻辑注入 RAG + 实时块 + 提示词，
+    /// 再让模型自己决定要不要继续检索/翻文档（上限见 AgenticChatAsync），最后一轮仍以 SSE 流返回。
+    /// </summary>
     public async Task<Stream?> ChatStream(string question, SearchScope scope, List<(string role, string content)>? history = null)
     {
         var opt = await _ai.ResolveAsync();
         if (!opt.IsConfigured) return null;
 
-        var results = _search.Search(question, topK: 8, scope.Role, scope.Department, scope.UserId);
-        // Filter: only include results with meaningful TF-IDF score (>5% of top score)
-        var topScore = results.FirstOrDefault()?.Score ?? 0;
-        var relevant = results.Where(r => r.Score >= topScore * 0.05).Take(5).ToList();
-        var context = BuildContext(relevant);
-        // RAG 可观测性：真正注入了多少文档/多少字（空转率另由 KnowledgeSearchService 的检索行统计）
-        _log.Info(RagLog.Category, RagLog.ContextLine(context.Length, relevant.Count));
-
-        // 实时库存/货位：每次提问现查数据库（数量随时在变，写进索引会答过期数字）。不相关时返回 null。
-        var live = await LiveInventoryContext.BuildAsync(question, _db);
-        if (live is not null) _log.Info(RagLog.Category, $"RAG live: chars={live.Length}");
-
-        var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };
-
-        if (history != null && history.Count > 0)
-            foreach (var (role, content) in history)
-                messages.Add(new { role, content });
-
-        // 无论有没有命中都注入 RAG 段：空结果时必须让模型先声明"未检索到队内资料"，
-        // 否则检索空转时用户根本分不清答案是队内资料还是通用知识（见 RagInjectionFor）。
-        // 有实时查询结果时那条声明要让位（不能"KB 空 + 有实时数据"还叫模型说没资料）。
-        messages.Add(new { role = "system", content = RagInjectionFor(context, live) });
-
-        messages.Add(new { role = "user", content = question });
-
-        var payload = _ai.BuildChatPayload(opt, messages, stream: true);
-        var response = await _ai.SendAsync(_ai.CreateChatRequest(opt, payload), HttpCompletionOption.ResponseHeadersRead);
-        return response.IsSuccessStatusCode ? await response.Content.ReadAsStreamAsync() : null;
+        var messages = await BuildMessagesAsync(question, scope, history);
+        return await AgenticChatAsync(opt, messages, scope);
     }
 
     public async Task<object?> Search(string query, SearchScope scope)

@@ -137,6 +137,7 @@ public class SettingsService
             new() { Key = "AI:RequestTimeoutSeconds", Value = "300", Category = "AI 服务", Description = "AI 单次 HTTP 请求超时（秒）" },
             new() { Key = "AI:EnableThinking", Value = "false", Category = "AI 服务", Description = "启用思考模式（官方默认就是开启；本系统默认关闭以避免长时间无输出与高费用）" },
             new() { Key = "AI:ReasoningEffort", Value = "high", Category = "AI 服务", Description = "思考深度：none / low / high / max（历史别名 medium→high、minimal→low）" },
+            new() { Key = "AI:MaxToolRounds", Value = "4", Category = "AI 服务", Description = "聊天里模型自主检索（工具调用）最多几轮，1-8，默认 4。每轮最多 3 个工具调用、工具返回总量上限 24000 字符；达到上限会基于已有资料作答" },
             new() { Key = "Baidu:AppKey", Value = "", Category = "百度网盘", Description = "百度开放平台 AppKey" },
             new() { Key = "Baidu:SecretKey", Value = "", Category = "百度网盘", Description = "百度开放平台 SecretKey" },
             new() { Key = "Baidu:SignKey", Value = "", Category = "百度网盘", Description = "百度开放平台 SignKey" },

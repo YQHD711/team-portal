@@ -167,6 +167,21 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public async Task SeedDefaults_SeedsMaxToolRoundsDefault()
+    {
+        var db = CreateContext();
+        var svc = CreateService(db);
+        await svc.SeedDefaults();
+
+        // task-16：聊天自主检索的轮数上限（有上限才可控；但默认必须是"能用"的值，不能是 0/关闭）
+        var row = db.SystemSettings.Single(s => s.Key == "AI:MaxToolRounds");
+
+        Assert.Equal("4", row.Value);
+        Assert.True(await svc.GetInt("AI:MaxToolRounds", 0) is >= 1 and <= 8);
+        Assert.Contains("工具", row.Description);
+    }
+
+    [Fact]
     public async Task SeedDefaults_KeepsUserSetTemperature()
     {
         var db = CreateContext();
