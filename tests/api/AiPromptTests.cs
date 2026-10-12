@@ -158,4 +158,27 @@ public class AiPromptTests
         Assert.Contains("知识库中未检索到相关队内资料", message);
         Assert.DoesNotContain(LiveInventoryContext.Header, message);
     }
+
+    // ── task-21：检索质量（弱结果要提醒模型先换关键词再查） ──
+
+    [Fact]
+    public void RagInjection_WeakContext_WarnsToChangeKeywordsFirst()
+    {
+        var message = AiProxyService.RagInjectionFor("来源：公共/参数表-01.md（相关度 0.10）", null, weak: true);
+
+        Assert.Contains("请先换关键词再查", message);
+        Assert.Contains("search_knowledge", message);
+        Assert.Contains("借", message);                       // 给出同义词示例
+        // P1-1 的声明分支仍在（"弱"不等于"空"）
+        Assert.Contains("知识库中未检索到相关队内资料", message);
+    }
+
+    [Fact]
+    public void RagInjection_StrongContext_DoesNotWarn()
+    {
+        var message = AiProxyService.RagInjectionFor("来源：公共/物料管理规范.md（相关度 5.20）");
+
+        Assert.DoesNotContain("请先换关键词再查", message);
+        Assert.Contains("知识库参考资料", message);
+    }
 }

@@ -113,8 +113,11 @@ public partial class AiProxyService
     ///   - 有 KB 资料（±实时数据）→ 原有 KB 段 + 学习库规则（P1-2）+ 实时数据规则；
     ///   - **KB 空但有实时数据** → 不再要求声明"没检索到资料"（明明查到了实时库存），直接按实时结果回答。
     /// 实时块里的数字是当前值，模型必须直接用；查不到要明说去「零件库存 / 物料布局」看，严禁编。
+    ///
+    /// task-21 增补：<paramref name="weak"/>=true 表示本次检索**只被通用词命中**（"参数/流程/分布"这种），
+    /// 此时额外警示模型"先换关键词/同义词再查"，治线上 round=1 calls=0 直接拿无关资料下结论的问题。
     /// </summary>
-    internal static string RagInjectionFor(string context, string? liveContext = null)
+    internal static string RagInjectionFor(string context, string? liveContext = null, bool weak = false)
     {
         var hasKb = !string.IsNullOrEmpty(context);
         var hasLive = !string.IsNullOrEmpty(liveContext);
@@ -127,6 +130,12 @@ public partial class AiProxyService
         {
             sb.AppendLine("知识库参考资料（按相关度排序）：");
             sb.AppendLine("请优先使用这些资料回答；与问题无关的直接忽略。");
+            if (weak)
+            {
+                sb.AppendLine("注意：本次检索只命中了通用词，下列资料很可能与问题无关。请先换关键词再查"
+                              + "（用 search_knowledge，换成更具体的说法或同义词，例如「借」→「领用」、「仓库」→「库房」、"
+                              + "「货架」→「库位」、「东西」→「物料」），再决定怎么回答，不要仅凭这些资料下结论。");
+            }
             sb.AppendLine("若这些资料都不能回答该问题，必须先在回答开头说明「知识库中未检索到相关队内资料」，再基于通用知识回答并注明。");
             sb.AppendLine("若资料里包含学习库（某部门的学习路径、阶段与课时），按阶段顺序给出学习路径（阶段名与课时名要具体），并提醒可在 /study 页面查看完整内容与打勾进度。");
             sb.AppendLine();

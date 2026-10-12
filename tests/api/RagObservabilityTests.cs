@@ -110,6 +110,29 @@ public class RagObservabilityTests : IDisposable
         Assert.Equal("量子纠缠推进器", stats.RecentEmpty[0].Query);
     }
 
+    [Fact]
+    public async Task SearchLog_AppendsWeakSynRelax_ForWeakQuery()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Knowledge:BasePath"] = _kbDir })
+            .Build();
+        var settings = new SettingsService(_scopes);
+        var log = new LogService(_scopes, NullLogger<LogService>.Instance, settings);
+        using var search = new KnowledgeSearchService(config, NullLogger<KnowledgeSearchService>.Instance, _scopes, log);
+
+        // task-21：这条查询只可能"弱"（没有任何词命中）且没用同义词/二次检索
+        var outcome = search.SearchDetailed("量子纠缠推进器", 5, "admin", null);
+        Assert.True(outcome.Weak);
+        Assert.False(outcome.Relaxed);
+
+        var rows = await WaitForRagLogsAsync();
+        var line = rows.First(r => r.Message.StartsWith(RagLog.SearchPrefix));
+        Assert.Contains(" empty=True", line.Message);          // 老字段还在原位
+        Assert.Contains(" weak=True syn=0 relax=0", line.Message);
+        Assert.True(RagLog.TryParseSearch(line.Message, out _, out _, out _, out var empty));
+        Assert.True(empty);
+    }
+
     private async Task<List<SystemLog>> WaitForRagLogsAsync(int timeoutMs = 12000)
     {
         var start = Environment.TickCount64;

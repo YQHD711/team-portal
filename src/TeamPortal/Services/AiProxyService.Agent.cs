@@ -30,7 +30,10 @@ public partial class AiProxyService
     private async Task<List<object>> BuildMessagesAsync(string question, SearchScope scope,
         List<(string role, string content)>? history)
     {
-        var results = _search.Search(question, topK: 8, scope.Role, scope.Department, scope.UserId);
+        // task-21：SearchDetailed 会在"只被通用词命中"时自动做一次二次检索并合并，
+        // 同时把 weak 传出来 —— 弱结果要在注入段里明确提醒模型"先换词再查"（治 rounds=1 calls=0）。
+        var outcome = _search.SearchDetailed(question, topK: 8, scope.Role, scope.Department, scope.UserId);
+        var results = outcome.Results;
         // Filter: only include results with meaningful TF-IDF score (>5% of top score)
         var topScore = results.FirstOrDefault()?.Score ?? 0;
         var relevant = results.Where(r => r.Score >= topScore * 0.05).Take(5).ToList();
@@ -49,7 +52,7 @@ public partial class AiProxyService
         // 无论有没有命中都注入 RAG 段：空结果时必须让模型先声明"未检索到队内资料"；
         // 有实时查询结果时那条声明要让位（见 RagInjectionFor）。
         // 再告诉模型它有两个只读检索工具 —— 资料不够时应该自己继续查/翻页，而不是只用一次。
-        messages.Add(new { role = "system", content = RagInjectionFor(context, live) + ToolUsageHint(relevant.Count) });
+        messages.Add(new { role = "system", content = RagInjectionFor(context, live, outcome.Weak) + ToolUsageHint(relevant.Count) });
         messages.Add(new { role = "user", content = question });
         return messages;
     }

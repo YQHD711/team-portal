@@ -182,6 +182,21 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public async Task SeedDefaults_SeedsSearchSynonyms()
+    {
+        var db = CreateContext();
+        await CreateService(db).SeedDefaults();
+
+        // task-21：同义词表种子（管理员可在设置里改；留空/写坏退回内置表）
+        var row = db.SystemSettings.Single(s => s.Key == SearchSynonyms.SettingKey);
+        var map = SearchSynonyms.Parse(row.Value);
+
+        Assert.NotEmpty(map);
+        Assert.Equal(["领用"], map["借"]);            // 种子表第一项就是线上缺的那条（借 → 领用）
+        Assert.Contains("同义词", row.Description);
+    }
+
+    [Fact]
     public async Task SeedDefaults_KeepsUserSetTemperature()
     {
         var db = CreateContext();

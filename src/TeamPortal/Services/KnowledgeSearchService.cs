@@ -65,82 +65,9 @@ public partial class KnowledgeSearchService : IDisposable
     }
 
     /// <summary>
-    /// BM25 检索。索引覆盖全部部门目录,因此**必须在计分前按调用者角色/部门过滤**
-    /// (放到 Take(topK) 之后再过滤会让有权文档被无权文档挤掉,同时也没堵住泄露)。
-    ///
-    /// 打分：每个**分块**先累加各 query token 的 BM25 分；同一文档的多个分块只保留最高分那块，
-    /// snippet 也从那块取（长文档答案在后半段时不会退化成文档开头）。
+    /// 检索入口见 KnowledgeSearchService.Query.cs（task-21 起是"预处理 + 弱结果自动二次检索"）：
+    /// <see cref="Search"/> 只返回结果，<see cref="SearchDetailed"/> 额外告诉调用方本次结果是否"弱"。
     /// </summary>
-    public List<KbResult> Search(string query, int topK, string? role, string? department, int userId = 0)
-    {
-        var snap = _snapshot;   // 一次取快照：重建期间也不会读到半新半旧的索引
-        if (snap.ChunkCount == 0)
-        {
-            LogSearch(query, hits: 0, returned: 0);
-            return new List<KbResult>();
-        }
-
-        var queryTokens = TokenizeQuery(query);
-        if (queryTokens.Length == 0)
-        {
-            LogSearch(query, hits: 0, returned: 0);
-            return new List<KbResult>();
-        }
-
-        var invisibleProjects = InvisibleProjectNames(role, department, userId);
-        bool Allowed(string path) =>
-            KnowledgeAcl.CanAccess(path, role, department) &&
-            !KnowledgeAcl.IsInvisibleWikiProject(path, invisibleProjects);
-
-        var chunkScores = new Dictionary<int, double>();
-        foreach (var token in queryTokens)
-        {
-            if (!snap.Index.TryGetValue(Hash(token), out var packed)) continue;
-            var (offset, count) = Unpack(packed);
-            var idf = Bm25Idf(snap.ChunkCount, count);
-            for (var i = 0; i < count; i++)
-            {
-                var at = offset + i;
-                var chunkId = snap.PostingChunks[at];
-                var chunk = snap.Chunks[chunkId];
-                if (!Allowed(chunk.Path)) continue;
-                var score = idf * Bm25Tf(snap.PostingTfs[at], chunk.TokenCount, snap.AvgChunkLength);
-                chunkScores.TryGetValue(chunkId, out var existing);
-                chunkScores[chunkId] = existing + score;
-            }
-        }
-
-        // 同一文档多分块取 max（规格要求）；命中分块同时用于取 snippet
-        var best = new Dictionary<string, (double Score, int Chunk)>(StringComparer.Ordinal);
-        foreach (var (chunkId, score) in chunkScores)
-        {
-            var path = snap.Chunks[chunkId].Path;
-            if (!best.TryGetValue(path, out var current) || score > current.Score)
-                best[path] = (score, chunkId);
-        }
-
-        var results = new List<KbResult>();
-        foreach (var (path, hit) in best.OrderByDescending(x => x.Value.Score).Take(topK))
-        {
-            results.Add(new KbResult
-            {
-                Path = path,
-                Snippet = SnippetForChunk(snap, hit.Chunk, query, queryTokens),
-                Score = hit.Score,
-            });
-        }
-
-        LogSearch(query, chunkScores.Count, results.Count);
-        return results;
-    }
-
-    /// <summary>
-    /// RAG 可观测性：每次检索留一行统计（Category=ai）。空转判据是**返回条数为 0**
-    /// （即没有任何可注入的文档）；hits 是命中的**分块数**（分块索引下 scores 字典按分块计）。
-    /// 真正注入了几篇由 AiProxyService 的 "RAG context: used=" 记录。
-    /// </summary>
-    private void LogSearch(string query, int hits, int returned) =>
-        _log.Info(RagLog.Category, RagLog.SearchLine(query, hits, returned, returned == 0));
 
     /// <summary>
     /// 按 wiki 任务的 Visibility 计算对调用者不可见的项目名(与知识库树的规则一致):
