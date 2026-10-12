@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/lib/hooks";
 import DOMPurify from "dompurify";
 import { ancestorFolders, findFirstFile, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
 import { findAnchorTarget } from "@/lib/docAnchor";
+import { downloadErrorMessage, filenameFromPath, saveBlob } from "@/lib/download";
 import { KnowledgeTree } from "@/components/knowledge/KnowledgeTree";
 import { MarkdownRenderer } from "@/components/knowledge/MarkdownRenderer";
 
@@ -24,6 +25,11 @@ function urlParam(key: string): string {
  */
 function reason(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "未知错误";
+}
+
+/** 进度文案里的体积：不声明 Content-Length 时只能显示"已收多少" */
+function formatKb(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 export default function KnowledgeAdminPage() {
@@ -44,6 +50,9 @@ export default function KnowledgeAdminPage() {
   const [splitMode, setSplitMode] = useState(false);
   const [searchKw] = useState(() => urlParam("q"));
   const [cssContent, setCssContent] = useState("");
+  const [downloadMsg, setDownloadMsg] = useState("");
+  const [downloadError, setDownloadError] = useState(false);
+  const downloadingRef = useRef(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
@@ -133,9 +142,36 @@ export default function KnowledgeAdminPage() {
       alert("加载失败");
     }
   };
+  /**
+   * 非文本文件（PDF/图片等）走**鉴权下载**：`window.open` 开的新标签页发不出 Authorization 头
+   * （JWT 在 localStorage），必然 401。api.download 内部带 token + 进度 + 空闲超时，401 会跳登录。
+   */
+  const downloadFile = async (path: string) => {
+    if (downloadingRef.current) return;   // 重复点击不叠加
+    downloadingRef.current = true;
+    setDownloadError(false);
+    setDownloadMsg("下载中…");
+    try {
+      const blob = await api.download(`/api/knowledge/download?path=${encodeURIComponent(path)}`, {
+        onProgress: ({ received, total }) => {
+          setDownloadMsg(total ? `下载中 ${Math.round((received / total) * 100)}%` : `下载中… ${formatKb(received)}`);
+        },
+      });
+      saveBlob(blob, filenameFromPath(path));
+      setDownloadMsg("");
+    } catch (err) {
+      // 401 已由 api.download 接管（清 token + 跳登录）→ 这里不再提示，避免"下载失败"误导
+      const message = downloadErrorMessage(err);
+      if (message) { setDownloadError(true); setDownloadMsg(`下载失败：${message}`); }
+      else setDownloadMsg("");
+    } finally {
+      downloadingRef.current = false;
+    }
+  };
+
   /** 打开树上的节点 / Markdown 里的站内文档引用：文本文件进编辑器，其余走下载 */
   const openPath = (path: string, hash?: string) => {
-    if (!isTextFile(path)) { window.open(`/api/knowledge/download?path=${encodeURIComponent(path)}`, "_blank"); return; }
+    if (!isTextFile(path)) { void downloadFile(path); return; }
     // 链接里的 #锚点要等目标文档的正文到位后再滚（正文是异步来的）
     setPendingAnchor(hash ? { path, hash } : null);
     loadFile(path);
@@ -285,6 +321,14 @@ export default function KnowledgeAdminPage() {
           </div>
         )}
       </div>
+
+      {/* 下载反馈：树上的 PDF 也能触发，所以放在标题下方（不受"是否选中文档"影响） */}
+      {downloadMsg && (
+        <p data-testid="download-status"
+          className={`rounded-lg border-l-4 px-3 py-2 text-xs ${downloadError ? "border-danger bg-red-50 text-red-700" : "border-sky-400 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300"}`}>
+          {downloadMsg}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100vh-12rem)]">
         <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-72 lg:max-h-none">
