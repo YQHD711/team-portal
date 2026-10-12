@@ -19,10 +19,11 @@ internal static class RagLog
 
     /// <summary>
     /// q 用**贪婪**匹配：登录的 query 里万一含有 " hits=" 之类字样，也从行尾的最后一个后缀取值，
-    /// 不会把统计解析歪掉。
+    /// 不会把统计解析歪掉。task-21 起行尾会追加 <c>weak/syn/relax</c>，所以尾部整体做成可选。
     /// </summary>
     private static readonly Regex SearchRx = new(
-        @"^RAG search: q=(?<q>.*) hits=(?<hits>\d+) returned=(?<ret>\d+) empty=(?<empty>True|False)$",
+        @"^RAG search: q=(?<q>.*) hits=(?<hits>\d+) returned=(?<ret>\d+) empty=(?<empty>True|False)"
+        + @"(?: weak=(?<weak>True|False) syn=(?<syn>\d+) relax=(?<relax>\d+))?$",
         RegexOptions.Compiled | RegexOptions.Singleline);
 
     private static readonly Regex ContextRx = new(
@@ -30,7 +31,16 @@ internal static class RagLog
 
     /// <summary>检索统计行：hits=命中词条数（scores 字典条数），returned=最终返回条数，empty=是否空结果。</summary>
     public static string SearchLine(string query, int hits, int returned, bool empty) =>
-        $"{SearchPrefix}q={Sanitize(query)} hits={hits} returned={returned} empty={empty}";
+        SearchLine(query, hits, returned, empty, weak: false, synonymAdds: 0, relaxed: 0);
+
+    /// <summary>
+    /// task-21 起的检索行：在原字段后面**追加** weak（是否只被通用词命中）/syn（追加了几个同义词）/
+    /// relax（是否做了二次检索或退回了原查询）。原字段位置不动，老解析（RagStatsService）不受影响。
+    /// </summary>
+    public static string SearchLine(string query, int hits, int returned, bool empty,
+        bool weak, int synonymAdds, int relaxed) =>
+        $"{SearchPrefix}q={Sanitize(query)} hits={hits} returned={returned} empty={empty}"
+        + $" weak={weak} syn={synonymAdds} relax={relaxed}";
 
     /// <summary>上下文统计行：chars=注入的上下文长度，used=实际注入的文档数。</summary>
     public static string ContextLine(int chars, int used) => $"{ContextPrefix}chars={chars} used={used}";
