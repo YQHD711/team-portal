@@ -6,7 +6,7 @@ import { FileText, Plus, Trash2, Save, FolderPlus, X, Upload, Loader2, Eye, Colu
 import { getToken, isStaff } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/hooks";
 import DOMPurify from "dompurify";
-import { ancestorFolders, findFirstFile, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
+import { ancestorFolders, findFirstFile, findNode, isTextFile, type TreeNode } from "@/lib/knowledgeTree";
 import { findAnchorTarget } from "@/lib/docAnchor";
 import { downloadErrorMessage, filenameFromPath, saveBlob } from "@/lib/download";
 import { KnowledgeTree } from "@/components/knowledge/KnowledgeTree";
@@ -76,11 +76,39 @@ export default function KnowledgeAdminPage() {
   }, []);
 
   /**
+   * 非文本文件（PDF/图片等）走**鉴权下载**：`window.open` 开的新标签页发不出 Authorization 头
+   * （JWT 在 localStorage），必然 401。api.download 内部带 token + 进度 + 空闲超时，401 会跳登录。
+   */
+  const downloadFile = useCallback(async (path: string) => {
+    if (downloadingRef.current) return;   // 重复点击不叠加
+    downloadingRef.current = true;
+    setDownloadError(false);
+    setDownloadMsg("下载中…");
+    try {
+      const blob = await api.download(`/api/knowledge/download?path=${encodeURIComponent(path)}`, {
+        onProgress: ({ received, total }) => {
+          setDownloadMsg(total ? `下载中 ${Math.round((received / total) * 100)}%` : `下载中… ${formatKb(received)}`);
+        },
+      });
+      saveBlob(blob, filenameFromPath(path));
+      setDownloadMsg("");
+    } catch (err) {
+      // 401 已由 api.download 接管（清 token + 跳登录）→ 这里不再提示，避免"下载失败"误导
+      const message = downloadErrorMessage(err);
+      if (message) { setDownloadError(true); setDownloadMsg(`下载失败：${message}`); }
+      else setDownloadMsg("");
+    } finally {
+      downloadingRef.current = false;
+    }
+  }, []);
+
+  /**
    * 拉目录树；首次到位后顺带解析 ?path=。
    *
-   * 这个 ?path= 可能是**目录**（例如从学习库点「编辑本库」跳过来）。
-   * 旧实现一律按文件去请求 content，目录必然失败、又被 .catch 静默吞掉，
-   * 于是"跳过来了却一片空白、也不报错"。现在目录就展开它并打开里面第一个文档。
+   * 这个 ?path= 可能是**目录**（例如从学习库点「编辑本库」跳过来）或**非文本文件**（全局搜索点 PDF）。
+   * 旧实现一律按文件去请求 content，目录必然失败、又被 .catch 静默吞掉；
+   * 非文本（PDF）更糟：既不下载也不报错，**整条深链接毫无反应**（全局搜索跳知识库走的就是它）。
+   * 现在按树里的类型分流：文本 → 编辑器；文件 → 鉴权下载；目录 → 展开并打开首个可编辑文件；找不到 → 明确提示。
    * 放在 .then 里而不是 effect 体内，避免 effect 里同步 setState。
    */
   const fetchTree = useCallback(() => {
@@ -91,14 +119,27 @@ export default function KnowledgeAdminPage() {
 
       const target = urlParam("path");
       if (!target) return;
+      // 文本：照旧进编辑器（#锚点由 pendingAnchor 那套负责），行为不变
       if (isTextFile(target)) { openFileAt(target); return; }
 
+      const node = findNode(nodes, target);
+      // 树里确认是文件 → 用**完整真实 path** 下载（树里显示名不带扩展名，别拿显示名去下）
+      if (node?.type === "file") { void downloadFile(target); return; }
+
+      // 树里没有、但看起来像文件（带扩展名）→ 明确提示，别静默
+      if (!node && /\.[a-z0-9]{1,8}$/i.test(target)) {
+        setNotice(`没找到「${target}」：可能已被移动或删除`);
+        return;
+      }
+
+      // 目录（树里存在但不是文件 / 不带扩展名）：展开它，并打开里面第一个可编辑文档
       setExpanded(prev => new Set([...prev, target, ...ancestorFolders(target)]));
       const first = findFirstFile(nodes, target);
       if (first) openFileAt(first);
+      else if (!node) setNotice(`没找到「${target}」：可能已被移动或删除`);
       else setNotice(`「${target}」下还没有文档，可用右上角「新建文档」创建`);
     });
-  }, [openFileAt]);
+  }, [openFileAt, downloadFile]);
   useEffect(() => { fetchTree(); }, [fetchTree]);
 
   // 跨项目预览时套原文档的 CSS(Wiki 翻译项目把仓库 assets/ 复制到知识库,这里加载套到预览)
@@ -142,33 +183,6 @@ export default function KnowledgeAdminPage() {
       alert("加载失败");
     }
   };
-  /**
-   * 非文本文件（PDF/图片等）走**鉴权下载**：`window.open` 开的新标签页发不出 Authorization 头
-   * （JWT 在 localStorage），必然 401。api.download 内部带 token + 进度 + 空闲超时，401 会跳登录。
-   */
-  const downloadFile = async (path: string) => {
-    if (downloadingRef.current) return;   // 重复点击不叠加
-    downloadingRef.current = true;
-    setDownloadError(false);
-    setDownloadMsg("下载中…");
-    try {
-      const blob = await api.download(`/api/knowledge/download?path=${encodeURIComponent(path)}`, {
-        onProgress: ({ received, total }) => {
-          setDownloadMsg(total ? `下载中 ${Math.round((received / total) * 100)}%` : `下载中… ${formatKb(received)}`);
-        },
-      });
-      saveBlob(blob, filenameFromPath(path));
-      setDownloadMsg("");
-    } catch (err) {
-      // 401 已由 api.download 接管（清 token + 跳登录）→ 这里不再提示，避免"下载失败"误导
-      const message = downloadErrorMessage(err);
-      if (message) { setDownloadError(true); setDownloadMsg(`下载失败：${message}`); }
-      else setDownloadMsg("");
-    } finally {
-      downloadingRef.current = false;
-    }
-  };
-
   /** 打开树上的节点 / Markdown 里的站内文档引用：文本文件进编辑器，其余走下载 */
   const openPath = (path: string, hash?: string) => {
     if (!isTextFile(path)) { void downloadFile(path); return; }
