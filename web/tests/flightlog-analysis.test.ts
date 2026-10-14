@@ -210,6 +210,20 @@ describe("滤波（陷波）规则", () => {
     expect(f.suggestions).toHaveLength(0);
   });
 
+  it("负向对照：振动测不出来时不得声称「无需启用陷波」（不能把未知说成通过）", () => {
+    // 只有 10 条 VIBE（低于 50 条门槛）→ 振动不可评估
+    const doc = makeDoc({
+      series: healthyVibe(10, DT),
+      durationSec: 10 * DT,
+      params: { INS_HNTCH_ENABLE: 0, FFT_ENABLE: 1 },
+    });
+    const [f] = findingsFor(doc, "filter_notch");
+    expect(f.status).toBe("insufficient_data");
+    expect(f.severity).toBe("unknown");
+    expect(f.note).toContain("样本不足");
+    expect(f.phenomenon).not.toContain("在阈值内");
+  });
+
   it("固件版本低于 4.1 时判不适用并说明原因", () => {
     const doc = makeDoc({
       series: healthyVibe(N, DT),

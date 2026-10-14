@@ -72,11 +72,12 @@ function buildFinding(
     title: TITLE,
     severity: verdict.severity,
     status:
-      verdict.severity === "ok"
+      verdict.status ??
+      (verdict.severity === "ok"
         ? "passed"
         : verdict.severity === "unknown"
           ? "checked_but_not_supported"
-          : "fired",
+          : "fired"),
     window,
     phenomenon: verdict.phenomenon,
     impact: verdict.impact,
@@ -94,7 +95,10 @@ function buildFinding(
     suggestions: verdict.suggestions,
     docLinks: [DOC, DOC_FFT],
     charts,
-    note: capabilityNote(ev.imuFs),
+    // 振动测不出来时必须把原因说清楚，否则用户会把"未检出问题"当成"没问题"
+    note: [ev.vibrationUnavailable, capabilityNote(ev.imuFs)]
+      .filter((s): s is string => s !== null)
+      .join("；"),
   });
 }
 

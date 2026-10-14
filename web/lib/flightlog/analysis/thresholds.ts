@@ -30,7 +30,13 @@ export const PID_RATE = {
   /** Err/Tar 均值比：>0.5 跟踪偏差明显；>1.0 误差已达指令量级 */
   errRatioWarning: 0.5,
   errRatioCritical: 1,
-  minSamples: 200,
+  /**
+   * 最少样本数 = 10 秒飞行（10 Hz 记录 100 点）。
+   * 依据：RMS 比值在 100 点上已经稳定（几十个样本即可，估计误差随 √n）；
+   * 实测 user_0509 的 arm 窗口只有 125 点（12.5 s），若门槛设 200（20 s）
+   * 会把正常的短程飞行一律判成"无法判断"，失去可用性。
+   */
+  minSamples: 100,
 } as const;
 
 export const FILTER = {

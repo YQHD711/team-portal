@@ -3,7 +3,7 @@
  * 便于对每一类结论写独立测试（needsNotch / notNeeded / enabledNoPeak / enabledPeak / enabledUnverified）。
  */
 
-import type { Severity } from "../types/report";
+import type { CheckStatus, Severity } from "../types/report";
 import type { Suggestion } from "../types/report";
 import { suggestion } from "./finding";
 import type { VibrationIndicator } from "./vibrationIndicators";
@@ -22,6 +22,7 @@ export interface NotchEvidence {
 export type NotchDecision =
   | { kind: "needsNotch"; severe: boolean }
   | { kind: "notNeeded" }
+  | { kind: "vibrationUnmeasurable" }
   | { kind: "enabledNoPeak"; snrMax: number }
   | { kind: "enabledPeak"; peakHz: number; offset: number }
   | { kind: "enabledUnverified" };
@@ -38,6 +39,8 @@ export function vibrationBad(indicators: readonly VibrationIndicator[]): boolean
 export function decideNotch(ev: NotchEvidence): NotchDecision {
   const cfg = ev.cfg;
   if (!cfg.enabled) {
+    // 振动测不出来时**不能**说"振动在阈值内、无需启用"——那是把未知说成通过
+    if (ev.vibrationUnavailable !== null) return { kind: "vibrationUnmeasurable" };
     if (!vibrationBad(ev.indicators)) return { kind: "notNeeded" };
     const severe = ev.indicators.some(
       (i) =>
@@ -63,6 +66,8 @@ export function decideNotch(ev: NotchEvidence): NotchDecision {
 
 export interface NotchVerdict {
   severity: Severity;
+  /** 覆盖由 severity 推导的默认状态（例如"振动测不出来"应为 insufficient_data） */
+  status?: CheckStatus;
   phenomenon: string;
   impact: string;
   suggestions: Suggestion[];
@@ -101,6 +106,15 @@ export function verdictFor(d: NotchDecision, ev: NotchEvidence): NotchVerdict {
         severity: "ok",
         phenomenon: "谐波陷波未启用，但振动水平在阈值内，当前无需启用",
         impact: "振动不构成威胁，保持现状即可",
+        suggestions: [],
+      };
+    case "vibrationUnmeasurable":
+      return {
+        severity: "unknown",
+        status: "insufficient_data",
+        phenomenon:
+          "谐波陷波未启用；本次日志无法测出振动水平，因此无法判断是否需要启用陷波",
+        impact: "无法判断滤波配置是否够用，不代表通过",
         suggestions: [],
       };
     case "enabledNoPeak":

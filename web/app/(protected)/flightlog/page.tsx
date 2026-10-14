@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Cpu } from "lucide-react";
+import { FileText, Cpu, Stethoscope } from "lucide-react";
 import { LogFileList } from "@/components/flightlog/LogFileList";
 import { FirmwarePanel } from "@/components/flightlog/FirmwarePanel";
+import { DiagnosisPanel } from "@/components/flightlog/diagnosis/DiagnosisPanel";
 
-type Tab = "logs" | "firmware";
+type Tab = "logs" | "firmware" | "diagnosis";
 
 const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
   { id: "logs", label: "日志文件", icon: FileText },
   { id: "firmware", label: "固件下载", icon: Cpu },
+  // 默认标签必须仍是「日志文件」（smoke e2e 断言它 aria-selected=true）
+  { id: "diagnosis", label: "诊断", icon: Stethoscope },
 ];
 
 export default function FlightLogPage() {
@@ -42,7 +45,7 @@ export default function FlightLogPage() {
       </div>
 
       {/* 只挂载当前 Tab 的组件，避免未激活面板在后台打接口 */}
-      {tab === "logs" ? <LogFileList /> : <FirmwarePanel />}
+      {tab === "logs" ? <LogFileList /> : tab === "firmware" ? <FirmwarePanel /> : <DiagnosisPanel />}
     </div>
   );
 }
