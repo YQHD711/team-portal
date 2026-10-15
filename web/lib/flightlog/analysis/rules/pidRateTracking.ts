@@ -24,7 +24,8 @@ import {
   spectrumCapabilityNote,
   type RateAxisSpec,
 } from "../rateAxisEvidence";
-import { buildAxisFinding, PID_RULE_ID, PID_RULE_TITLE } from "./pidAxisFinding";
+import { axisParamSuffix, buildAxisFinding, PID_RULE_ID, PID_RULE_TITLE } from "./pidAxisFinding";
+import { collectRateTuning } from "../tuningAdvice";
 
 const PARAM_MAP = {
   rollRateP: "ATC_RAT_RLL_P",
@@ -100,7 +101,18 @@ export const pidRateTrackingRule: Rule = {
           note: ev.detail,
         });
       }
-      return buildAxisFinding(ev, capNote, ctx.param(spec.paramName));
+      const suffix = axisParamSuffix(spec.axis);
+      return buildAxisFinding(
+        ev,
+        capNote,
+        {
+          currentP: ctx.param(spec.paramName),
+          i: ctx.param(`ATC_RAT_${suffix}_I`),
+          d: ctx.param(`ATC_RAT_${suffix}_D`),
+          ff: ctx.param(`ATC_RAT_${suffix}_FF`),
+        },
+        collectRateTuning(ctx, spec, window),
+      );
     });
   },
 };
