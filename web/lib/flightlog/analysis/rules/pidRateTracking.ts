@@ -144,6 +144,14 @@ function buildAxisFinding(
   });
 }
 
+/** 固定翼/车辆默认没有 yaw **速率**控制器：YAW2SRV_* 是协调转弯阻尼，不是速率环。 */
+const NO_YAW_RATE_VEHICLES: readonly string[] = ["plane", "rover"];
+
+export function hasYawRateController(ctx: RuleContext): boolean {
+  if (ctx.series("PIDY") !== null) return true;
+  return !NO_YAW_RATE_VEHICLES.includes(ctx.doc.meta.vehicleKind);
+}
+
 export const pidRateTrackingRule: Rule = {
   id: RULE_ID,
   title: TITLE,
@@ -152,9 +160,13 @@ export const pidRateTrackingRule: Rule = {
     {
       platform: "ardupilot",
       minVersion: 30400,
-      requires: ["PIDR", "PIDP", "PIDY"],
+      // ⚠️ 曾经写成 ["PIDR","PIDP","PIDY"]，结果**固定翼日志把整条规则打成"缺少必需消息"**，
+      // 连 roll/pitch 的分析一起废掉（线上真实反馈）。yaw 是否适用必须**按轴判断**，
+      // 不能当整条规则的门槛。
+      requires: ["PIDR", "PIDP"],
+      optional: ["PIDY"],
       paramMap: PARAM_MAP,
-      note: "PIDx 逐项日志（含 Tar/Act/Err）自 3.4 起稳定；4.1+ 的 P 参数名为 ATC_RAT_*_P",
+      note: "PIDx 逐项日志（含 Tar/Act/Err）自 3.4 起稳定；4.1+ 的 P 参数名为 ATC_RAT_*_P；固定翼默认没有 yaw 速率环",
     },
   ],
   run(ctx: RuleContext) {
@@ -170,13 +182,27 @@ export const pidRateTrackingRule: Rule = {
       ];
     }
     const capNote = spectrumCapabilityNote(ctx);
+    const yawApplicable = hasYawRateController(ctx);
     return AXES.map((spec) => {
       const ev = computeRateAxisEvidence(ctx, spec, window);
       if ("kind" in ev) {
+        // 缺 yaw 速率环 ≠ 数据缺失：固定翼就是没有这个环，如实说"不适用"而不是"缺数据"
+        if (spec.axis === "yaw" && !yawApplicable) {
+          return unknownFinding({
+            ruleId: RULE_ID,
+            title: `${TITLE}（${spec.label}）`,
+            status: "not_applicable",
+            axis: spec.axis,
+            note:
+              `${ctx.doc.meta.vehicleKind === "rover" ? "Rover" : "固定翼"}默认没有 yaw 速率控制器` +
+              "（没有 PIDY 日志；YAW2SRV_* 是协调转弯阻尼，不是速率环），该轴不适用本检查",
+          });
+        }
         return unknownFinding({
           ruleId: RULE_ID,
           title: `${TITLE}（${spec.label}）`,
           status: ev.kind === "missing" ? "missing_required" : "insufficient_data",
+          axis: spec.axis,
           note: ev.detail,
         });
       }

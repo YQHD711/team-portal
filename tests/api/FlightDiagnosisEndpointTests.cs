@@ -29,6 +29,8 @@ public class FlightDiagnosisEndpointTests : IClassFixture<WebApplicationFactory<
         public long SkippedBytes { get; set; }
         public int DecodedTypes { get; set; }
         public int TotalTypes { get; set; }
+        public int ParseMs { get; set; }
+        public int AnalyzeMs { get; set; }
         public List<string> Warnings { get; set; } = new();
     }
     private sealed class ListResp
@@ -79,8 +81,11 @@ public class FlightDiagnosisEndpointTests : IClassFixture<WebApplicationFactory<
         vehicleKind = "copter",
         firmwareVersion = "4.6.2",
         versionNumeric = 40602,
-        parseMs = 196,
-        analyzeMs = 12,
+        // ⚠️ 故意用**小数**：前端 performance.now() 差值就是这个形状（线上实测 69.89999999990687）。
+        // 曾经 DTO 声明成 int → System.Text.Json 绑定失败 → 框架级 400（且服务端校验根本没被调用）。
+        // 这条用例就是那个线上事故的回归守卫。
+        parseMs = 69.89999999990687,
+        analyzeMs = 2.1000000000931323,
         decodedTypes = 81,
         totalTypes = 81,
         critical = 1,
@@ -115,6 +120,9 @@ public class FlightDiagnosisEndpointTests : IClassFixture<WebApplicationFactory<
         var detail = await member.GetFromJsonAsync<Item>($"/api/flight-diagnoses/{created.Id}");
         Assert.Equal("quad.bin", detail!.FileName);
         Assert.Equal(1, detail.Critical);
+        // 小数毫秒被接受，并按四舍五入落库（69.9 → 70、2.1 → 2）
+        Assert.Equal(70, detail.ParseMs);
+        Assert.Equal(2, detail.AnalyzeMs);
     }
 
     [Fact]

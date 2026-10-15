@@ -51,6 +51,61 @@ export const FILTER = {
 } as const;
 
 /**
+ * 角度环（外环）跟踪：ATT.Des* vs ATT.*，单位一律是**度**，跨机型一致。
+ *
+ * ⚠️ 下面的数值是**待标定的初值**：实施时必须用真实语料（66 Copter / 9 Plane）
+ * 实测各轴角度误差的分布，再据此定档并把实测数字写进回报——不许直接照抄。
+ */
+export const ATTITUDE = {
+  /** 评估跟踪所需的最小指令角度（RMS，度）。太小则误差/指令比天然失真 */
+  minExcitationDeg: 5,
+  errRmsWarningDeg: 5,
+  errRmsCriticalDeg: 10,
+  minSamples: 100,
+} as const;
+
+/**
+ * 速度环 / 位置环跟踪。
+ *
+ * Copter：PSCN/PSCE 的 `TV*`(目标速度) vs `V*`(实际速度)、`TP*`(目标位置) vs `P*`(实际位置)。
+ * Plane ：CTUN 的 `AsT`(目标空速) vs `As`，NTUN 的 `XT`(航迹横向偏差)、`AltE`(高度偏差)。
+ */
+export const SPEED_POSITION = {
+  /** 速度环最小指令激励（m/s，RMS）：低于它不判定 */
+  minVelocityExcitationMps: 1,
+  errRatioWarning: 0.5,
+  errRatioCritical: 1,
+  /** 位置误差（m）：Copter 位置偏差 / Plane 航迹横向偏差 XT */
+  posErrWarningM: 5,
+  posErrCriticalM: 15,
+  /** Plane 高度偏差 AltE（m） */
+  altErrWarningM: 5,
+  altErrCriticalM: 20,
+  minSamples: 100,
+} as const;
+
+/**
+ * 固定翼 TECS（总能量控制）系统。数据来自 TECS 消息：
+ * `spdem/sp`(目标/实际空速)、`hdem/h`(目标/实际高度)、`th`(油门 0..1)、`ph`(俯仰)、`pmin/pmax`。
+ *
+ * ⚠️ 同 ATTITUDE：数值是初值，必须用 9 份真实 Plane 日志实测分布后定档。
+ */
+export const TECS = {
+  minSamples: 50,
+  /** 空速跟踪误差 RMS（m/s） */
+  airspeedErrWarningMps: 2,
+  airspeedErrCriticalMps: 4,
+  /** 高度跟踪误差 RMS（m） */
+  heightErrWarningM: 5,
+  heightErrCriticalM: 15,
+  /** 油门顶到 0/1 的时间占比 */
+  throttleSaturationWarning: 0.1,
+  throttleSaturationCritical: 0.3,
+  /** 俯仰触及 pmin/pmax 的时间占比 */
+  pitchSaturationWarning: 0.1,
+} as const;
+
+/**
  * 速率环原生单位 → deg/s。
  *
  * ArduPilot 各机型的速率控制器内部单位不同：Copter/Sub 用 rad/s，

@@ -21,8 +21,17 @@ public class FlightDiagnosisInput
     public string VehicleKind { get; set; } = string.Empty;
     public string FirmwareVersion { get; set; } = string.Empty;
     public int VersionNumeric { get; set; }
-    public int ParseMs { get; set; }
-    public int AnalyzeMs { get; set; }
+    /// <summary>
+    /// 解析耗时（毫秒）。
+    ///
+    /// ⚠️ 必须是 double：前端用 performance.now() 差值算出来的是**小数**
+    /// （线上实测 69.89999999990687）。若声明成 int，System.Text.Json 绑定失败 →
+    /// 端点返回**框架级 400**（响应里没有 detail），而且服务端校验根本不会被调用。
+    /// 这个坑已经真实发生过一次。落库时四舍五入成整数。
+    /// </summary>
+    public double ParseMs { get; set; }
+    /// <summary>规则分析耗时（毫秒）。同上，必须容忍小数。</summary>
+    public double AnalyzeMs { get; set; }
     public int DecodedTypes { get; set; }
     public int TotalTypes { get; set; }
     public int Critical { get; set; }
@@ -71,8 +80,11 @@ public class FlightDiagnosisService
         if (input.VehicleKind.Length > 32) return "vehicleKind 过长";
         if (input.FirmwareVersion.Length > 64) return "firmwareVersion 过长";
         if (input.VersionNumeric < 0) return "versionNumeric 不能为负";
-        if (input.ParseMs < 0 || input.ParseMs > 3_600_000) return "parseMs 超出范围";
-        if (input.AnalyzeMs < 0 || input.AnalyzeMs > 3_600_000) return "analyzeMs 超出范围";
+        // 允许小数（前端 performance.now() 差值就是小数），但不能是 NaN/Inf/超范围
+        if (!double.IsFinite(input.ParseMs) || input.ParseMs < 0 || input.ParseMs > 3_600_000)
+            return "parseMs 超出范围";
+        if (!double.IsFinite(input.AnalyzeMs) || input.AnalyzeMs < 0 || input.AnalyzeMs > 3_600_000)
+            return "analyzeMs 超出范围";
         if (input.DecodedTypes < 0 || input.TotalTypes < 0 || input.DecodedTypes > 2_000 || input.TotalTypes > 2_000)
             return "消息类型数超出范围";
         if (input.Critical < 0 || input.Warning < 0 || input.Passed < 0 || input.Unknown < 0)
@@ -102,8 +114,9 @@ public class FlightDiagnosisService
             VehicleKind = input.VehicleKind,
             FirmwareVersion = input.FirmwareVersion,
             VersionNumeric = input.VersionNumeric,
-            ParseMs = input.ParseMs,
-            AnalyzeMs = input.AnalyzeMs,
+            // 客户端的毫秒是小数，落库四舍五入成整数（亚毫秒精度没有意义）
+            ParseMs = (int)Math.Round(input.ParseMs),
+            AnalyzeMs = (int)Math.Round(input.AnalyzeMs),
             DecodedTypes = input.DecodedTypes,
             TotalTypes = input.TotalTypes,
             Critical = input.Critical,

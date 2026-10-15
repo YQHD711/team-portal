@@ -57,10 +57,25 @@ export function detectArmedWindows(doc: LogDocument): ArmedWindowResult {
   }
 
   if (windows.length === 0) {
+    // ⚠️ 线上真实故障：某份 ArduPlane 日志（85 分钟、确实飞过）报「没有可用的飞行时间段」，
+    // 结果是**三条规则全部只能"无法判断"**。原因是 arm/disarm 事件存在但凑不出 ≥1 秒的窗口
+    // （时间戳异常/同刻成对出现），而这里返回空集 → 规则集体拒绝分析。
+    //
+    // 正确行为：**能分析就不要拒绝分析**——退化为全日志，并在 note 里如实说明区间不精确。
+    // 分析一个偏宽的区间远比"什么都不分析"有用；关键是不能假装它精确。
+    if (doc.meta.durationSec > 0) {
+      return {
+        windows: [{ index: 0, startSec: 0, endSec: doc.meta.durationSec }],
+        source: "fallback",
+        note:
+          "有解锁/上锁事件，但无法据此确定有效飞行段（时长不足 1 秒或时间戳异常），" +
+          "统计区间已退化为整个日志（含地面段），结论可能被地面段拉偏",
+      };
+    }
     return {
       windows: [],
       source: "events",
-      note: "有解锁/上锁事件，但没有一段有效飞行时长，无法做飞行段统计",
+      note: "有解锁/上锁事件，但没有一段有效飞行时长，也无法确定日志时长，无法做飞行段统计",
     };
   }
   return { windows, source: "events", note: null };

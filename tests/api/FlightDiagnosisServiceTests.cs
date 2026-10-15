@@ -35,8 +35,9 @@ public class FlightDiagnosisServiceTests : IDisposable
         VehicleKind = "copter",
         FirmwareVersion = "4.6.2",
         VersionNumeric = 40602,
-        ParseMs = 196,
-        AnalyzeMs = 12,
+        // 小数毫秒：前端 performance.now() 差值就是这个形状（线上实测）
+        ParseMs = 69.89999999990687,
+        AnalyzeMs = 2.1000000000931323,
         DecodedTypes = 81,
         TotalTypes = 81,
         Critical = 1,
@@ -74,6 +75,16 @@ public class FlightDiagnosisServiceTests : IDisposable
 
         var e = ValidInput(); e.ParseMs = int.MaxValue;
         Assert.Contains("parseMs", FlightDiagnosisService.Validate(e)!);
+
+        // 小数必须**通过**（线上真实形状）；但 NaN/Inf 必须被拒（否则会污染落库）
+        var fractional = ValidInput();
+        Assert.Null(FlightDiagnosisService.Validate(fractional));
+
+        var nan = ValidInput(); nan.ParseMs = double.NaN;
+        Assert.Contains("parseMs", FlightDiagnosisService.Validate(nan)!);
+
+        var inf = ValidInput(); inf.AnalyzeMs = double.PositiveInfinity;
+        Assert.Contains("analyzeMs", FlightDiagnosisService.Validate(inf)!);
 
         var f = ValidInput(); f.Findings = new List<FlightDiagnosisFindingDto>();
         Assert.Null(FlightDiagnosisService.Validate(f));
