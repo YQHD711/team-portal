@@ -37,8 +37,8 @@ export function ParseLogPanel({ stats }: { stats: DiagnosisParseStats }) {
       {noRecords && (
         <p data-testid="parse-records-zero"
           className="mt-3 rounded-lg border-l-4 border-danger bg-red-50 px-3 py-2 text-xs font-medium leading-relaxed text-red-700 dark:bg-red-950/30 dark:text-red-300">
-          没解析出任何记录：这段字节很可能不是 DataFlash 日志（或文件被截断/损坏）。请确认导出的是飞控 `.bin`，
-          而不是文本日志、遥测日志或其它文件。
+          没解析出任何记录：这段字节很可能不是本工具支持的日志格式（ArduPilot `.bin` / PX4 `.ulg`），或文件被截断/损坏。
+          请确认导出的是飞控二进制日志，而不是文本日志、遥测日志或其它文件。
         </p>
       )}
 

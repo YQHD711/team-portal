@@ -8,6 +8,7 @@
 
 import { analyzeLog } from "./analysis";
 import { parseLogFile } from "./dataflash";
+import { parseUlogFile } from "./ulog";
 import type { LogDocument } from "./types/log";
 import type { DiagnosisReport } from "./types/report";
 
@@ -59,22 +60,54 @@ export type RunDiagnosis = (
   options?: RunDiagnosisOptions,
 ) => Promise<DiagnosisResult>;
 
-/** 本切片只实现 ArduPilot 二进制日志；其余格式给出明确说明而不是晦涩的解析错误 */
+/** 明确不支持、但能给出人话原因的格式（不是"解析器抛异常"） */
 const UNSUPPORTED_EXTENSIONS: Readonly<Record<string, string>> = {
-  ".ulg": "PX4 ULog（.ulg）解析器尚未实现（架构位已保留）",
   ".log": "ArduPilot 文本日志（.log）尚未实现，请提供同一次飞行的 .bin",
   ".tlog": "遥测日志（.tlog）不含飞控内部数据，无法做诊断",
 };
 
-function nowMs(): number {
-  return typeof performance !== "undefined" ? performance.now() : Date.now();
+/** 内容嗅探：文件头前 16 字节（伪扩展名/无扩展名也能正确路由） */
+const ULOG_MAGIC: readonly number[] = [0x55, 0x4c, 0x6f, 0x67, 0x01, 0x12, 0x35];
+const DF_HEAD_BYTE1 = 0xa3;
+const DF_HEAD_BYTE2 = 0x95;
+
+type LogFormat = "dataflash" | "ulog";
+
+function extensionOf(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
 }
 
-function ensureSupported(fileName: string): void {
-  const dot = fileName.lastIndexOf(".");
-  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+export function sniffFormat(head: Uint8Array): LogFormat | null {
+  if (head.length >= 7 && ULOG_MAGIC.every((b, i) => head[i] === b)) return "ulog";
+  if (head.length >= 4 && (head[0] === DF_HEAD_BYTE1 || head[0] === DF_HEAD_BYTE2)) return "dataflash";
+  return null;
+}
+
+/**
+ * 按内容/扩展名路由 —— ArduPilot `.bin` → DataFlash，PX4 `.ulg` → ULog。
+ *
+ * 优先级：**内容优先**（同名/改名的文件也能解析），内容嗅探不出来时退回扩展名；
+ * 两者都不认识就抛可读原因（**不是**模糊的解析错误）。
+ */
+async function resolveFormat(file: File): Promise<LogFormat> {
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const sniffed = sniffFormat(head);
+  if (sniffed) return sniffed;
+
+  const ext = extensionOf(file.name);
   const reason = UNSUPPORTED_EXTENSIONS[ext];
   if (reason) throw new Error(`暂不支持该格式：${reason}`);
+  if (ext === ".bin") return "dataflash";
+  if (ext === ".ulg") return "ulog";
+  throw new Error(
+    `无法识别的日志格式（${file.name || "无文件名"}，前 16 字节既不是 DataFlash 的 A3 95 也不是 PX4 ULog 的 "ULog" 魔术头）：`
+    + "请提供 ArduPilot 的 .bin 或 PX4 的 .ulg",
+  );
+}
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -83,23 +116,27 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 export const runDiagnosis: RunDiagnosis = async (file, options = {}) => {
   const { onProgress, signal } = options;
-  ensureSupported(file.name);
+  // 按格式路由（内容优先、扩展名兜底）：未知格式在这里给出可读原因，不落成模糊错误
+  const format = await resolveFormat(file);
   throwIfAborted(signal);
 
   onProgress?.({ phase: "parsing", percent: 0, message: "读取日志字节…" });
   const parseStart = nowMs();
-  const parsed = await parseLogFile(file, {
+  const parseOptions = {
     signal,
     // jsdom / 无 Worker 环境退化为主线程，避免测试里挂在等待 Worker 上
     forceMainThread: typeof Worker === "undefined",
-    onProgress: (p) =>
+    onProgress: (p: { percent: number; message: string }) =>
       onProgress?.({
         phase: "parsing",
         // 解析占 0~90%，规则分析占 90~100%
         percent: Math.max(0, Math.min(90, Math.round(p.percent * 0.9))),
         message: p.message,
       }),
-  });
+  };
+  const parsed = format === "ulog"
+    ? await parseUlogFile(file, parseOptions)
+    : await parseLogFile(file, parseOptions);
   const parseMs = nowMs() - parseStart;
   const document = parsed.doc;
   throwIfAborted(signal);
