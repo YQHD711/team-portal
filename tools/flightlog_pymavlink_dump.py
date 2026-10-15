@@ -41,13 +41,9 @@ def clean_json(obj):
         return [clean_json(v) for v in obj]
     return obj
 
-# 与 TS 侧白名单一致（只有这些消息会被解码成 Series）
-WHITELIST = [
-    "FMT", "FMTU", "UNIT", "MULT", "PARM", "VIBE", "PIDR", "PIDP", "PIDY", "RATE", "ATT",
-    "IMU", "FTN1", "FTN2", "RCOU", "CTUN", "POWR", "BAT", "GPS", "EV", "MODE", "ARM", "MSG", "VER",
-]
-# 元信息/声明类消息：计入 counts，但不产出 Series（值是字符串，或本身是布局声明）
-NO_SERIES = {"FMT", "FMTU", "UNIT", "MULT", "PARM", "MSG"}
+# task-24：**没有白名单**（TS 侧解码全部 FMT 声明的类型）。
+# 只有"声明类"消息不产出 Series：它们是布局/单位/倍率本身，不是时序数据。
+NO_SERIES = {"FMT", "FMTU", "UNIT", "MULT"}
 
 NUMERIC = (int, float)
 
@@ -64,7 +60,9 @@ def dump(data: bytes, source: str, start: int, end: int) -> dict:
         tmp_name = tmp.name
     try:
         conn = mavutil.mavlink_connection(tmp_name)
-        formats: dict[str, dict] = {}
+        seen_types: dict[str, int] = {}          # 消息名 → type id（结尾统一取最终 units）
+        series_type: dict[str, int] = {}         # series key → type id
+        fmtu_latest: dict[int, tuple[str, str]] = {}   # FmtType → (UnitIds, MultIds)
         series: dict[str, dict] = {}
         counts: dict[str, int] = {}
         msgs: list[str] = []
@@ -84,23 +82,16 @@ def dump(data: bytes, source: str, start: int, end: int) -> dict:
             if t0us is None and isinstance(time_us, NUMERIC):
                 t0us = int(time_us)
 
-            # 格式表（第一次见到该消息时记录，布局事实来自 pymavlink 自己）
             fmt = msg.fmt
-            if name not in formats:
-                formats[name] = {
-                    "type": fmt.type,
-                    "len": fmt.len,
-                    "format": fmt.format,
-                    "columns": list(fmt.columns),
-                    "units": list(fmt.units) if fmt.units is not None else None,
-                    "instanceField": fmt.instance_field,
-                    "mults": list(fmt.msg_mults),
-                }
+            seen_types.setdefault(name, fmt.type)
 
-            if name == "MSG":
-                if len(msgs) < 6:
-                    msgs.append(str(row.get("Message", "")))
-                continue
+            if name == "MSG" and len(msgs) < 6:
+                msgs.append(str(row.get("Message", "")))
+            if name == "FMTU":
+                # 记下最后的 FMTU 声明（UnitIds/MultIds），结尾用 pymavlink 自己的查表逻辑重算单位。
+                # 为什么要重算：pymavlink 内部某些调用路径会把 units 清成 ''（实测 HEAT 252 就是如此），
+                # 而用它的 set_unit_ids/set_mult_ids + 最终字符串算出来是 'µs'/'UNKNOWN' —— 与 TS 侧一致。
+                fmtu_latest[int(row["FmtType"])] = (str(row["UnitIds"]), str(row["MultIds"]))
             if name == "VER" and ver is None:
                 ver = {k: v for k, v in row.items() if k != "mavpackettype"}
             if name == "EV" and isinstance(row.get("Id"), NUMERIC):
@@ -108,29 +99,60 @@ def dump(data: bytes, source: str, start: int, end: int) -> dict:
             if name == "ARM" and isinstance(row.get("ArmState"), NUMERIC):
                 arm_states[str(int(row["ArmState"]))] = arm_states.get(str(int(row["ArmState"])), 0) + 1
 
-            if name not in WHITELIST or name in NO_SERIES:
+            if name in NO_SERIES:
+                continue
+            # 与 TS 侧同口径：没有 TimeUS 列的消息不产出 Series（时间轴无法表达）
+            if "TimeUS" not in fmt.columns:
                 continue
 
             inst_field = fmt.instance_field
             instance = int(row[inst_field]) if inst_field and isinstance(row.get(inst_field), NUMERIC) else 0
             key = f"{name}:{instance}"
             bucket = series.setdefault(key, {"fields": {}, "units": {}})
-            for idx, col in enumerate(fmt.columns):
+            series_type[key] = fmt.type
+            for col in fmt.columns:
                 value = row.get(col)
                 if not isinstance(value, NUMERIC) or isinstance(value, bool):
                     continue
                 bucket["fields"].setdefault(col, []).append(value)
-                unit = fmt.units[idx] if fmt.units is not None and idx < len(fmt.units) else ""
-                if col not in bucket["units"]:
-                    bucket["units"][col] = unit or ""
+
+        # ⚠️ 单位必须在**整份文件解析完之后**取：FMTU 可能出现在某类型的第一条记录之后，
+        # 边读边取会拿到未更新的单位表（这曾导致 HEAT 的 TimeUS 单位对不上）。
+        final_formats = conn.formats
+        for type_id, (unit_ids, mult_ids) in fmtu_latest.items():
+            fmt = final_formats.get(type_id)
+            if fmt is None:
+                continue
+            fmt.set_unit_ids(unit_ids, conn.unit_lookup)
+            fmt.set_mult_ids(mult_ids, conn.mult_lookup)
+        for key, bucket in series.items():
+            fmt = final_formats.get(series_type[key])
+            if fmt is None or fmt.units is None:
+                continue
+            for col in bucket["fields"]:
+                if col in fmt.columns:
+                    idx = fmt.columns.index(col)
+                    bucket["units"][col] = fmt.units[idx] or ""
+
+        formats: dict[str, dict] = {}
+        for name, type_id in seen_types.items():
+            fmt = final_formats.get(type_id)
+            formats[name] = {
+                "type": type_id,
+                "len": fmt.len if fmt is not None else None,
+                "format": fmt.format if fmt is not None else None,
+                "columns": list(fmt.columns) if fmt is not None else [],
+                "units": (list(fmt.units) if fmt is not None and fmt.units is not None else None),
+                "instanceField": fmt.instance_field if fmt is not None else None,
+                "mults": list(fmt.msg_mults) if fmt is not None else [],
+            }
         return {
             "source": source,
             "start": start,
             "end": end,
             "bytes": len(data),
             "t0us": t0us,
-            "whitelist": WHITELIST,
-            "formats": {k: v for k, v in formats.items() if k in WHITELIST},
+            "formats": formats,
             "allFormatNames": sorted(formats.keys()),
             "counts": counts,
             "series": series,

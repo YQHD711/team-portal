@@ -22,6 +22,10 @@ vi.mock("uplot", () => ({
 }));
 vi.mock("@/components/flightlog/LogFileList", () => ({ LogFileList: () => <div data-testid="logs-tab" /> }));
 vi.mock("@/components/flightlog/FirmwarePanel", () => ({ FirmwarePanel: () => <div data-testid="fw-tab" /> }));
+// 报告出来后会挂载诊断历史（拉 /api/flight-diagnoses）：这里给个空列表替身，避免测试去发真实请求
+vi.mock("@/lib/api", () => ({
+  api: { get: vi.fn(async () => ({ total: 0, items: [] })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), download: vi.fn() },
+}));
 
 import FlightLogPage from "@/app/(protected)/flightlog/page";
 

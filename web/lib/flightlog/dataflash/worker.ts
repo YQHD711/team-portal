@@ -6,7 +6,7 @@
  * 之所以薄：解析器必须能在 vitest 里直接调用（不依赖 self / worker 生命周期），本文件只做消息搬运。
  */
 
-import { parseDataflash } from "./parseDataflash";
+import { parseDataflash, type DataflashParseResult } from "./parseDataflash";
 
 interface ParseRequest {
   type: "parse";
@@ -19,7 +19,8 @@ interface DoneReply {
   id: number;
   doc: unknown;
   warnings: readonly string[];
-  stats: { records: number; skippedBytes: number; t0us: number; elapsedMs: number };
+  /** 直接复用纯函数的 stats 类型，避免两边字段漂移（曾漏掉 truncatedBytes） */
+  stats: DataflashParseResult["stats"];
 }
 
 interface ProgressReply {

@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, FileWarning, Loader2, Upload } from "lucide-react";
 import type { DiagnosisReport } from "@/lib/flightlog/types/report";
 import type { LogDocument } from "@/lib/flightlog/types/log";
-import { runDiagnosis, type DiagnosisProgress } from "@/lib/flightlog/runDiagnosis";
+import { runDiagnosis, type DiagnosisParseStats, type DiagnosisProgress } from "@/lib/flightlog/runDiagnosis";
+import { buildDiagnosisRecord, createFlightDiagnosis } from "@/lib/flightDiagnosesApi";
 import { ReportHeader } from "./ReportHeader";
 import { FindingList } from "./FindingList";
+import { ParseLogPanel } from "./ParseLogPanel";
+import { DiagnosisHistory } from "./DiagnosisHistory";
 
 type Status = "idle" | "running" | "done" | "error";
 
@@ -16,6 +19,10 @@ export function DiagnosisPanel({ document: documentProp }: { document?: LogDocum
   const [progress, setProgress] = useState<DiagnosisProgress | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
   const [document, setDocument] = useState<LogDocument | undefined>(documentProp);
+  const [parseStats, setParseStats] = useState<DiagnosisParseStats | null>(null);
+  /** 落库结果：null=未尝试/成功，字符串=非阻塞提示（接口没上线也要能看报告） */
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -35,6 +42,8 @@ export function DiagnosisPanel({ document: documentProp }: { document?: LogDocum
     setError("");
     setReport(null);
     setDocument(undefined);
+    setParseStats(null);
+    setSaveNote(null);
     setProgress({ phase: "parsing", percent: 0, message: "开始解析日志…" });
 
     try {
@@ -42,7 +51,16 @@ export function DiagnosisPanel({ document: documentProp }: { document?: LogDocum
       setReport(result.report);
       // 时序图的原始信号来自这里；谱图点已在 ChartRequest.spectrum 里
       setDocument(result.document);
+      // 解析诊断（记录数/跳过字节/覆盖度/警告）：「解析日志」面板与历史落库共用这一份
+      setParseStats(result.parseStats ?? null);
       setStatus("done");
+
+      // 落库是**附带动作**：失败只提示一句，绝不影响报告展示（接口可能还没上线）
+      if (result.parseStats) {
+        void createFlightDiagnosis(buildDiagnosisRecord(result))
+          .then(() => setHistoryKey(k => k + 1))
+          .catch(() => setSaveNote("诊断记录未保存（接口不可用），本次报告不受影响"));
+      }
     } catch (err) {
       // 未接线/解析失败都必须让用户看到原因（不允许静默失败）
       setError(err instanceof Error ? err.message : "诊断失败：未知错误");
@@ -105,7 +123,15 @@ export function DiagnosisPanel({ document: documentProp }: { document?: LogDocum
       {status === "done" && report && (
         <div data-testid="diagnosis-report" className="space-y-4">
           <ReportHeader report={report} />
+          {saveNote && (
+            <p data-testid="diagnosis-save-note" className="rounded-lg border-l-4 border-warning bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              {saveNote}
+            </p>
+          )}
+          {parseStats && <ParseLogPanel stats={parseStats} />}
           <FindingList report={report} doc={document} />
+          {/* 历史只在报告出来之后才挂载 → 不拖慢首屏；同时落库成功后刷新列表 */}
+          <DiagnosisHistory refreshKey={historyKey} />
         </div>
       )}
 

@@ -16,16 +16,12 @@ interface Bucket {
 
 export interface SeriesBuildResult {
   series: Record<string, Series>;
-  /** 消息名 → 已解码的数值字段名（用于 LogDocument.decodedFields）。 */
-  decodedFields: Record<string, string[]>;
   /** 因缺少 TimeUS 列而没有产出 Series 的消息名（不静默）。 */
   skippedNoTime: string[];
 }
 
 export class SeriesAccumulator {
   private readonly buckets = new Map<string, Bucket>();
-  private readonly decoded = new Map<string, string[]>();
-  private readonly decodedCache = new Map<number, string[]>();
   private readonly skipped = new Set<string>();
 
   constructor(
@@ -72,15 +68,6 @@ export class SeriesAccumulator {
       seen += 1;
     }
     if (seen > 0) bucket.count += 1;
-    if (!this.decoded.has(layout.name)) {
-      // 每 24 万条记录都会走到这里，字段名数组必须缓存，不能每条 map 一次
-      let names = this.decodedCache.get(type);
-      if (!names) {
-        names = layout.numericIndexes.map((index) => layout.columns[index]);
-        this.decodedCache.set(type, names);
-      }
-      this.decoded.set(layout.name, names);
-    }
   }
 
   /**
@@ -117,10 +104,6 @@ export class SeriesAccumulator {
       }
       series[key] = { name, instance, timeSec, fields, units };
     }
-    return {
-      series,
-      decodedFields: Object.fromEntries(this.decoded),
-      skippedNoTime: [...this.skipped],
-    };
+    return { series, skippedNoTime: [...this.skipped] };
   }
 }

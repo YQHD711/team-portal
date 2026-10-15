@@ -66,32 +66,50 @@ export function parseFormatHeader(payload: Uint8Array): FormatHeader | null {
 
 /** 按 FMT 声明构建布局；格式字符不认识或长度不自洽时返回 null（调用方记 warning 并跳过该消息）。 */
 export function buildLayout(header: FormatHeader): FormatLayout | null {
+  return buildLayoutDetailed(header).layout;
+}
+
+/**
+ * 同 `buildLayout`，但**给出失败原因**（指名哪个格式字符、差多少字节）——
+ * task-24 的"零静默跳过"要求：跳过一条消息类型必须能在 warnings 里说清为什么。
+ */
+export function buildLayoutDetailed(header: FormatHeader): { layout: FormatLayout | null; error: string | null } {
   const offsets: number[] = [];
   const specs: FieldSpec[] = [];
   const numericIndexes: number[] = [];
   let size = 0;
   for (let i = 0; i < header.format.length; i += 1) {
     const spec = FIELD_SPECS[header.format[i]];
-    if (!spec) return null;
+    if (!spec) {
+      return { layout: null, error: `未知格式字符 '${header.format[i]}'（第 ${i + 1} 位，format="${header.format}"）` };
+    }
     offsets.push(size);
     specs.push(spec);
     if (spec.kind !== "char") numericIndexes.push(i);
     size += spec.size;
   }
-  if (size + 3 !== header.length) return null;
+  if (size + 3 !== header.length) {
+    return {
+      layout: null,
+      error: `长度不自洽：format="${header.format}" 需要 ${size + 3} 字节，FMT 声明 ${header.length}`,
+    };
+  }
   return {
-    type: header.type,
-    name: header.name,
-    length: header.length,
-    format: header.format,
-    columns: header.columns,
-    offsets,
-    specs,
-    numericIndexes,
-    units: header.columns.map(() => ""),
-    instanceField: null,
-    instanceOffset: -1,
-    instanceSize: 0,
+    layout: {
+      type: header.type,
+      name: header.name,
+      length: header.length,
+      format: header.format,
+      columns: header.columns,
+      offsets,
+      specs,
+      numericIndexes,
+      units: header.columns.map(() => ""),
+      instanceField: null,
+      instanceOffset: -1,
+      instanceSize: 0,
+    },
+    error: null,
   };
 }
 

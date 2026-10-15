@@ -26,6 +26,13 @@ export interface ParseLogOptions {
   forceMainThread?: boolean;
 }
 
+/** 解析结果：文档 + 解析诊断数据（跳过的字节、警告必须能传到 UI） */
+export interface ParseLogFileResult {
+  doc: LogDocument;
+  warnings: readonly string[];
+  stats: DataflashParseResult["stats"];
+}
+
 async function toBytes(source: File | ArrayBuffer | Uint8Array): Promise<Uint8Array> {
   if (source instanceof Uint8Array) return source;
   if (source instanceof ArrayBuffer) return new Uint8Array(source);
@@ -48,27 +55,30 @@ function parseInProcess(bytes: Uint8Array, options: ParseLogOptions): DataflashP
 }
 
 /**
- * 解析日志文件 → LogDocument。
+ * 解析日志文件 → LogDocument **+ 解析诊断数据**。
+ *
+ * 为什么必须回传统计与警告：排查解析失败（跳字节、未知签名、字段解码异常）
+ * 只能靠这些数字与文案；只回传 doc 会让上层永远看不到"解析不完整"。
  * 解析失败（文件根本不像 DataFlash）不抛异常：返回带 warning 的空文档，让 UI 明确提示。
  */
 export async function parseLogFile(
   source: File | ArrayBuffer | Uint8Array,
   options: ParseLogOptions = {},
-): Promise<LogDocument> {
+): Promise<ParseLogFileResult> {
   const bytes = await toBytes(source);
   options.onProgress?.({ phase: "parsing", percent: 0, message: "读取日志字节…" });
   if (options.signal?.aborted) throw new DOMException("解析已取消", "AbortError");
 
   if (options.forceMainThread === true || typeof Worker === "undefined") {
-    return parseInProcess(bytes, options).doc;
+    return narrow(parseInProcess(bytes, options));
   }
 
-  return new Promise<LogDocument>((resolve, reject) => {
+  return new Promise<ParseLogFileResult>((resolve, reject) => {
     let worker: Worker;
     try {
       worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     } catch {
-      resolve(parseInProcess(bytes, options).doc);
+      resolve(narrow(parseInProcess(bytes, options)));
       return;
     }
     const requestId = 1;
@@ -95,7 +105,11 @@ export async function parseLogFile(
         percent: 100,
         message: `解析完成：${reply.stats.records} 条记录，${reply.warnings.length} 条警告`,
       });
-      resolve(reply.doc as LogDocument);
+      resolve({
+        doc: reply.doc as LogDocument,
+        warnings: reply.warnings,
+        stats: reply.stats,
+      });
     };
     worker.onerror = (event) => {
       options.signal?.removeEventListener("abort", abort);
@@ -107,3 +121,8 @@ export async function parseLogFile(
     worker.postMessage({ type: "parse", id: requestId, buffer }, [buffer]);
   });
 }
+
+function narrow(result: DataflashParseResult): ParseLogFileResult {
+  return { doc: result.doc, warnings: result.warnings, stats: result.stats };
+}
+
