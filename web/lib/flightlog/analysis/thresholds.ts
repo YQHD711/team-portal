@@ -29,6 +29,9 @@ export const PID_TUNING = {
   /** 滞后显著的门槛（采样数）：≥1 即认为存在可补偿的滞后 */
   lagSignificantSamples: 1,
   maxLagSamples: 10,
+  /** 实测「P项输出/误差」可当增益用的区间：Copter ~0.25 可用；Plane 是另一套单位(实测4.554)，超出就不许兜底 */
+  measuredGainMin: 0.01,
+  measuredGainMax: 2,
   /** FF 起点值上限：不超过 P 增益的 60%（再高就是前馈主导，模型误差有风险） */
   ffMaxRatioOfP: 0.6,
   /** RMS(D项)/RMS(Err) 超过该值说明 D 在放大噪声 */

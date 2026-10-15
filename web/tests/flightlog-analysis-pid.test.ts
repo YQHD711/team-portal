@@ -45,10 +45,19 @@ describe("速率环跟踪质量规则", () => {
     expect(f.severity).toBe("critical");
   });
 
-  it("触发时给出按官方顺序的参数建议与复飞验证指标", () => {
+  it("触发时给出按机型的参数建议与复飞验证指标（固定翼用 RLL2SRV，不是 Copter 的 ATC_RAT_*）", () => {
     const [f] = findingsFor(pidScenario(70, 90, "plane"), "pid_rate_tracking");
-    expect(f.suggestions.some((s) => s.param?.name === "ATC_RAT_RLL_P")).toBe(true);
+    // 线上实测缺陷回归：曾写死 ATC_RAT_*，给固定翼推了不存在的参数
+    expect(f.suggestions.some((s) => s.param?.name === "RLL2SRV_P")).toBe(true);
+    expect(f.suggestions.some((s) => (s.param?.name ?? "").startsWith("ATC_RAT_"))).toBe(false);
     expect(f.suggestions.some((s) => (s.verify ?? "").includes("RMS"))).toBe(true);
+  });
+
+  it("Copter 用 ATC_RAT_*（参数名必须按机型映射）", () => {
+    const series = pidMessages(0.6, 0.9).filter((s) => s.name !== "PIDY");
+    const doc = makeDoc({ vehicleKind: "copter", series, durationSec: RULE_N * RULE_DT });
+    const roll = findingsFor(doc, "pid_rate_tracking").find((f) => f.axis === "roll");
+    expect(roll!.suggestions.some((s) => s.param?.name === "ATC_RAT_RLL_P")).toBe(true);
   });
 
   it("悬停（激励不足）时判无法判断，且明确说明不等于通过", () => {

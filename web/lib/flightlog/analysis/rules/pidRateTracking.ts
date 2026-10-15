@@ -39,6 +39,23 @@ const AXES: readonly RateAxisSpec[] = [
   { axis: "yaw", message: "PIDY", label: "Yaw", paramName: PARAM_MAP.yawRateP },
 ];
 
+/**
+ * 速率环参数的**机型前缀**：Copter 用 `ATC_RAT_*`，固定翼用 `RLL2SRV`/`PTCH2SRV`/`YAW2SRV`
+ * （实测 ArduPlane 4.6.1 就是后者）。
+ * ⚠️ 写死 Copter 前缀会给固定翼推一个**不存在的参数**——这是线上验收抓到的真实缺陷。
+ */
+const PARAM_PREFIX: Readonly<Record<string, { roll: string; pitch: string; yaw: string }>> = {
+  copter: { roll: "ATC_RAT_RLL", pitch: "ATC_RAT_PIT", yaw: "ATC_RAT_YAW" },
+  plane: { roll: "RLL2SRV", pitch: "PTCH2SRV", yaw: "YAW2SRV" },
+};
+
+export function paramPrefixFor(
+  vehicleKind: string,
+  axis: "roll" | "pitch" | "yaw",
+): string {
+  return (PARAM_PREFIX[vehicleKind] ?? PARAM_PREFIX.copter)[axis];
+}
+
 /** 固定翼/车辆默认没有 yaw **速率**控制器：YAW2SRV_* 是协调转弯阻尼，不是速率环。 */
 const NO_YAW_RATE_VEHICLES: readonly string[] = ["plane", "rover"];
 
@@ -101,15 +118,16 @@ export const pidRateTrackingRule: Rule = {
           note: ev.detail,
         });
       }
-      const suffix = axisParamSuffix(spec.axis);
+      const prefix = paramPrefixFor(ctx.doc.meta.vehicleKind, spec.axis);
       return buildAxisFinding(
         ev,
         capNote,
         {
-          currentP: ctx.param(spec.paramName),
-          i: ctx.param(`ATC_RAT_${suffix}_I`),
-          d: ctx.param(`ATC_RAT_${suffix}_D`),
-          ff: ctx.param(`ATC_RAT_${suffix}_FF`),
+          prefix,
+          p: ctx.param(`${prefix}_P`),
+          i: ctx.param(`${prefix}_I`),
+          d: ctx.param(`${prefix}_D`),
+          ff: ctx.param(`${prefix}_FF`),
         },
         collectRateTuning(ctx, spec, window),
       );

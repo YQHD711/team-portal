@@ -48,7 +48,9 @@ export function axisParamSuffix(axis: "roll" | "pitch" | "yaw"): string {
 }
 
 export interface AxisTuningParams {
-  currentP: number | null;
+  /** 该机型的参数前缀（Copter=ATC_RAT_RLL，Plane=RLL2SRV/PTCH2SRV）——写死 Copter 前缀会给固定翼推不存在的参数 */
+  prefix: string;
+  p: number | null;
   i: number | null;
   d: number | null;
   ff: number | null;
@@ -117,13 +119,13 @@ export function buildAxisFinding(
   // A/B 级只代表"当前够用"，仍然要把实测能看出的改进空间与具体数值给出来。
   const advice: Suggestion[] = tuning
     ? buildRateAdvice(tuning, {
-        p: params.currentP,
+        prefix: params.prefix,
+        p: params.p,
         i: params.i,
         d: params.d,
         ff: params.ff,
-        axis: axisParamSuffix(ev.spec.axis),
       })
-    : legacySuggestions(ev, params.currentP);
+    : legacySuggestions(ev, params.p);
 
   if (severity === "ok") {
     return makeFinding({
