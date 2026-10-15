@@ -23,8 +23,8 @@ import { longestWindow } from "../windows";
 import { suggestion } from "../finding";
 import { extractPair, timeAxis } from "../trackingEvidence";
 import { absoluteThresholds, highlightFor, trackingChart } from "../trackingCharts";
-import { channelFinding, globalInsufficient } from "../trackingFindings";
-import { notApplicable, unavailable } from "../trackingUnknowns";
+import { channelFinding } from "../trackingFindings";
+import { globalInsufficient, notApplicable, unavailable } from "../trackingUnknowns";
 import { ATTITUDE, thresholdsFor } from "../thresholds";
 
 const RULE_ID = "attitude_tracking";

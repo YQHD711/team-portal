@@ -21,8 +21,8 @@ import {
   deviationPair, extractPair, timeAxis, type TrackingPair,
 } from "../trackingEvidence";
 import { absoluteThresholds, highlightFor, ratioThresholds, trackingChart } from "../trackingCharts";
-import { channelFinding, globalInsufficient } from "../trackingFindings";
-import { unavailable } from "../trackingUnknowns";
+import { channelFinding } from "../trackingFindings";
+import { globalInsufficient, unavailable } from "../trackingUnknowns";
 import {
   channelsFor, structuralGaps, suggestionsFor, type Channel,
 } from "./speedPositionChannels";

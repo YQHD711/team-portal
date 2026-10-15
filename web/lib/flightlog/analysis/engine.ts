@@ -16,8 +16,36 @@ import type {
   Severity,
 } from "../types/report";
 import { unknownFinding } from "./finding";
+import { dataGapStep } from "./rules/tuningSteps";
 import { createRuleContext } from "./context";
 import { ALL_RULES } from "./rules";
+
+/**
+ * 用户要求「每一项都有建议」——**兜底**在这里：
+ * 引擎自己产生的结论（平台/版本不匹配、缺必需消息、规则抛异常）不经过规则文件，
+ * 若不给建议就会漏掉"每一项"。补一条**方向型**建议（不编数值），
+ * 并说明缺什么、下一步该补什么数据。
+ */
+function ensureAdvice(f: Finding): Finding {
+  if (f.suggestions.length > 0) return f;
+  const howToFix =
+    f.status === "not_applicable"
+      ? "本规则不适用于当前机型/平台/版本，无需调参；同一份报告里其余结论仍然有效"
+      : f.status === "missing_required"
+        ? `按原因补齐缺失的消息/字段后复飞重采（${f.note ?? "见原因"}）`
+        : "补足样本或满足前提条件后复飞重采";
+  return {
+    ...f,
+    suggestions: [
+      dataGapStep({
+        signature: `${f.title} · ${f.status}`,
+        missing: f.note ?? "规则未给出原因说明",
+        howToFix,
+        doc: f.docLinks[0] ?? "",
+      }),
+    ],
+  };
+}
 
 const SEVERITY_ORDER: Readonly<Record<Severity, number>> = {
   critical: 0,
@@ -135,7 +163,7 @@ export function analyzeLog(
     }
   }
 
-  const sorted = sortFindings(findings);
+  const sorted = sortFindings(findings.map(ensureAdvice));
   return {
     meta: doc.meta,
     fileName: options.fileName ?? "",

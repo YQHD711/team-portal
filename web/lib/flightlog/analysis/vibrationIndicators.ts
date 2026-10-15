@@ -3,13 +3,18 @@
  *
  * 抽出来的原因：滤波建议只有在"确实存在振动问题"时才允许给出，
  * 否则就会变成对健康机架乱推参数的噪声源。两个规则必须看到同一份证据。
+ *
+ * ⚠️ 降落/触地段处理（用户反馈：「有时候降落坠机产生的震动不能算异常的一部分」）：
+ *   常规统计 = arm 窗口 **减去** 识别出的降落段；降落段单独统计成 `landing`。
+ *   识别不出降落段时 `excluded = null`，调用方必须如实说明"未排除"。
  */
 
 import type { TimeWindow } from "../types/log";
 import type { RuleContext } from "../types/rule";
 import { longestWindow } from "./windows";
-import { absMax, stdDev } from "./stats";
-import { VIBRATION } from "./thresholds";
+import { detectLanding, type LandingDetection } from "./landingSegment";
+import { scanInstance } from "./vibrationInstance";
+import { FILTER, VIBRATION } from "./thresholds";
 
 export type VibrationAxis = "x" | "y" | "z";
 
@@ -21,10 +26,24 @@ export interface VibrationAxisStat {
   max: number;
 }
 
+/** 降落/触地段的独立统计 */
+export interface LandingStats {
+  window: TimeWindow;
+  samples: number;
+  worstStd: number;
+  worstAxis: VibrationAxis;
+  max: number;
+  /** 该段内加速度计饱和（clip）增量 */
+  clipDelta: number;
+}
+
 export interface VibrationIndicator {
   /** IMU 实例号 */
   instance: number;
+  /** 统计窗口（**已排除降落段**）；未排除时等于 arm 窗口 */
   window: TimeWindow;
+  /** arm 窗口（含降落段），供证据说明 */
+  armedWindow: TimeWindow;
   samples: number;
   axes: VibrationAxisStat[];
   worstStd: number;
@@ -36,6 +55,10 @@ export interface VibrationIndicator {
   exceedWindow: TimeWindow | null;
   /** 被超过的阈值（30 优先于 15）；未超阈值则 null */
   exceedThreshold: number | null;
+  /** 降落/触地段（若识别出来）：单独统计，不混进上面的常规振动 */
+  landing: LandingStats | null;
+  /** 被排除区段的说明（依据 + 可信度）；未排除时为 null */
+  excluded: LandingDetection | null;
 }
 
 export interface VibrationScan {
@@ -44,49 +67,24 @@ export interface VibrationScan {
   unavailable: string | null;
 }
 
-const AXES: readonly { axis: VibrationAxis; field: string }[] = [
-  { axis: "x", field: "VibeX" },
-  { axis: "y", field: "VibeY" },
-  { axis: "z", field: "VibeZ" },
-];
-
-function exceedRange(
-  timeSec: Float64Array,
-  columns: Float64Array[],
-  level: number,
-): TimeWindow | null {
-  let start: number | null = null;
-  let end: number | null = null;
-  for (let i = 0; i < timeSec.length; i++) {
-    let hit = false;
-    for (const col of columns) {
-      if (col[i] > level) {
-        hit = true;
-        break;
-      }
-    }
-    if (hit) {
-      if (start === null) start = timeSec[i];
-      end = timeSec[i];
-    }
-  }
-  return start === null || end === null ? null : { startSec: start, endSec: end };
+/**
+ * 振动是否已达到"需要陷波"的程度（振动规则与滤波规则共用，避免模块互相 import 成环）。
+ * 只看**排除降落段之后**的常规振动 ✓（落地冲击不再污染这个判据）。
+ */
+export function vibrationBad(indicators: readonly VibrationIndicator[]): boolean {
+  return indicators.some(
+    (i) => i.worstStd >= FILTER.vibrationNeedsNotchStd || i.clipDelta >= VIBRATION.clipDeltaCritical,
+  );
 }
 
 export function scanVibration(ctx: RuleContext): VibrationScan {
   const anyInstance = ctx.doc.series["VIBE:0"] !== undefined;
   if (!anyInstance && ctx.series("VIBE") === null) {
-    return {
-      indicators: [],
-      unavailable: "日志中没有 VIBE（振动水平）消息，无法评估振动",
-    };
+    return { indicators: [], unavailable: "日志中没有 VIBE（振动水平）消息，无法评估振动" };
   }
   const window = longestWindow(ctx.armedWindows());
   if (!window) {
-    return {
-      indicators: [],
-      unavailable: "没有可用的飞行（arm）时间段，无法评估飞行中的振动",
-    };
+    return { indicators: [], unavailable: "没有可用的飞行（arm）时间段，无法评估飞行中的振动" };
   }
 
   const instances = Object.keys(ctx.doc.series)
@@ -98,55 +96,17 @@ export function scanVibration(ctx: RuleContext): VibrationScan {
     return { indicators: [], unavailable: "日志中没有 VIBE 消息" };
   }
 
+  // 降落段识别一次，所有 IMU 共用（依据与可信度写进证据）
+  const landing = detectLanding(ctx, window);
   const indicators: VibrationIndicator[] = [];
   const skipped: string[] = [];
   for (const instance of instances) {
-    const columns: Float64Array[] = [];
-    let timeSec: Float64Array | null = null;
-    let samples = Number.MAX_SAFE_INTEGER;
-    const axes: VibrationAxisStat[] = [];
-    for (const { axis, field } of AXES) {
-      const w = ctx.windowed("VIBE", field, window, instance);
-      if (!w) {
-        samples = 0;
-        break;
-      }
-      columns.push(w.values);
-      samples = Math.min(samples, w.values.length);
-      if (!timeSec || w.timeSec.length > timeSec.length) timeSec = w.timeSec;
-      axes.push({ axis, field, std: stdDev(w.values), max: absMax(w.values) });
-    }
-    if (!timeSec || samples < VIBRATION.minSamples) {
-      skipped.push(`IMU${instance}（样本 ${Math.max(0, samples)} 条，门槛 ${VIBRATION.minSamples}）`);
+    const result = scanInstance(ctx, instance, window, landing);
+    if ("skipped" in result) {
+      skipped.push(result.skipped);
       continue;
     }
-
-    const clip = ctx.windowed("VIBE", "Clip", window, instance);
-    const clipDelta =
-      clip && clip.values.length >= 2
-        ? clip.values[clip.values.length - 1] - clip.values[0]
-        : 0;
-
-    const worst = axes.reduce((a, b) => (b.std > a.std ? b : a), axes[0]);
-    const criticalHit = exceedRange(timeSec, columns, VIBRATION.stdCritical);
-    const warnHit = exceedRange(timeSec, columns, VIBRATION.stdWarning);
-    indicators.push({
-      instance,
-      window,
-      samples,
-      axes,
-      worstStd: worst.std,
-      worstAxis: worst.axis,
-      worstMax: Math.max(...axes.map((a) => a.max)),
-      clipDelta,
-      exceedWindow: criticalHit ?? warnHit,
-      exceedThreshold:
-        criticalHit !== null
-          ? VIBRATION.stdCritical
-          : warnHit !== null
-            ? VIBRATION.stdWarning
-            : null,
-    });
+    indicators.push(result);
   }
 
   if (indicators.length === 0) {

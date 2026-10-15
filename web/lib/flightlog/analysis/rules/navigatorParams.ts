@@ -12,7 +12,8 @@
 
 import type { Finding, Severity } from "../../types/report";
 import type { Rule, RuleContext } from "../../types/rule";
-import { makeFinding, step, suggestion, unknownFinding } from "../finding";
+import { makeFinding, step } from "../finding";
+import { dataGapStep, improvementStep, tuningStep, unknownWithAdvice } from "./tuningSteps";
 import {
   NAV_PARAM_SPECS, classifyParam, clampToOk, crossCheckParams, type ParamSpec, type ParamVerdict,
 } from "./navigatorParamRanges";
@@ -52,9 +53,15 @@ function violationFinding(spec: ParamSpec, value: number, verdict: ParamVerdict)
     ],
     metrics: { value, default: spec.def, okMin: spec.ok[0], okMax: spec.ok[1] },
     suggestions: [
-      suggestion(1, `把 ${spec.name} 调到合理区间内（官方默认 ${spec.def}）`, {
+      tuningStep({
+        order: 1,
+        signature: `${spec.name}=${value} 超出合理区间 ${range}`,
+        current: `${spec.name}=${value}（官方默认 ${spec.def}）`,
+        suggested: `调回合理区间内：${spec.name} → ${target}（以官方默认 ${spec.def} 为基准的起点值）`,
+        basis: `官方参数表的合理区间与危险端点；${spec.why}`,
+        verify: `复飞后与 ${spec.name} 相关的飞行品质指标（航线跟随/姿态响应）改善且无新的振荡`,
+        doc: spec.doc,
         param: { name: spec.name, from: value, to: target, reason: spec.why },
-        verify: `改动后复飞，确认与 ${spec.name} 相关的飞行品质指标（如航线跟随/姿态响应）改善且无新的振荡`,
       }),
     ],
     docLinks: [spec.doc],
@@ -78,9 +85,11 @@ export const navigatorParamsRule: Rule = {
     const kind = ctx.doc.meta.vehicleKind;
     const specs = NAV_PARAM_SPECS.filter(s => s.kinds.includes(kind));
     if (specs.length === 0) {
-      return [unknownFinding({
+      return [unknownWithAdvice({
         ruleId: RULE_ID, title: TITLE, status: "not_applicable",
-        note: `本规则目前只收录 Plane 与 Copter 的导航参数范围；当前机型 ${ctx.doc.meta.vehicle}（${kind}）不在覆盖范围，因此不作判断。`,
+        reason: `本规则目前只收录 Plane 与 Copter 的导航参数范围；当前机型 ${ctx.doc.meta.vehicle}（${kind}）不在覆盖范围，因此不作判断。`,
+        docLinks: [],
+        suggestions: [dataGapStep({ signature: `本机型（${kind}）不在导航参数覆盖范围`, missing: "规则只收录 Plane/Copter 的导航参数", howToFix: "该规则不适用、无需调参；如需覆盖请补充该机型的官方参数区间依据", doc: "" })],
       })];
     }
 
@@ -89,9 +98,11 @@ export const navigatorParamsRule: Rule = {
       .filter((x): x is { spec: ParamSpec; value: number } => x.value !== null);
 
     if (present.length === 0) {
-      return [unknownFinding({
+      return [unknownWithAdvice({
         ruleId: RULE_ID, title: TITLE, status: "missing_required",
-        note: `日志里没有这些导航参数的 PARM 记录（本机型应收录 ${specs.length} 条：${specs.map(s => s.name).join("、")}），无法评估参数是否合理 —— 这不代表参数没问题。`,
+        reason: `日志里没有这些导航参数的 PARM 记录（本机型应收录 ${specs.length} 条：${specs.map(s => s.name).join("、")}），无法评估参数是否合理 —— 这不代表参数没问题。`,
+        docLinks: [],
+        suggestions: [dataGapStep({ signature: `缺少 ${specs.length} 条导航参数的 PARM 记录`, missing: "本份日志没有记录这些参数", howToFix: "在包含 PARM 段的完整日志上重新诊断，或按官方参数表逐条核对", doc: "" })],
       })];
     }
 
@@ -109,6 +120,17 @@ export const navigatorParamsRule: Rule = {
         impact: "相关参数组合在一起不自洽，可能导致能量/姿态控制行为异常",
         evidence: [step("交叉检查", crossNote), step("口径", "只检查参数之间的相互关系，不改动单个参数的合理区间判定")],
         docLinks: [DOC_TECS_RULE],
+        suggestions: [
+          tuningStep({
+            order: 1,
+            signature: crossNote,
+            current: "相关参数组合不自洽（见「交叉检查」）",
+            suggested: "按官方文档把相关参数调成一组自洽取值（方向；不硬给数值，避免与整机配置冲突）",
+            basis: "官方 TECS 调参页给出的参数相互关系（重量/翼面积/速度包线决定取值）",
+            verify: "复飞后高度/速度跟踪与油门饱和占比同时改善，且不再出现能量控制振荡",
+            doc: DOC_TECS_RULE,
+          }),
+        ],
         note: null,
       }));
     }
@@ -125,6 +147,17 @@ export const navigatorParamsRule: Rule = {
         ],
         metrics: Object.fromEntries(present.map(({ spec, value }) => [spec.name, value])),
         docLinks: [MODEL_DOC[kind] ?? DOC_TECS_RULE],
+        // 用户要求「每一项都有建议」：通过也要给方向 + 说清缺什么，不编数值
+        suggestions: [
+          improvementStep({
+            signature: `已检查 ${present.length} 条导航参数，全部落在官方合理区间内`,
+            current: present.map(({ spec, value }) => fmt(spec, value)).join("；"),
+            direction: "维持当前参数；若要进一步改善航线跟随，先记录本次飞行品质作为基线，再按官方顺序微调单个参数并逐次复飞",
+            missing: "没有航线阶跃/风扰响应数据时无法给出参数起点值（需专门试飞科目）",
+            verify: "复飞后航线跟随误差不劣于本次基线，且不出现新的振荡",
+            doc: MODEL_DOC[kind] ?? DOC_TECS_RULE,
+          }),
+        ],
         note: null,
       }));
     }

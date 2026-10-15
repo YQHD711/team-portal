@@ -22,11 +22,10 @@ vi.mock("uplot", () => ({
 }));
 vi.mock("@/components/flightlog/LogFileList", () => ({ LogFileList: () => <div data-testid="logs-tab" /> }));
 vi.mock("@/components/flightlog/FirmwarePanel", () => ({ FirmwarePanel: () => <div data-testid="fw-tab" /> }));
-// 报告出来后会挂载诊断历史（拉 /api/flight-diagnoses）：这里给个空列表替身，避免测试去发真实请求
+// 报告出来后会挂载诊断历史（拉 /api/flight-diagnoses）：空列表替身，避免测试去发真实请求
 vi.mock("@/lib/api", () => ({
   api: { get: vi.fn(async () => ({ total: 0, items: [] })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), download: vi.fn() },
 }));
-
 import FlightLogPage from "@/app/(protected)/flightlog/page";
 
 const finding = (over: Partial<Finding> & Pick<Finding, "ruleId" | "title" | "severity" | "status">): Finding => ({
@@ -55,8 +54,7 @@ const report: DiagnosisReport = {
     platform: "ardupilot", vehicleKind: "copter", vehicle: "ArduCopter", firmwareVersion: "4.6.2",
     firmwareString: "ArduCopter V4.6.2 (1ebd4d99)", versionNumeric: 40602, durationSec: 125.4, armed: true,
   },
-  fileName: "quad_20260617.bin", sizeBytes: 10_200_000, parseMs: 480, analyzeMs: 120,
-  summary: { critical: 1, warning: 0, passed: 1, unknown: 2 },
+  fileName: "quad_20260617.bin", sizeBytes: 10_200_000, parseMs: 480, analyzeMs: 120, summary: { critical: 1, warning: 0, passed: 1, unknown: 2 },
   findings: [
     finding({ ruleId: "pid-osc", title: "速率环低频振荡", severity: "critical", status: "fired", charts: [spectrumChart] }),
     finding({ ruleId: "vibe-ok", title: "振动水平", severity: "ok", status: "passed" }),
@@ -103,20 +101,28 @@ describe("诊断报告 UI", () => {
     expect(within(passed as HTMLElement).getByTestId("finding-status")).toHaveTextContent("通过");
   });
 
-  it("缺数据一侧（not_applicable / missing_required）：显示原因，**不显示「通过」**", async () => {
+  it("结构性不适用折叠成一行（条数与名称可见），展开后仍显示原因、**不显示「通过」**", async () => {
     await showReport();
 
-    for (const [title, label, reason] of [
-      ["滤波有效性", "不适用", "要求 ArduPilot ≥ 4.4"],
-      ["振动超标", "缺少必需数据", "缺少 VIBE 消息"],
-    ] as const) {
-      const card = screen.getByText(title).closest("[data-testid='finding-card']") as HTMLElement;
-      expect(within(card).getByTestId("finding-status")).toHaveTextContent(label);
-      expect(within(card).getByTestId("finding-note")).toHaveTextContent(reason);
-      // 负向对照：这一侧绝不能出现「通过」
-      expect(within(card).getByTestId("finding-status")).not.toHaveTextContent("通过");
-      expect(within(card).getByTestId("finding-note")).not.toHaveTextContent("通过");
-    }
+    // 折叠行：数量与名称必须可见（折叠 ≠ 静默）
+    const summary = screen.getByTestId("finding-na-summary");
+    expect(summary).toHaveTextContent("本机型不适用 1 项：滤波有效性");
+    // 机型缺失的项不单独占卡片（用户：非此机型的数据不要展示）
+    expect(screen.queryAllByTestId("finding-card").some(el => el.textContent?.includes("滤波有效性"))).toBe(false);
+
+    // 展开后可看到每条的原因，且绝不出现「通过」
+    fireEvent.click(summary);
+    const card = screen.getByText("滤波有效性").closest("[data-testid='finding-card']") as HTMLElement;
+    expect(within(card).getByTestId("finding-severity")).toHaveTextContent("不适用");
+    expect(within(card).getByTestId("finding-note")).toHaveTextContent("要求 ArduPilot ≥ 4.4");
+    expect(within(card).getByTestId("finding-severity")).not.toHaveTextContent("通过");
+    expect(within(card).getByTestId("finding-note")).not.toHaveTextContent("通过");
+
+    // 缺数据（missing_required）不属于结构性不适用 → 仍然单独成卡片
+    const missing = screen.getByText("振动超标").closest("[data-testid='finding-card']") as HTMLElement;
+    expect(within(missing).getByTestId("finding-status")).toHaveTextContent("缺少必需数据");
+    expect(within(missing).getByTestId("finding-note")).toHaveTextContent("缺少 VIBE 消息");
+
     // 纯函数层面也钉住：unknown 一侧的状态都不是 passed
     expect(isUnknownSide("not_applicable")).toBe(true);
     expect(isUnknownSide("missing_required")).toBe(true);
