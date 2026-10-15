@@ -378,6 +378,100 @@ namespace TeamPortal.Migrations
                     b.ToTable("DepartmentExamResults");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.FlightDiagnosisRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AnalyzeMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Critical")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DecodedTypes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("DurationSec")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FindingsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FirmwareVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ParseMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Passed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Records")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("SkippedBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalTypes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Unknown")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Vehicle")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VehicleKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("VersionNumeric")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Warning")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WarningsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("FileName");
+
+                    b.HasIndex("CreatedByUserId", "CreatedAt");
+
+                    b.ToTable("FlightDiagnosisRecords");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.IncidentRecord", b =>
                 {
                     b.Property<int>("Id")

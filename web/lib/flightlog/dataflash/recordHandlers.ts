@@ -1,13 +1,17 @@
 /**
  * 单条记录 → 内部状态的分发（FMT 布局 / FMTU 单位 / 参数 / 事件 / Series）。
  *
- * 这里只做**分发**，具体解码算法在各自模块：布局见 fmtLayout.ts，读值与倍率见 layout.ts，
- * 列式累积见 series.ts，事件见 events.ts。任何字段缺失都只记 warning，不抛异常。
+ * task-24 起**没有白名单**：FMT 声明过的类型全部解码。本文件只做**分发**，
+ * 具体算法在各自模块（布局 fmtLayout.ts、读值 layout.ts、列式累积 series.ts、事件 events.ts）。
+ *
+ * 零静默跳过：`decodedFields` 对每一条被定位到的记录都登记一行（字段清单来自 FMT 布局），
+ * 因此 `decodedFields` 的键数 == `messageCounts` 的键数；解不出来的只能是不存在的类型
+ * （被 walk 计成未知类型并写进 warnings）。
  */
 
-import { FMT_MSG_TYPE, readField, readTimeUs, type FormatLayout } from "./layout";
-import { applyFmtu, buildLayout, parseFormatHeader, roundMultiplier } from "./fmtLayout";
-import { META_ONLY, isWhitelisted } from "./whitelist";
+import { FMT_MSG_TYPE, numberField, readTimeUs, stringField, type FormatLayout } from "./layout";
+import { applyFmtu, buildLayoutDetailed, parseFormatHeader, roundMultiplier } from "./fmtLayout";
+import { isDeclaration } from "./messageKinds";
 import type { SeriesAccumulator } from "./series";
 import type { EventCollector } from "./events";
 
@@ -18,6 +22,8 @@ export interface WalkState {
   unitLabels: Map<number, string>;
   multValues: Map<number, number>;
   counts: Map<string, number>;
+  /** 消息名 → 已解码字段清单（每条记录都登记，保证"零静默跳过"可被计数验证）。 */
+  decodedFields: Map<string, string[]>;
   params: Record<string, number>;
   messages: string[];
   banner: string | null;
@@ -40,28 +46,29 @@ export function applyRecord(
   const layout = state.layouts.get(type);
   if (!layout) return;
   const name = layout.name;
+  state.decodedFields.set(name, [...layout.columns]);
 
   if (type === FMT_MSG_TYPE) {
     registerFormat(view, state, warn);
     return;
   }
   if (name === "UNIT") {
-    const id = numberAt(view, layout, 1);
-    const label = readField(view, layout.offsets[2], layout.specs[2]);
-    if (id !== null && typeof label === "string") state.unitLabels.set(id, label);
+    const id = numberField(view, layout, ["Id"], 1);
+    const label = stringField(view, layout, ["Label"], 2);
+    if (id !== null && label.length > 0) state.unitLabels.set(id, label);
     return;
   }
   if (name === "MULT") {
-    const id = numberAt(view, layout, 1);
-    const mult = numberAt(view, layout, 2);
+    const id = numberField(view, layout, ["Id"], 1);
+    const mult = numberField(view, layout, ["Mult"], 2);
     // 7 位有效数字取整是 pymavlink 的既定事实（float32 转 double 的脏值否则匹配不到单位前缀）
     if (id !== null && mult !== null) state.multValues.set(id, roundMultiplier(mult));
     return;
   }
   if (name === "FMTU") {
-    const target = numberAt(view, layout, 1);
-    const unitIds = String(readField(view, layout.offsets[2], layout.specs[2]));
-    const multIds = String(readField(view, layout.offsets[3], layout.specs[3]));
+    const target = numberField(view, layout, ["FmtType"], 1);
+    const unitIds = stringField(view, layout, ["UnitIds"], 2);
+    const multIds = stringField(view, layout, ["MultIds"], 3);
     const targetLayout = target === null ? undefined : state.layouts.get(target);
     if (targetLayout) applyFmtu(targetLayout, unitIds, multIds, state.unitLabels, state.multValues);
     return;
@@ -75,62 +82,45 @@ export function applyRecord(
   }
   const tSec = timeUs === null ? 0 : (timeUs - (state.t0us ?? timeUs)) / 1e6;
 
-  // 白名单之外的消息：只统计条数（messageCounts 在 walk 里做），不解码
-  if (!isWhitelisted(name)) return;
-
   if (name === "PARM") {
-    const key = String(readField(view, layout.offsets[1], layout.specs[1])).trim();
-    const value = numberAt(view, layout, 2);
+    const key = stringField(view, layout, ["Name"], 1).trim();
+    const value = numberField(view, layout, ["Value"], 2);
     if (key.length > 0 && value !== null) state.params[key] = value;
-    return;
-  }
-  if (name === "MSG") {
-    const text = String(readField(view, layout.offsets[1], layout.specs[1]));
+  } else if (name === "MSG") {
+    // ⚠️ 列名定位：4.8.0-dev 的 MSG 是 [TimeUS, ID, Seq, Message]
+    const text = stringField(view, layout, ["Message"], 1);
     if (state.messages.length < 32) state.messages.push(text);
     if (state.banner === null && text.startsWith("Ardu")) state.banner = text;
     events.addMessage(tSec, text);
-    return;
-  }
-  if (name === "VER") {
+  } else if (name === "VER") {
     if (state.ver === null) {
       state.ver = {
-        major: numberAt(view, layout, columnIndex(layout, "Maj")) ?? 0,
-        minor: numberAt(view, layout, columnIndex(layout, "Min")) ?? 0,
-        patch: numberAt(view, layout, columnIndex(layout, "Pat")) ?? 0,
-        firmwareString: stringAt(view, layout, columnIndex(layout, "FWS")),
+        major: numberField(view, layout, ["Maj"], 3) ?? 0,
+        minor: numberField(view, layout, ["Min"], 4) ?? 0,
+        patch: numberField(view, layout, ["Pat"], 5) ?? 0,
+        firmwareString: stringField(view, layout, ["FWS"], 8),
       };
     }
-    seriesAcc.add(type, view);
-    return;
-  }
-  if (name === "ARM") {
-    const armState = numberAt(view, layout, 1);
+  } else if (name === "ARM") {
+    const armState = numberField(view, layout, ["ArmState"], 1);
     if (armState !== null) {
       if (armState !== 0) state.armed = true;
       events.addArm(tSec, armState);
     }
-    seriesAcc.add(type, view);
-    return;
-  }
-  if (name === "MODE") {
-    const modeNum = numberAt(view, layout, 1);
-    const reason = numberAt(view, layout, 3);
+  } else if (name === "MODE") {
+    // 4.6/4.7 是 [TimeUS, Mode, ModeNum, Rsn]；更老的是 [TimeUS, Mode] 等
+    const modeNum = numberField(view, layout, ["ModeNum", "Mode"], 1);
+    const reason = numberField(view, layout, ["Rsn"], 3);
     if (modeNum !== null) events.addMode(tSec, modeNum, reason ?? 0);
-    seriesAcc.add(type, view);
-    return;
-  }
-  if (name === "EV") {
-    const id = numberAt(view, layout, 1);
+  } else if (name === "EV") {
+    const id = numberField(view, layout, ["Id"], 1);
     if (id !== null) {
       events.addEv(tSec, id);
       if (id === 10 || id === 15) state.armed = true;
     }
-    seriesAcc.add(type, view);
-    return;
   }
 
-  // 白名单里的数据消息：直接进列式 Series（metadata-only 的消息在上面已经 return）
-  if (META_ONLY.has(name)) return;
+  // 声明类之外的消息都进列式 Series（PARM/MSG 也进，只是它们的数值列很少）
   seriesAcc.add(type, view);
 }
 
@@ -138,12 +128,12 @@ export function applyRecord(
 function registerFormat(view: DataView, state: WalkState, warn: (message: string) => void): void {
   const header = parseFormatHeader(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
   if (!header) {
-    warn("FMT 记录内容无法解析，已跳过");
+    warn("FMT 记录内容无法解析（负载不足 86 字节），已跳过");
     return;
   }
-  const built = buildLayout(header);
+  const { layout: built, error } = buildLayoutDetailed(header);
   if (!built) {
-    warn(`FMT 声明无法解析（name=${header.name} format=${header.format} len=${header.length}），该消息将被跳过`);
+    warn(`FMT 声明无法解析：name=${header.name} type=0x${header.type.toString(16)} ${error} —— 该类型的记录会被跳过`);
     return;
   }
   const existing = state.layouts.get(header.type);
@@ -155,20 +145,4 @@ function registerFormat(view: DataView, state: WalkState, warn: (message: string
   }
   state.layouts.set(header.type, built);
   state.byName.set(built.name, built);
-}
-
-function columnIndex(layout: FormatLayout, name: string): number {
-  return layout.columns.indexOf(name);
-}
-
-function numberAt(view: DataView, layout: FormatLayout, index: number): number | null {
-  if (index < 0 || index >= layout.specs.length) return null;
-  const value = readField(view, layout.offsets[index], layout.specs[index]);
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function stringAt(view: DataView, layout: FormatLayout, index: number): string {
-  if (index < 0) return "";
-  const value = readField(view, layout.offsets[index], layout.specs[index]);
-  return typeof value === "string" ? value : "";
 }

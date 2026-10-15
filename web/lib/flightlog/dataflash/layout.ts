@@ -130,3 +130,40 @@ export function readTimeUs(view: DataView, layout: FormatLayout): number | null 
   const value = readField(view, layout.offsets[index], spec);
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
+
+/**
+ * 按**列名**定位字段（task-24 实测教训：4.8.0-dev 的 MSG 是 `[TimeUS, ID, Seq, Message]`，
+ * 4.6.2 是 `[TimeUS, Message]` —— 写死下标会把 ID 当成横幅文字）。
+ * 名字都找不到时退回 `fallbackIndex`（老固件的兼容位），返回 -1 表示确实没有该列。
+ */
+export function resolveIndex(layout: FormatLayout, names: readonly string[], fallbackIndex = -1): number {
+  for (const name of names) {
+    const index = layout.columns.indexOf(name);
+    if (index >= 0) return index;
+  }
+  return fallbackIndex;
+}
+
+export function numberField(
+  view: DataView,
+  layout: FormatLayout,
+  names: readonly string[],
+  fallbackIndex = -1,
+): number | null {
+  const index = resolveIndex(layout, names, fallbackIndex);
+  if (index < 0 || index >= layout.specs.length) return null;
+  const value = readField(view, layout.offsets[index], layout.specs[index]);
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function stringField(
+  view: DataView,
+  layout: FormatLayout,
+  names: readonly string[],
+  fallbackIndex = -1,
+): string {
+  const index = resolveIndex(layout, names, fallbackIndex);
+  if (index < 0 || index >= layout.specs.length) return "";
+  const value = readField(view, layout.offsets[index], layout.specs[index]);
+  return typeof value === "string" ? value : "";
+}

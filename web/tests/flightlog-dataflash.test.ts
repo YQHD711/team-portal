@@ -33,6 +33,24 @@ describe("flightlog dataflash 切片黄金对照（pymavlink 2.4.49）", () => {
     expect(parsed.stats.records).toBe(total);   // 没有丢记录、也没有多算
   });
 
+  it("解析完整性（task-24）：解码全部消息类型，decodedTypes == totalTypes", () => {
+    const decodedTypes = Object.keys(doc.decodedFields).length;
+    const totalTypes = Object.keys(doc.messageCounts).length;
+
+    expect(totalTypes).toBe(Object.keys(golden.counts).length);
+    expect(decodedTypes).toBe(totalTypes);            // 覆盖度判据（契约 §0.5.3）
+    expect(decodedTypes).toBeGreaterThan(70);         // 这个切片有 73 种；白名单时代只有 ~20
+
+    // 旧白名单之外的"新解码"类型必须真解到值，且样本数与 pymavlink 条数一致
+    for (const [name, key] of [["AHR2", "AHR2:0"], ["BARO", "BARO:0"], ["ANG", "ANG:0"], ["DCM", "DCM:0"]] as const) {
+      expect(doc.series[key], `${key} 未被解码`).toBeDefined();
+      const samples = Object.keys(doc.series)
+        .filter((k) => k.startsWith(`${name}:`))
+        .reduce((sum, k) => sum + doc.series[k].timeSec.length, 0);
+      expect(samples, `${name} 样本数`).toBe(golden.counts[name]);
+    }
+  });
+
   it("逐字段对照：Series 键、字段名、条数、数值、单位全部一致", () => {
     expect(Object.keys(doc.series).sort()).toEqual(Object.keys(golden.series).sort());
     let compared = 0;
@@ -51,7 +69,7 @@ describe("flightlog dataflash 切片黄金对照（pymavlink 2.4.49）", () => {
         expect(actual.units[field] ?? "", `${key}.${field} 单位不一致`).toBe(expected.units[field] ?? "");
       }
     }
-    expect(compared).toBeGreaterThan(10_000);   // 这个切片逐一比对了一万多个数值
+    expect(compared).toBeGreaterThan(30_000);   // task-24 起：全部类型逐一比对三万多个数值
   });
 
   it("时间统一为秒（相对起点第一条 TimeUS）", () => {

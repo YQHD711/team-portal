@@ -25,6 +25,28 @@ export interface DiagnosisResult {
   report: DiagnosisReport;
   /** 原始信号（时序图取数用） */
   document: LogDocument;
+  /**
+   * 解析诊断数据：用于「解析日志」面板与诊断历史落库。
+   * 这些数字直接来自解析器（不是二手推断）——排查"解析不完整/跳字节"看的就是它们。
+   */
+  parseStats: DiagnosisParseStats;
+}
+
+export interface DiagnosisParseStats {
+  /** 成功解码的记录数 */
+  records: number;
+  /** 跳过的字节数（未知签名/坏记录）；> 0 时 UI 必须醒目标注 */
+  skippedBytes: number;
+  /** 已解码的消息类型数 */
+  decodedTypes: number;
+  /** 日志中出现的消息类型数 */
+  totalTypes: number;
+  /** 解析耗时（含读文件，用户实际等待时间） */
+  parseMs: number;
+  /** 规则分析耗时 */
+  analyzeMs: number;
+  /** 解析过程中的非致命问题，原样透出给用户 */
+  warnings: readonly string[];
 }
 
 export interface RunDiagnosisOptions {
@@ -66,7 +88,7 @@ export const runDiagnosis: RunDiagnosis = async (file, options = {}) => {
 
   onProgress?.({ phase: "parsing", percent: 0, message: "读取日志字节…" });
   const parseStart = nowMs();
-  const document = await parseLogFile(file, {
+  const parsed = await parseLogFile(file, {
     signal,
     // jsdom / 无 Worker 环境退化为主线程，避免测试里挂在等待 Worker 上
     forceMainThread: typeof Worker === "undefined",
@@ -79,6 +101,7 @@ export const runDiagnosis: RunDiagnosis = async (file, options = {}) => {
       }),
   });
   const parseMs = nowMs() - parseStart;
+  const document = parsed.doc;
   throwIfAborted(signal);
 
   onProgress?.({ phase: "analyzing", percent: 92, message: "运行诊断规则…" });
@@ -97,5 +120,17 @@ export const runDiagnosis: RunDiagnosis = async (file, options = {}) => {
     message: `完成：${summary.critical} 项严重 / ${summary.warning} 项警告 / ${summary.unknown} 项无法判断`,
   });
 
-  return { report: { ...report, parseMs, analyzeMs }, document };
+  return {
+    report: { ...report, parseMs, analyzeMs },
+    document,
+    parseStats: {
+      records: parsed.stats.records,
+      skippedBytes: parsed.stats.skippedBytes,
+      decodedTypes: Object.keys(document.decodedFields).length,
+      totalTypes: Object.keys(document.messageCounts).length,
+      parseMs,
+      analyzeMs,
+      warnings: parsed.warnings,
+    },
+  };
 };
