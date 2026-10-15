@@ -95,4 +95,40 @@ describe.skipIf(ROOT === null)("外环规则 · 真实语料（76 个 .bin，需
     console.log(`[rules-corpus] 明细已写入 ${outFile}`);
     expect(Number.isFinite(copterRoll?.errP50 ?? Number.NaN)).toBe(true);
   });
+
+  /**
+   * task-32 四条要求的语料验收（与上面同一遍解析，不额外跑第二遍 76 个文件）：
+   *  ① 每一项都要有建议；② ATT>20 / FREQ 偏差≥20% 不得判 passed；
+   *  ③ not_applicable 必须带原因；④ 降落段被排除且冲击单列。
+   */
+  it("task-32 四条要求：每项都有建议 / 滤波自相矛盾已修 / 不适用带原因 / 降落段单列", { timeout: TIMEOUT }, async () => {
+    const reports = await all();
+    const acc = reports.map((r) => r.acceptance);
+    const noSuggestions = acc.flatMap((a, i) => a.noSuggestions.map((s) => `${reports[i].file}: ${s}`));
+    const changed = reports.filter(
+      (r) => r.acceptance.vibrationOld === "critical" && !r.acceptance.vibrationNew.includes("critical"),
+    );
+    console.log(`\n[task32] 无建议的结论：${noSuggestions.length} 条（要求 0）`);
+    console.log(`[task32] not_applicable 缺原因：${acc.reduce((s, a) => s + a.naWithoutNote, 0)} 条（要求 0）`);
+    console.log(`[task32] ATT>20 dB 的日志：${acc.reduce((s, a) => s + a.attSeen, 0)} / ${reports.length}；其中判 passed：${acc.reduce((s, a) => s + a.notchViolations, 0)} 条（要求 0）`);
+    console.log(`[task32] FREQ 偏差≥20% 的日志：${acc.reduce((s, a) => s + a.freqOffsetSeen, 0)}；其中判 passed：${acc.reduce((s, a) => s + a.freqViolations, 0)} 条（要求 0）`);
+    console.log(`[task32] 识别并排除降落段的日志：${acc.filter((a) => a.landingExcluded > 0).length} / ${reports.length}`);
+    console.log(`[task32] 触发"冲击/坠机"独立结论的日志：${acc.filter((a) => a.landingFindings > 0).length}`);
+    console.log(`[task32] 旧口径 critical、新口径不再 critical 的日志：${changed.length} 个（其中 ${changed.filter((r) => r.acceptance.landingFindings > 0).length} 个改为"冲击/坠机"独立结论）`);
+    for (const r of changed) {
+      console.log(`[task32]   ${r.file}: old=critical new=${r.acceptance.vibrationNew} 冲击结论=${r.acceptance.landingFindings} 段=${r.acceptance.landingExcluded}`);
+    }
+    const engineFindings = acc.reduce((s, a) => s + a.engineFindings, 0);
+    const engineStatuses: Record<string, number> = {};
+    for (const a of acc) for (const [k, v] of Object.entries(a.engineStatuses)) engineStatuses[k] = (engineStatuses[k] ?? 0) + v;
+    console.log(`[task32] 引擎全量状态分布（7 条规则 + 门控）：${JSON.stringify(engineStatuses)}`);
+    console.log(`[task32] 引擎全量结论 ${engineFindings} 条（6 条规则 + 门控结论）`);
+
+    expect(noSuggestions).toEqual([]);
+    expect(acc.every((a) => a.naWithoutNote === 0)).toBe(true);
+    expect(acc.every((a) => a.notchViolations === 0)).toBe(true);
+    expect(acc.every((a) => a.freqViolations === 0)).toBe(true);
+    expect(acc.every((a) => a.landingExcluded > 0 || a.landingFindings === 0)).toBe(true);
+    expect(engineFindings).toBeGreaterThan(reports.length);
+  });
 });

@@ -15,6 +15,7 @@ import { PID_RATE } from "../thresholds";
 import type { RateAxisEvidence, RateAxisSpec } from "../rateAxisEvidence";
 import type { Grade, RateTuningMetrics } from "../tuningAdvice";
 import { buildRateAdvice } from "../rateTuningAdvice";
+import { dataGapStep } from "./tuningSteps";
 
 export const PID_RULE_ID = "pid_rate_tracking";
 export const PID_RULE_TITLE = "速率环跟踪质量";
@@ -92,6 +93,15 @@ export function buildAxisFinding(
       phenomenon: `本次飞行 ${ev.spec.label} 轴指令过小：Tar RMS 仅 ${ev.tarRmsDegPerSec.toFixed(2)} deg/s（门槛 ${PID_RATE.minExcitationDegPerSec} deg/s），无法评价跟踪质量`,
       impact: "无法判断该轴跟踪是否正常，不代表通过",
       note: `指令激励 ${ev.tarRmsDegPerSec.toFixed(2)} deg/s 低于评估门槛 ${PID_RATE.minExcitationDegPerSec} deg/s：激励不足时 Err/Tar 天然可大于 1，因此不做判定，结果不代表通过。${capNote ?? ""}`.trim(),
+      // 用户要求「每一项都有建议」：无法判断时给方向 + 说清缺什么，不给参数数值
+      suggestions: [
+        dataGapStep({
+          signature: `${ev.spec.label} 轴指令激励 ${ev.tarRmsDegPerSec.toFixed(2)} deg/s < 门槛 ${PID_RATE.minExcitationDegPerSec} deg/s`,
+          missing: "本次飞行该轴几乎没有明显机动，无法评估跟踪",
+          howToFix: "复飞时给出明显的滚转/俯仰/偏航机动（航线转弯或手动扰动）后重采；本条不代表通过",
+          doc: PID_DOC,
+        }),
+      ],
     });
   }
 

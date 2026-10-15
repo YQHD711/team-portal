@@ -10,6 +10,7 @@
 
 import type { ChartRequest, EvidenceStep, Finding, Suggestion } from "../types/report";
 import { makeFinding, step, unknownFinding } from "./finding";
+import { dataGapStep } from "./rules/tuningSteps";
 import type { TrackingPair } from "./trackingEvidence";
 
 export type Severity = "critical" | "warning" | "ok";
@@ -48,9 +49,27 @@ export interface ChannelArgs {
   minExcitation?: number;
   chart: ChartRequest;
   docLinks: readonly string[];
+  /** 通过（ok）与触发（fired）时给的调参/改进建议（六要素） */
   suggestions: readonly Suggestion[];
+  /** unknown 一侧（无法判断）时的建议：默认给"先补齐判据所需数据"，**绝不带参数数值** */
+  unknownAdvice?: readonly Suggestion[];
   /** 偏差列专用：整段恒为 0 → 说明没有数据（不是"跟踪完美"） */
   zeroDeviationIsUnknown?: boolean;
+}
+
+/** unknown 一侧的兜底建议：给方向 + 说清缺什么，不编数值 */
+function gapAdvice(args: ChannelArgs): readonly Suggestion[] {
+  if (args.unknownAdvice && args.unknownAdvice.length > 0) return args.unknownAdvice;
+  return [
+    dataGapStep({
+      signature: `${args.subject}无法判定（缺数据或样本不足）`,
+      missing: args.pair.isDeviation
+        ? "该偏差列整段为 0，说明本次没有产生可用数据"
+        : "本次飞行缺少该通道的可用样本",
+      howToFix: "按同一载重/场地复飞一次，让该通道在飞行中出现明显机动（航线、定点加速、爬升下降）",
+      doc: args.docLinks[0] ?? "",
+    }),
+  ];
 }
 
 function evidenceFor(args: ChannelArgs): EvidenceStep[] {
@@ -119,6 +138,7 @@ export function channelFinding(args: ChannelArgs): Finding {
       phenomenon: `${args.subject}整段恒为 0：本次飞行没有产生可评价的${args.subject}数据`,
       impact: "无法判断该通道跟踪是否正常，不代表通过",
       evidence,
+      suggestions: gapAdvice(args),
       note: "偏差列恒为 0 说明该通道本次没有被使用（例如没飞航线/没有高度目标），"
         + "不能当作\"跟踪完美\"；如需评估请在带航线或高度目标的飞行里复飞分析。",
     });
@@ -137,6 +157,7 @@ export function channelFinding(args: ChannelArgs): Finding {
         + `${pair.excitement.toFixed(3)} ${args.excitationUnit}（门槛 ${args.minExcitation} ${args.excitationUnit}），无法评价跟踪质量`,
       impact: "无法判断该通道是否正常，不代表通过",
       evidence,
+      suggestions: gapAdvice(args),
       note: `指令激励不足（门槛 ${args.minExcitation} ${args.excitationUnit}）时"误差/指令"比会天然放大，`
         + "因此该通道不做判定，结论**不代表通过**；若需要对这条通道下结论，"
         + "请在飞行中给出明显的角度/速度机动（航线飞行、定点加速、爬升下降）后复飞分析。",
@@ -160,6 +181,8 @@ export function channelFinding(args: ChannelArgs): Finding {
       phenomenon: `${args.subject}跟踪良好：${measured}`,
       impact: "该通道能跟随指令，不构成控制风险",
       evidence,
+      // 用户要求「每一项都有建议」：通过也要给改进建议（六要素，数值是起点值/或只给方向）
+      suggestions: args.suggestions,
     });
   }
   return makeFinding({
@@ -173,7 +196,3 @@ export function channelFinding(args: ChannelArgs): Finding {
   });
 }
 
-/** 通道级"无法判断"（缺 arm 窗口等全局原因，不属于任何单通道） */
-export function globalInsufficient(ruleId: string, ruleTitle: string, note: string): Finding {
-  return unknownFinding({ ruleId, title: ruleTitle, status: "insufficient_data", note });
-}

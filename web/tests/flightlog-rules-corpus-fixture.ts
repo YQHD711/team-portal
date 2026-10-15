@@ -16,6 +16,7 @@ import { attitudeTrackingRule } from "@/lib/flightlog/analysis/rules/attitudeTra
 import { speedPositionTrackingRule } from "@/lib/flightlog/analysis/rules/speedPositionTracking";
 import type { Finding } from "@/lib/flightlog/types/report";
 import { manifest, type ManifestEntry } from "./flightlog-corpus-fixture";
+import { acceptanceOf, type AcceptanceRow } from "./flightlog-corpus-acceptance";
 
 export interface MetricRow {
   file: string;
@@ -41,6 +42,8 @@ export interface FileRulesReport {
   byStatus: Record<string, number>;
   rows: MetricRow[];
   problems: string[];
+  /** task-32 四条要求的语料实测（在**同一遍解析**里顺便采集，避免再跑一遍 76 个文件） */
+  acceptance: AcceptanceRow;
 }
 
 const rules = [attitudeTrackingRule, speedPositionTrackingRule];
@@ -123,6 +126,7 @@ export function collectFile(entry: ManifestEntry, root: string): FileRulesReport
     byStatus,
     rows,
     problems,
+    acceptance: acceptanceOf(ctx),
   };
 }
 
