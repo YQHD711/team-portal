@@ -11,6 +11,9 @@
  *     **重新复制会归零**（`copyBuffer` 返回 `pasteIndex: 0`）——
  *     否则"复制→粘贴→再复制→粘贴"会越偏越远。
  *  4. 按原类型粘贴：`cloneForPaste` 保留 `type`，**禁止跨类型**。
+ *
+ * ⚠️ 验证边界（task-37）：真机已验证"选中 → Ctrl+C/V → 元素+1、新 id、+24/+18 偏移、同类型"与"Ctrl+Z 一次回退"
+ * （PUT 载荷级证据）。**"粘贴后新元素被选中"只有单测覆盖，线上待验。**
  */
 
 import type { ItemElement, PosElement, RoomLayout } from "./layoutTypes";

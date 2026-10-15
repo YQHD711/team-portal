@@ -13,6 +13,9 @@ import { applyPaste, copyBuffer, type ClipboardBuffer } from "./layoutClipboard"
 
 type Copyable = PosElement | ItemElement;
 
+/** ⚠️ 验证边界（task-37 收尾）：本文件的逻辑有单测覆盖（`tests/inventory-clipboard.test.ts` 16 条）。
+ * 但"**粘贴后新元素被选中**"（下面 `setSelected(pasted[0].id)`）**只有单测覆盖，线上真机尚未验证** ——
+ * 真机验证时被"保存后页面刷新重置编辑器"打断，未能完成；请勿把它当成已验过的行为。 */
 export function usePlannerClipboard(
   layout: RoomLayout,
   selectedIds: readonly string[],
