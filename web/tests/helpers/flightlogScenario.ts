@@ -52,40 +52,51 @@ export function vibeWithClipDelta(
   );
 }
 
-/** 三个速率轴的 PID 消息；Err 用不同频率，避免与 Tar 混叠 */
+/** 把序列整体后移 lag 个采样（前面补 0）——用来造"实际滞后于指令"的真实情形 */
+function delayed(values: readonly number[], lag: number): number[] {
+  const out = new Array<number>(values.length).fill(0);
+  for (let i = lag; i < values.length; i += 1) out[i] = values[i - lag];
+  return out;
+}
+
+/** 三个速率轴的 PID 消息；Err 用不同频率，避免与 Tar 混叠；`lagSamples>0` 时 Act 滞后于 Tar */
 export function pidMessages(
   tarAmplitude: number,
   errAmplitude: number,
   count = RULE_N,
+  lagSamples = 0,
 ): Series[] {
   const time = uniformTime(count, RULE_DT);
-  return ["PIDR", "PIDP", "PIDY"].map((name) =>
-    makeSeries(
+  return ["PIDR", "PIDP", "PIDY"].map((name) => {
+    const tar = sineWave(count, RULE_DT, 0.5, tarAmplitude);
+    return makeSeries(
       name,
       0,
       time,
       {
-        Tar: sineWave(count, RULE_DT, 0.5, tarAmplitude),
-        Act: sineWave(count, RULE_DT, 0.5, tarAmplitude),
+        Tar: tar,
+        Act: lagSamples > 0 ? delayed(tar, lagSamples) : sineWave(count, RULE_DT, 0.5, tarAmplitude),
         Err: sineWave(count, RULE_DT, 2.5, errAmplitude),
         P: constant(count, 1),
         I: constant(count, 0),
         D: constant(count, 0),
       },
       { Tar: "rad/s", Act: "rad/s", Err: "rad/s" },
-    ),
-  );
+    );
+  });
 }
 
 export function pidScenario(
   tarAmplitude: number,
   errAmplitude: number,
   vehicleKind: VehicleKind,
+  extra: DocInit = {},
 ): LogDocument {
   return makeDoc({
     vehicleKind,
     series: pidMessages(tarAmplitude, errAmplitude),
     durationSec: DURATION,
+    ...extra,
   });
 }
 

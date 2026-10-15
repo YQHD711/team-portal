@@ -49,12 +49,16 @@ export function axisParamSuffix(axis: "roll" | "pitch" | "yaw"): string {
 }
 
 export interface AxisTuningParams {
-  /** 该机型的参数前缀（Copter=ATC_RAT_RLL，Plane=RLL2SRV/PTCH2SRV）——写死 Copter 前缀会给固定翼推不存在的参数 */
+  /** 参数前缀（Copter=ATC_RAT_RLL / Plane=RLL_RATE），由 rateParamNames 声明 + 存在性探测 */
   prefix: string;
+  /** 机型：决定 FF 建议是「给数值」还是「只给方向」（固定翼 FF/P=4.31，量纲不同，见 rateParamNames.ts） */
+  vehicleKind: string;
   p: number | null;
   i: number | null;
   d: number | null;
   ff: number | null;
+  /** D 项前馈（4.5+） */
+  dff: number | null;
 }
 
 export function buildAxisFinding(
@@ -130,10 +134,12 @@ export function buildAxisFinding(
   const advice: Suggestion[] = tuning
     ? buildRateAdvice(tuning, {
         prefix: params.prefix,
+        vehicleKind: params.vehicleKind,
         p: params.p,
         i: params.i,
         d: params.d,
         ff: params.ff,
+        dff: params.dff,
       })
     : legacySuggestions(ev, params.p);
 

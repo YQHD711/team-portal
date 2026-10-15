@@ -14,79 +14,56 @@
 import type { Suggestion } from "../types/report";
 import { suggestion } from "./finding";
 import { PID_TUNING } from "./thresholds";
+import { ffPolicyFor } from "./rules/rateParamNames";
 import type { RateTuningMetrics } from "./tuningAdvice";
 
-export interface RateAdviceParams {
-  /** 该机型的参数前缀，如 `ATC_RAT_RLL`（Copter）或 `RLL2SRV`（Plane） */
-  prefix: string;
-  p: number | null;
-  i: number | null;
-  d: number | null;
-  ff: number | null;
-}
+import { ffDirectionAdvice, ffNumericAdvice, usableMeasuredGain, type RateAdviceParams } from "./rateFfAdvice";
 
-/** 实测的"P 项输出/误差"能否当增益用（单位是否自洽） */
-function usableMeasuredGain(v: number): boolean {
-  return v >= PID_TUNING.measuredGainMin && v <= PID_TUNING.measuredGainMax;
-}
+export type { RateAdviceParams } from "./rateFfAdvice";
+
 
 export function buildRateAdvice(m: RateTuningMetrics, params: RateAdviceParams): Suggestion[] {
   const out: Suggestion[] = [];
   const tau = m.lagMs / 1000;
   const omega = 2 * Math.PI * m.dominantHz;
   const lagSignificant = m.lagSamples >= PID_TUNING.lagSignificantSamples;
+  const ffPolicy = ffPolicyFor(params.vehicleKind);
 
   // 1) 滤波（官方顺序第一步，永远排最前）
   out.push(suggestion(1, "先按「滤波有效性」的结论处理滤波——滤波未确认前，下面的增益建议都不作数"));
 
-  // 2) 滞后主导 → 先加 FF（前馈不引入相位滞后，而加 P 会）
+  // 2) 滞后主导 → 先加 FF（前馈不引入相位滞后，而加 P 会）；数值/方向由机型策略决定
   if (lagSignificant) {
     const pKnown = params.p;
-    const gain =
-      pKnown ?? (usableMeasuredGain(m.pOverErr) ? m.pOverErr : null);
-    if (gain !== null && params.ff !== null) {
-      const raw = gain * omega * tau;
-      const capped = Math.min(raw, gain * PID_TUNING.ffMaxRatioOfP);
-      const target = Math.max(0, Math.round(capped * 0.5 * 1000) / 1000);
-      out.push(
-        suggestion(
-          2,
-          `误差是**滞后主导**（实测滞后 ${Math.round(m.lagMs)} ms，指令主频 ${m.dominantHz.toFixed(2)} Hz）：增大前馈 FF（前馈不引入相位滞后，加 P 会）`,
-          {
-            param: {
-              name: `${params.prefix}_FF`,
-              from: params.ff,
-              to: target,
-              reason:
-                `按纯延迟近似 FF ≈ P×2πfτ = ${gain.toFixed(3)}×2π×${m.dominantHz.toFixed(2)}×${tau.toFixed(3)} = ${raw.toFixed(3)}，` +
-                `取一半作为保守起点并限制在 P 的 ${(PID_TUNING.ffMaxRatioOfP * 100).toFixed(0)}% 以内 ⇒ ${target}。` +
-                (pKnown === null
-                  ? `（日志里没读到 ${params.prefix}_P，P 用的是**实测有效增益** ${m.pOverErr.toFixed(3)}）`
-                  : "") +
-                "该式假设：误差由单一主频的纯延迟主导，未做系统辨识",
-            },
-            verify: `复飞后 rate error RMS 下降 ≥30%，且 Tar→Act 滞后从 ${m.lagMs.toFixed(0)} ms 减小`,
-          },
-        ),
-      );
+    const gain = pKnown ?? (usableMeasuredGain(m.pOverErr) ? m.pOverErr : null);
+    if (ffPolicy.policy === "numeric" && gain !== null && params.ff !== null) {
+      out.push(ffNumericAdvice(m, params, gain, gain * omega * tau, gain * PID_TUNING.ffMaxRatioOfP));
     } else {
-      // 读不到增益或参数名不匹配 → **只给方向，不编绝对数值**（编出来的数会让用户白调一圈）
-      out.push(
-        suggestion(
-          2,
-          `误差是**滞后主导**（实测滞后 ${Math.round(m.lagMs)} ms，指令主频 ${m.dominantHz.toFixed(2)} Hz）：应优先增大前馈 FF（前馈不引入相位滞后，加 P 会）`,
-          {
-            param: null,
-            verify: `复飞后 Tar→Act 滞后应小于 ${Math.round(m.lagMs)} ms，rate error RMS 下降 ≥30%`,
-          },
-        ),
-      );
+      const why = ffPolicy.policy === "direction-only"
+        ? ffPolicy.basis
+        : `日志里读不到 ${params.prefix}_P/_FF 或单位不可判定`;
+      out.push(ffDirectionAdvice(m, params, why));
       m.assumptions.push(
-        `未能给出 ${params.prefix}_FF 的绝对起点值：日志里读不到 ${params.prefix}_P/_FF 或单位不可判定，` +
-          "为避免推出无意义的数值，这里只给调整方向与验证指标",
+        `未给 ${params.prefix}_FF 绝对值：${why}。只给方向与验证指标，避免反向建议`,
       );
     }
   }
+
+  // 2b) D 项前馈（4.5+）：D 与 D_FF 都接近 0 而误差滞后主导 → 明确点出这个未启用的手段
+  if (lagSignificant && params.dff !== null && params.dff === 0 && (params.d === null || params.d < 0.01)) {
+    out.push(
+      suggestion(
+        3,
+        `D 项前馈未启用（${params.prefix}_D_FF=0）且 ${params.prefix}_D≈${params.d ?? "未读到"}：`
+        + "滞后主导时 D_FF 是比继续加 P 更安全的手段（P 会同时放大噪声）",
+        {
+          param: null,
+          verify: "复飞后误差 RMS 下降且不出现高频抖动；若出现抖动先降 D_FF",
+        },
+      ),
+    );
+  }
+
 
   // 3) D 项过激 → 降 D 或加重 D 项滤波
   if (m.dOverErr > PID_TUNING.dOverErrWarn) {

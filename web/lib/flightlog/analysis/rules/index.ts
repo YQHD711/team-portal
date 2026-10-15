@@ -16,6 +16,10 @@ import { attitudeTrackingRule } from "./attitudeTracking";
 import { pidRateTrackingRule } from "./pidRateTracking";
 import { navigatorParamsRule } from "./navigatorParams";
 import { tecsTrackingRule } from "./tecsTracking";
+// PX4 专属规则（applies_to.platform = "px4"）排在最后：
+// 在 ArduPilot 日志上会被平台门控判 not_applicable，并由前端折叠为一行汇总。
+import { px4AttitudeTrackingRule, px4RateTrackingRule, px4SaturationRule } from "./px4";
+import { px4VibrationFilterRule } from "./px4/health/vibrationFilter";
 
 export const ALL_RULES: readonly Rule[] = [
   vibrationRule,
@@ -25,6 +29,10 @@ export const ALL_RULES: readonly Rule[] = [
   pidRateTrackingRule,
   navigatorParamsRule,
   tecsTrackingRule,
+  px4RateTrackingRule,
+  px4AttitudeTrackingRule,
+  px4SaturationRule,
+  px4VibrationFilterRule,
 ];
 
 export {
@@ -35,4 +43,8 @@ export {
   pidRateTrackingRule,
   navigatorParamsRule,
   tecsTrackingRule,
+  px4RateTrackingRule,
+  px4AttitudeTrackingRule,
+  px4SaturationRule,
+  px4VibrationFilterRule,
 };
