@@ -10,9 +10,9 @@ interface ElementPanelProps {
   variant?: "side" | "strip";
 }
 
-const KINDS: ElementKind[] = ["shelf", "workbench", "cabinet", "device", "wall", "door", "window"];
+const KINDS: ElementKind[] = ["shelf", "workbench", "cabinet", "device", "pegboard", "wall", "door", "window"];
 /** 默认划分格位的类型（用于侧栏说明） */
-const CELL_KINDS: ItemType[] = ["shelf", "cabinet", "workbench"];
+const CELL_KINDS: ItemType[] = ["shelf", "cabinet", "workbench", "pegboard"];
 
 function Icon({ kind }: { kind: ElementKind }) {
   const def = ELEMENT_DEFS[kind];

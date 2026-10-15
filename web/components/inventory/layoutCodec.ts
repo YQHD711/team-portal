@@ -58,7 +58,7 @@ function normPos(v: unknown): PosElement | null {
   };
 }
 
-function normItems(v: unknown): ItemElement[] {
+function normItems(v: unknown, warnings?: string[]): ItemElement[] {
   if (!Array.isArray(v)) return [];
   const out: ItemElement[] = [];
   for (const raw of v) {
@@ -66,22 +66,26 @@ function normItems(v: unknown): ItemElement[] {
     if (!pos) continue;
     const o = raw as Record<string, unknown>;
     const type = ITEM_TYPES.find(t => t === o.type);
-    if (!type) continue;
+    if (!type) {
+      // 明确行为：未知/未来的元素类型**不静默丢弃**，记录原因（把 warnings 数组传进来即可取到）
+      warnings?.push(`未知的元素类型「${String(o.type)}」已跳过（本版本不认识，可能是更新版本写入的布局）`);
+      continue;
+    }
     // 兼容旧字段 shelfCount / positionCount → rows / cols
     out.push({
       ...pos,
       type,
       name: typeof o.name === "string" && o.name ? o.name : ELEMENT_DEFS[type].label,
       locCode: typeof o.locCode === "string" ? o.locCode : "",
-      rows: intIn(o.rows ?? o.shelfCount, 1, ROWS_MAX, type === "shelf" ? DEFAULT_ROWS : 1),
-      cols: intIn(o.cols ?? o.positionCount, 1, COLS_MAX, type === "shelf" ? DEFAULT_COLS : 1),
+      rows: intIn(o.rows ?? o.shelfCount, 1, ROWS_MAX, type === "shelf" || type === "pegboard" ? DEFAULT_ROWS : 1),
+      cols: intIn(o.cols ?? o.positionCount, 1, COLS_MAX, type === "shelf" || type === "pegboard" ? DEFAULT_COLS : 1),
     });
   }
   return out;
 }
 
 /** 解析后端 LayoutJson，损坏/缺失返回 null（调用方回退默认布局） */
-export function parseLayout(json?: string | null): RoomLayout | null {
+export function parseLayout(json?: string | null, warnings?: string[]): RoomLayout | null {
   if (!json) return null;
   try {
     const raw = JSON.parse(json) as Record<string, unknown>;
@@ -92,7 +96,7 @@ export function parseLayout(json?: string | null): RoomLayout | null {
       walls: Array.isArray(raw.walls) ? raw.walls.map(normPos).filter((e): e is PosElement => e !== null) : [],
       doors: Array.isArray(raw.doors) ? raw.doors.map(normPos).filter((e): e is PosElement => e !== null) : [],
       windows: Array.isArray(raw.windows) ? raw.windows.map(normPos).filter((e): e is PosElement => e !== null) : [],
-      items: normItems(raw.items),
+      items: normItems(raw.items, warnings),
     };
   } catch {
     return null;

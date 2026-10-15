@@ -1,5 +1,6 @@
 /** 库位平面图数据类型与元素定义（编辑器与查看器共用）；画布坐标单位统一为厘米（cm） */
 import {
+  Grid3x3,
   Boxes, Wrench, Archive, Cpu, BrickWall, DoorOpen, AppWindow,
   type LucideIcon,
 } from "lucide-react";
@@ -15,7 +16,7 @@ export interface PosElement {
   rotation: number;
 }
 
-export type ItemType = "shelf" | "workbench" | "cabinet" | "device";
+export type ItemType = "shelf" | "workbench" | "cabinet" | "device" | "pegboard";
 export type ElementKind = "wall" | "door" | "window" | ItemType;
 
 /**
@@ -81,6 +82,11 @@ export const ELEMENT_DEFS: Record<ElementKind, ElementDef> = {
     rows: 4, cols: 8, rowLabel: "层", colLabel: "位",
     hint: "俯视为占地，行列即「层 × 位」，可挂载到具体层位",
   },
+  pegboard: {
+    label: "洞洞板", icon: Grid3x3, color: "#84cc16", w: 120, h: 80,
+    rows: 6, cols: 6, rowLabel: "层", colLabel: "位",
+    hint: "挂在墙上的洞洞板：按「层 × 位」定位挂钩，可挂具体物料",
+  },
   workbench: {
     label: "工作台", icon: Wrench, color: "#a855f7", w: 160, h: 80,
     rows: 1, cols: 3, rowLabel: "排", colLabel: "区",
@@ -98,7 +104,7 @@ export const ELEMENT_DEFS: Record<ElementKind, ElementDef> = {
   },
 };
 
-export const ITEM_TYPES: ItemType[] = ["shelf", "workbench", "cabinet", "device"];
+export const ITEM_TYPES: ItemType[] = ["shelf", "workbench", "cabinet", "device", "pegboard"];
 
 /** 默认画布：900 × 600 cm（9m × 6m） */
 export const DEFAULT_CANVAS = { width: 900, height: 600 };
