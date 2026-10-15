@@ -39,6 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<StudyProgress> StudyProgresses => Set<StudyProgress>();
     public DbSet<WikiDocEdit> WikiDocEdits => Set<WikiDocEdit>();
     public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
+    public DbSet<FlightDiagnosisRecord> FlightDiagnosisRecords => Set<FlightDiagnosisRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -386,6 +387,22 @@ public class AppDbContext : DbContext
             entity.Property(t => t.Background).IsRequired().HasMaxLength(9);
             entity.Property(t => t.ElementsJson).IsRequired();
             entity.Property(t => t.UpdatedBy).HasMaxLength(100);
+        });
+
+        // ── 诊断历史（诊断功能第二轮）──
+        // 列表按"谁能看全部"过滤 CreatedByUserId、按时间倒序；fileName 用于同一日志的回看/对比。
+        modelBuilder.Entity<FlightDiagnosisRecord>(entity =>
+        {
+            entity.Property(r => r.FileName).IsRequired().HasMaxLength(300);
+            entity.Property(r => r.Vehicle).IsRequired().HasMaxLength(64);
+            entity.Property(r => r.VehicleKind).IsRequired().HasMaxLength(32);
+            entity.Property(r => r.FirmwareVersion).IsRequired().HasMaxLength(64);
+            entity.Property(r => r.CreatedBy).HasMaxLength(100);
+            entity.Property(r => r.WarningsJson).IsRequired();
+            entity.Property(r => r.FindingsJson).IsRequired();
+            entity.HasIndex(r => new { r.CreatedByUserId, r.CreatedAt });
+            entity.HasIndex(r => r.FileName);
+            entity.HasIndex(r => r.CreatedAt);
         });
     }
 }

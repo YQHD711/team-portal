@@ -185,6 +185,7 @@ builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
 builder.Services.AddHttpClient<AiClient>();
 builder.Services.AddScoped<FlightLogService>();
+builder.Services.AddScoped<FlightDiagnosisService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddHttpClient<WikiGeneratorService>();
@@ -404,6 +405,7 @@ app.MapMaterialEndpoints();
 app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
 app.MapLabelTemplateEndpoints();
+app.MapFlightDiagnosisEndpoints();
 app.MapBackupEndpoints();
 app.MapMcp("/mcp").RequireAuthorization();
 app.MapRuntimeStats();
