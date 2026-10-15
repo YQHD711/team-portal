@@ -69,7 +69,8 @@ describe("解析日志面板", () => {
   it("records === 0：给结论（可能不是 DataFlash 日志），而不是一堆 0", () => {
     render(<ParseLogPanel stats={stats({ records: 0, decodedTypes: 0, totalTypes: 0 })} />);
 
-    expect(screen.getByTestId("parse-records-zero")).toHaveTextContent("很可能不是 DataFlash 日志");
+    expect(screen.getByTestId("parse-records-zero")).toHaveTextContent(/没解析出任何记录/);
+    expect(screen.getByTestId("parse-records-zero")).toHaveTextContent(/不是本工具支持的日志格式/);
     expect(screen.getByTestId("parse-records")).toHaveTextContent("0 条记录");
   });
 

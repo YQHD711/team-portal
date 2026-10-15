@@ -19,11 +19,14 @@ export function SuggestionSteps({ suggestions }: { suggestions: readonly Suggest
             <p className="leading-relaxed">{s.text}</p>
 
             {s.param && (
-              <p data-testid="suggestion-param" className="rounded bg-surface-subtle px-2 py-1 font-mono text-[11px]">
-                {s.param.name}: <span className="text-muted">{s.param.from === null ? "未知" : s.param.from}</span>
-                {" → "}
-                <span className="font-semibold text-foreground">{s.param.to}</span>
-                {s.param.reason && <span className="ml-2 font-sans text-faint">（{s.param.reason}）</span>}
+              <p data-testid="suggestion-param"
+                className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2 py-1 text-xs">
+                <span className="font-mono font-medium">{s.param.name}</span>
+                <span className="text-muted">{s.param.from === null ? "未知" : s.param.from}</span>
+                <span className="font-semibold text-primary">→</span>
+                {/* 具体数值必须显眼：加粗、放大一号、着色 */}
+                <span data-testid="suggestion-param-to" className="font-mono text-sm font-bold text-primary">{s.param.to}</span>
+                {s.param.reason && <span className="text-[11px] text-faint">（{s.param.reason}）</span>}
               </p>
             )}
 

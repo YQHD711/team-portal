@@ -89,7 +89,7 @@ describe("诊断报告 UI", () => {
     expect(within(card).getByTestId("evidence-metrics")).toHaveTextContent("1.23");
     expect(within(card).getByTestId("evidence-steps")).toHaveTextContent("样本数");
     expect(within(card).getByTestId("suggestion-param")).toHaveTextContent("0.25");
-    expect(within(card).getByTestId("suggestion-param")).toHaveTextContent("→ 0.18");
+    expect(within(card).getByTestId("suggestion-param-to")).toHaveTextContent("0.18");
     expect(within(card).getByTestId("suggestion-verify")).toHaveTextContent("RMS 下降");
     expect(within(card).getByTestId("evidence-doc-links")).toHaveTextContent("ardupilot.org");
   });

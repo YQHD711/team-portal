@@ -103,17 +103,40 @@ test("负向对照：未通过的结论一条都不许显示「通过」，且�
   await expect(insufficient.first().getByTestId("finding-note")).toBeVisible();
 
   await expect(page.getByText(/原因[：:]/).first()).toBeVisible();
+
+  // 回归防线（线上缺口）：**任何**结论里，note 与建议都必须默认可见 ——
+  // 以前 note 只在 unknown 一侧渲染、建议藏在折叠里，于是 fired 结论上的
+  // "起点值声明 / 降落段排除依据"与参数建议整块看不见，恰恰是最需要它们的时候。
+  const statuses: Record<string, number> = {};
+  for (let i = 0; i < cardCount; i++) {
+    const card = cards.nth(i);
+    const status = (await card.getAttribute("data-status")) ?? "unknown";
+    statuses[status] = (statuses[status] ?? 0) + 1;
+
+    const note = card.getByTestId("finding-note");
+    if ((await note.count()) > 0) await expect(note.first()).toBeVisible();
+
+    const suggestions = card.getByTestId("finding-suggestions");
+    if ((await suggestions.count()) > 0) {
+      await expect(suggestions.first()).toBeVisible();
+      const to = suggestions.first().getByTestId("suggestion-param-to");
+      if ((await to.count()) > 0) await expect(to.first()).not.toBeEmpty();
+    }
+  }
+  console.log(`[e2e] 卡片状态分布：${JSON.stringify(statuses)}`);
 });
 
 test("不支持的格式：给出可读原因，而不是晦涩的解析错误", async ({ page }) => {
   await openDiagnosisTab(page);
+  // 注意：`.ulg`（PX4 ULog）**现在是支持格式**（runDiagnosis 已路由到 ulog 解析器），
+  // 所以这里改用仍然不支持的 `.tlog` 来守"给可读原因"这条线。
   await page.getByTestId("diagnosis-file-input").setInputFiles({
-    name: "flight.ulg",
+    name: "flight.tlog",
     mimeType: "application/octet-stream",
-    buffer: Buffer.from("ULog\x01\x12\x35"),
+    buffer: Buffer.from("tlog-not-dataflash"),
   });
   await expect(page.getByTestId("diagnosis-error")).toBeVisible();
-  await expect(page.getByText(/PX4 ULog/)).toBeVisible();
+  await expect(page.getByText(/遥测日志|tlog/)).toBeVisible();
 });
 
 test("垃圾字节的 .bin：不崩、不静默，仍给出结论（无法判断）", async ({ page }) => {
