@@ -26,6 +26,7 @@ import {
 } from "../rateAxisEvidence";
 import { axisParamSuffix, buildAxisFinding, PID_RULE_ID, PID_RULE_TITLE } from "./pidAxisFinding";
 import { collectRateTuning } from "../tuningAdvice";
+import { declaredPrefix, resolveRateParams } from "./rateParamNames";
 
 const PARAM_MAP = {
   rollRateP: "ATC_RAT_RLL_P",
@@ -40,28 +41,30 @@ const AXES: readonly RateAxisSpec[] = [
 ];
 
 /**
- * 速率环参数的**机型前缀**：Copter 用 `ATC_RAT_*`，固定翼用 `RLL2SRV`/`PTCH2SRV`/`YAW2SRV`
- * （实测 ArduPlane 4.6.1 就是后者）。
- * ⚠️ 写死 Copter 前缀会给固定翼推一个**不存在的参数**——这是线上验收抓到的真实缺陷。
+ * 速率环参数的**机型前缀**由 `rateParamNames.ts` 声明 + `ctx.param` 探测（task-36）：
+ *  - Copter：`ATC_RAT_RLL` / `ATC_RAT_PIT` / `ATC_RAT_YAW`
+ *  - 固定翼：`RLL_RATE` / `PTCH_RATE`（实测 ArduPlane 4.6.1；**不是** `RLL2SRV`、更没有 `ATC_RAT_*`）
+ *  - 固定翼 yaw：没有参数组（只有 `YAW_RATE_ENABLE` 开关）
+ * ⚠️ 以前这里写死 `RLL2SRV`（或 Copter 前缀）会给固定翼推**不存在的参数**——线上验收抓到的真实缺陷。
  */
-const PARAM_PREFIX: Readonly<Record<string, { roll: string; pitch: string; yaw: string }>> = {
-  copter: { roll: "ATC_RAT_RLL", pitch: "ATC_RAT_PIT", yaw: "ATC_RAT_YAW" },
-  plane: { roll: "RLL2SRV", pitch: "PTCH2SRV", yaw: "YAW2SRV" },
-};
-
-export function paramPrefixFor(
-  vehicleKind: string,
-  axis: "roll" | "pitch" | "yaw",
-): string {
-  return (PARAM_PREFIX[vehicleKind] ?? PARAM_PREFIX.copter)[axis];
+export function paramPrefixFor(vehicleKind: string, axis: "roll" | "pitch" | "yaw"): string | null {
+  return declaredPrefix(vehicleKind, axis).prefix;
 }
 
-/** 固定翼/车辆默认没有 yaw **速率**控制器：YAW2SRV_* 是协调转弯阻尼，不是速率环。 */
+/** 固定翼/车辆默认没有 yaw **速率**控制器（YAW2SRV/YAW_RATE_ENABLE 是协调转弯阻尼，不是速率环）。 */
 const NO_YAW_RATE_VEHICLES: readonly string[] = ["plane", "rover"];
 
+/**
+ * yaw 速率环是否存在：结构性判断 + **参数/数据双重确认**（task-36）。
+ * Copter/Sub 等结构性就有 yaw 速率环（缺 PIDY 日志 = 缺数据，不是"不适用"）；
+ * 固定翼/Rover 默认没有，只有探测到 yaw 速率参数组或 `YAW_RATE_ENABLE>0` 才算"有"。
+ */
 export function hasYawRateController(ctx: RuleContext): boolean {
-  if (ctx.series("PIDY") !== null) return true;
-  return !NO_YAW_RATE_VEHICLES.includes(ctx.doc.meta.vehicleKind);
+  const kind = ctx.doc.meta.vehicleKind;
+  if (!NO_YAW_RATE_VEHICLES.includes(kind)) return true;
+  if (resolveRateParams(ctx, kind, "yaw").prefix !== null) return true;
+  const enable = ctx.param("YAW_RATE_ENABLE");
+  return enable !== null && enable > 0;
 }
 
 export const pidRateTrackingRule: Rule = {
@@ -98,16 +101,18 @@ export const pidRateTrackingRule: Rule = {
     return AXES.map((spec) => {
       const ev = computeRateAxisEvidence(ctx, spec, window);
       if ("kind" in ev) {
-        // 缺 yaw 速率环 ≠ 数据缺失：固定翼就是没有这个环，如实说"不适用"而不是"缺数据"
+        // 缺 yaw 速率环 ≠ 数据缺失：固定翼就是没有这个环，如实说"不适用"而不是"缺数据"。
+        // task-36：除了"没有 PIDY 数据"，再用**参数存在性**双重确认（YAW_RATE_ENABLE / yaw 速率增益组都不存在）。
         if (spec.axis === "yaw" && !yawApplicable) {
+          const enable = ctx.param("YAW_RATE_ENABLE");
           return unknownFinding({
             ruleId: PID_RULE_ID,
             title: `${PID_RULE_TITLE}（${spec.label}）`,
             status: "not_applicable",
             axis: spec.axis,
             note:
-              `${ctx.doc.meta.vehicleKind === "rover" ? "Rover" : "固定翼"}默认没有 yaw 速率控制器` +
-              "（没有 PIDY 日志；YAW2SRV_* 是协调转弯阻尼，不是速率环），该轴不适用本检查",
+              `${ctx.doc.meta.vehicleKind === "rover" ? "Rover" : "固定翼"}没有 yaw 速率控制器：` +
+              `实测既没有 PIDY 日志，也没有 yaw 速率增益参数组（只有 YAW_RATE_ENABLE=${enable ?? "未记录"}），该轴不适用本检查`,
           });
         }
         return unknownFinding({
@@ -118,16 +123,20 @@ export const pidRateTrackingRule: Rule = {
           note: ev.detail,
         });
       }
-      const prefix = paramPrefixFor(ctx.doc.meta.vehicleKind, spec.axis);
+      const kind = ctx.doc.meta.vehicleKind;
+      const resolved = resolveRateParams(ctx, kind, spec.axis);
+      const paramNote = resolved.unavailableReason;
       return buildAxisFinding(
         ev,
-        capNote,
+        [capNote, paramNote].filter((v): v is string => typeof v === "string" && v.length > 0).join("；") || null,
         {
-          prefix,
-          p: ctx.param(`${prefix}_P`),
-          i: ctx.param(`${prefix}_I`),
-          d: ctx.param(`${prefix}_D`),
-          ff: ctx.param(`${prefix}_FF`),
+          prefix: resolved.prefix ?? "未知参数组",
+          vehicleKind: kind,
+          p: resolved.p,
+          i: resolved.i,
+          d: resolved.d,
+          ff: resolved.ff,
+          dff: resolved.dff,
         },
         collectRateTuning(ctx, spec, window),
       );

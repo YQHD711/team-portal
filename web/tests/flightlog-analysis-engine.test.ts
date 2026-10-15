@@ -20,18 +20,25 @@ import {
 } from "./helpers/flightlogScenario";
 
 describe("引擎门控与汇总", () => {
-  it("PX4 日志：ArduPilot 规则全部判不适用（架构位保留，本切片未实现 PX4 规则）", () => {
+  it("PX4 日志：ArduPilot 规则全部判不适用，PX4 规则适用（缺数据 ≠ 不适用）", () => {
     const report = analyzeLog(px4Scenario());
     // 用规则表长度而不是硬编码数字：新增规则不该让这条测试失效
-    expect(report.findings).toHaveLength(ALL_RULES.length);
-    expect(report.findings.every((f) => f.status === "not_applicable")).toBe(true);
-    expect(report.summary.unknown).toBe(ALL_RULES.length);
-    expect(report.summary.passed).toBe(0);
+    // 规则集含平台专属规则：ArduPilot 规则在 PX4 日志上判不适用，而 px4 规则本身**适用**（缺数据 ≠ 不适用）
+    const ardupilot = report.findings.filter((f) => !f.ruleId.startsWith("px4_"));
+    // 每条规则至少一条结论；适用的规则会按轴/通道产出多条，所以不能断言恰好等于规则数
+    expect(report.findings.length).toBeGreaterThanOrEqual(ALL_RULES.length);
+    expect(ardupilot).toHaveLength(7);
+    expect(ardupilot.every((f) => f.status === "not_applicable")).toBe(true);
+    const px4 = report.findings.filter((f) => f.ruleId.startsWith("px4_"));
+    expect(new Set(px4.map((f) => f.ruleId)).size).toBe(4);
+    expect(px4.every((f) => f.status !== "not_applicable")).toBe(true);
+    expect(report.summary.unknown).toBeGreaterThanOrEqual(7);
+    expect(ardupilot.every((f) => f.status !== "passed")).toBe(true);
     expect(report.findings.every((f) => (f.note ?? "").length > 0)).toBe(true);
   });
 
   it("注册表：7 条规则且 ruleId 唯一（顺序即展示顺序）", () => {
-    expect(ALL_RULES.length).toBe(7);
+    expect(ALL_RULES.length).toBe(11);
     const ids = ALL_RULES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual([
@@ -42,6 +49,10 @@ describe("引擎门控与汇总", () => {
       "pid_rate_tracking",
       "navigator_params",
       "tecs_tracking",
+      "px4_rate_tracking",
+      "px4_attitude_tracking",
+      "px4_actuator_saturation",
+      "px4_vibration_filter",
     ]);
   });
 

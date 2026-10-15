@@ -18,6 +18,8 @@ export type { UlogParseOptions, UlogParseResult } from "./parseUlog";
 export { parseUlogFile } from "./client";
 export type { ParseLogFileResult } from "./client";
 export { quatToEulerDeg, quatColumnsToEulerDeg, wrap180Deg, RAD_TO_DEG } from "./quaternion";
+// task-34 契约里写的名字是 `quatToEuler`：这里给一个同语义别名，避免下游各自造名字
+export { quatToEulerDeg as quatToEuler } from "./quaternion";
 export type { EulerDeg } from "./quaternion";
 export { parseFormatString, flattenFormat, readCString, TYPE_INFO, fieldByteSize } from "./ulogFormat";
 export type { FlatField, UlogFieldSpec, UlogMessageFormat } from "./ulogFormat";

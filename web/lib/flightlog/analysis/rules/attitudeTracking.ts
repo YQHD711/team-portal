@@ -42,16 +42,29 @@ interface AxisSpec {
   label: string;
   des: string;
   act: string;
+  /** Copter 口径的角度环 P（`ATC_ANG_*_P`） */
   param: string;
+  /** 固定翼口径：实测无 `ATC_ANG_*`，角度环是**时间常数**；空串 = 该机型没有对应参数 */
+  planeParam: string;
   wrap: boolean;
 }
 
 /** ATT 的 Des 与实际 列名；`degheading` 的 yaw 走环绕 */
 const AXES: readonly AxisSpec[] = [
-  { axis: "roll", label: "Roll", des: "DesRoll", act: "Roll", param: "ATC_ANG_RLL_P", wrap: false },
-  { axis: "pitch", label: "Pitch", des: "DesPitch", act: "Pitch", param: "ATC_ANG_PIT_P", wrap: false },
-  { axis: "yaw", label: "Yaw", des: "DesYaw", act: "Yaw", param: "ATC_ANG_YAW_P", wrap: true },
+  { axis: "roll", label: "Roll", des: "DesRoll", act: "Roll", param: "ATC_ANG_RLL_P", planeParam: "RLL2SRV_TCONST", wrap: false },
+  { axis: "pitch", label: "Pitch", des: "DesPitch", act: "Pitch", param: "ATC_ANG_PIT_P", planeParam: "PTCH2SRV_TCONST", wrap: false },
+  { axis: "yaw", label: "Yaw", des: "DesYaw", act: "Yaw", param: "ATC_ANG_YAW_P", planeParam: "", wrap: true },
 ];
+// 角度环增益的机型口径（task-36）：Copter/Rover=ATC_ANG_*_P；固定翼无该参数组（实测 4.6.1），
+// 角度环是时间常数 RLL2SRV_TCONST/PTCH2SRV_TCONST —— 语义不同；探不到只给方向（绝不给 to=0）。
+function angleGainHint(ctx: RuleContext, kind: string, spec: AxisSpec): {
+  name: string; value: number | null; plane: boolean;
+} {
+  const plane = kind === "plane" || kind === "px4-fixedwing";
+  const name = plane ? spec.planeParam : spec.param;
+  if (name.length === 0) return { name: "", value: null, plane };
+  return { name, value: ctx.param(name), plane };
+}
 
 function axisFinding(ctx: RuleContext, spec: AxisSpec): Finding {
   const subject = `${spec.label} 角度环`;
@@ -91,7 +104,7 @@ function axisFinding(ctx: RuleContext, spec: AxisSpec): Finding {
   }
 
   const time = timeAxis(ctx, "ATT", window, pair.samples);
-  const paramValue = ctx.param(spec.param);
+  const gainHint = angleGainHint(ctx, kind, spec);
   const chart = trackingChart({
     id: `${RULE_ID}-${spec.axis}`,
     title: `${spec.label} 角度环：指令 / 实际 / 误差`,
@@ -122,19 +135,31 @@ function axisFinding(ctx: RuleContext, spec: AxisSpec): Finding {
     suggestions: [
       suggestion(1, "先按振动与滤波规则确认机械与滤波是否正常（前一步未验证不做后一步）"),
       suggestion(2, `检查 ${spec.label} 轴配平/重心与舵面、电机一致性：持续单向偏差通常是机械问题，不是参数问题`),
-      suggestion(
-        3,
-        `若机械正常，再调 ${spec.param}（角度环 P）：保守从 −20% 起步，复飞后看误差 RMS 是否下降`,
-        {
-          param: {
-            name: spec.param,
-            from: paramValue,
-            to: paramValue !== null ? paramValue * 0.8 : 0,
-            reason: "角度环增益过大表现为超调与振荡；先降 P 再评估 D/FF",
-          },
-          verify: `${spec.label} 角度误差 RMS 下降 ≥30%`,
-        },
-      ),
+      gainHint.value !== null && gainHint.name.length > 0
+        ? suggestion(
+            3,
+            gainHint.plane
+              ? `若机械正常，再调 ${gainHint.name}（固定翼角度环是**时间常数**，不是 P）：保守从 −20% 起步（时间常数越大响应越慢），复飞看误差 RMS 与超调`
+              : `若机械正常，再调 ${gainHint.name}（角度环 P）：保守从 −20% 起步，复飞后看误差 RMS 是否下降`,
+            {
+              param: {
+                name: gainHint.name,
+                from: gainHint.value,
+                to: Math.round(gainHint.value * 0.8 * 10000) / 10000,
+                reason: gainHint.plane
+                  ? "固定翼实测无 ATC_ANG_* 参数组，角度环由 RLL2SRV_TCONST/PTCH2SRV_TCONST 决定；先小幅收紧再评估"
+                  : "角度环增益过大表现为超调与振荡；先降 P 再评估 D/FF",
+              },
+              verify: `${spec.label} 角度误差 RMS 下降 ≥30%`,
+            },
+          )
+        : suggestion(
+            3,
+            `若机械正常，再调角度环增益：**本次不给数值** —— 日志里没有探测到 `
+            + `${spec.param}${spec.planeParam ? ` / ${spec.planeParam}` : ""}（机型 ${kind} 的参数组名不同或未记录），`
+            + "只给方向：先从时间常数/增益的响应速度入手，并复核滤波与机械",
+            { param: null, verify: `${spec.label} 角度误差 RMS 下降 ≥30%，且不出现新的振荡` },
+          ),
     ],
   });
 }
