@@ -51,6 +51,17 @@ export const FILTER = {
 } as const;
 
 /**
+ * 角度环（外环）跟踪：ATT.Des* vs ATT.*，单位一律是**度**。
+ *
+ * ⚠️ **必须按机型 + 轴分档**：用同一份阈值管所有机型是**假红根源**。
+ * 实测（76 份语料，armed 窗口）：
+ *   Copter Roll 误差 p50 0.63° / p90 5.82°；Pitch p50 0.91° / p90 4.73°
+ *   Plane  Roll 误差 p50 **19.79°** / p90 51.3°；Pitch p50 **8.77°** / p90 19.3°
+ * 若 Plane 用 Copter 的 5/10 → **7/9 份健康固定翼日志全判 fired**（已实测）。
+ * Plane 的角误差天然大：`ATT.DesRoll ≈ CTUN.NavRoll`（经 pymavlink 独立复核，不是字段错位），
+ * 导航转弯与阵风下实际滚转滞后是常态。
+ */
+/**
  * 速率环原生单位 → deg/s。
  *
  * ArduPilot 各机型的速率控制器内部单位不同：Copter/Sub 用 rad/s，
@@ -68,3 +79,10 @@ export const RATE_UNIT_TO_DEG_PER_SEC: Readonly<Record<VehicleKind, number>> = {
   "px4-fixedwing": 1,
   unknown: 1,
 };
+/**
+ * 新阈值按职责拆到下面的文件，这里保持 barrel：
+ * 调用方仍然 import { ATTITUDE, SPEED_POSITION, TECS } from "../thresholds"；
+ * 好处是拆分不会扩散成几十处 import 改动。
+ */
+export * from "./thresholdsTracking";
+export * from "./thresholdsTecs";

@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { analyzeLog, sortFindings, summarize } from "@/lib/flightlog/analysis/engine";
+import { ALL_RULES } from "@/lib/flightlog/analysis/rules";
 import type { Rule } from "@/lib/flightlog/types/rule";
 import type { Severity } from "@/lib/flightlog/types/report";
 import { healthyVibe } from "./helpers/flightlogFixture";
@@ -21,11 +22,27 @@ import {
 describe("引擎门控与汇总", () => {
   it("PX4 日志：ArduPilot 规则全部判不适用（架构位保留，本切片未实现 PX4 规则）", () => {
     const report = analyzeLog(px4Scenario());
-    expect(report.findings).toHaveLength(3);
+    // 用规则表长度而不是硬编码数字：新增规则不该让这条测试失效
+    expect(report.findings).toHaveLength(ALL_RULES.length);
     expect(report.findings.every((f) => f.status === "not_applicable")).toBe(true);
-    expect(report.summary.unknown).toBe(3);
+    expect(report.summary.unknown).toBe(ALL_RULES.length);
     expect(report.summary.passed).toBe(0);
     expect(report.findings.every((f) => (f.note ?? "").length > 0)).toBe(true);
+  });
+
+  it("注册表：7 条规则且 ruleId 唯一（顺序即展示顺序）", () => {
+    expect(ALL_RULES.length).toBe(7);
+    const ids = ALL_RULES.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual([
+      "vibration_level",
+      "filter_notch",
+      "speed_position_tracking",
+      "attitude_tracking",
+      "pid_rate_tracking",
+      "navigator_params",
+      "tecs_tracking",
+    ]);
   });
 
   it("结论按严重程度排序，且统计数与条数一致", () => {

@@ -35,31 +35,41 @@ const TIMEOUT = 900_000;
 
 describe.skipIf(ROOT === null)("flightlog 真实语料对照（76 个 .bin，需 FLIGHTLOG_CORPUS_DIR）", () => {
   // 76 个文件解析一次、三组断言共用（惰性：只在 it 体内触发）
-  let cache: FileReport[] | null = null;
-  function reports(): FileReport[] {
-    if (cache) return cache;
-    const root = ROOT as string;
-    cache = manifest.files.map((entry) => compareFile(entry, root));
-    console.log(`\n${formatSummary(cache)}\n`);
-    const sum = (pick: (r: FileReport) => number): number => cache!.reduce((s, r) => s + pick(r), 0);
-    console.log(`[corpus] ${cache.length} 个日志 / ${(sum((r) => r.bytes) / 1e6).toFixed(0)} MB / `
-      + `${sum((r) => r.records)} 条记录 → TS 合计 ${sum((r) => r.ms).toFixed(0)} ms`
-      + `（pymavlink 合计 ${sum((r) => r.pymavlinkMs).toFixed(0)} ms）`);
-    console.log(`[corpus] 覆盖度：decodedTypes == types 全部成立 `
-      + `${cache.every((r) => r.decodedTypes === r.types)}；有 warning 的文件 ${cache.filter((r) => r.warnings > 0).length} 个`);
-    const tails = cache.filter((r) => r.skippedBytes !== 0);
-    console.log(`[corpus] 跳过字节非 0 的文件 ${tails.length} 个（全部为末尾半条记录）：`);
-    for (const r of tails) {
-      console.log(`[corpus]   ${r.file}: skipped=${r.skippedBytes}B 截断尾巴=${r.truncatedBytes}B`);
+  // ⚠️ 必须 async + 每 5 个文件 yield 一次：同步跑完 926 MB 会把 vitest worker 的 RPC 心跳卡超时
+  // （实测 `[vitest-worker]: Timeout calling "onTaskUpdate"` → 整轮 exit 1）。
+  let cache: Promise<FileReport[]> | null = null;
+  function reports(): Promise<FileReport[]> {
+    if (!cache) {
+      const root = ROOT as string;
+      cache = (async () => {
+        const all: FileReport[] = [];
+        for (let i = 0; i < manifest.files.length; i += 1) {
+          all.push(compareFile(manifest.files[i], root));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        console.log(`\n${formatSummary(all)}\n`);
+        const sum = (pick: (r: FileReport) => number): number => all.reduce((s, r) => s + pick(r), 0);
+        console.log(`[corpus] ${all.length} 个日志 / ${(sum((r) => r.bytes) / 1e6).toFixed(0)} MB / `
+          + `${sum((r) => r.records)} 条记录 → TS 合计 ${sum((r) => r.ms).toFixed(0)} ms`
+          + `（pymavlink 合计 ${sum((r) => r.pymavlinkMs).toFixed(0)} ms）`);
+        console.log(`[corpus] 覆盖度：decodedTypes == types 全部成立 `
+          + `${all.every((r) => r.decodedTypes === r.types)}；有 warning 的文件 ${all.filter((r) => r.warnings > 0).length} 个`);
+        const tails = all.filter((r) => r.skippedBytes !== 0);
+        console.log(`[corpus] 跳过字节非 0 的文件 ${tails.length} 个（全部为末尾半条记录）：`);
+        for (const r of tails) {
+          console.log(`[corpus]   ${r.file}: skipped=${r.skippedBytes}B 截断尾巴=${r.truncatedBytes}B`);
+        }
+        const outFile = join(mkdtempSync(join(tmpdir(), "flightlog-corpus-")), "corpus-report.json");
+        writeFileSync(outFile, JSON.stringify({ root, reports: all }, null, 2));
+        console.log(`[corpus] 明细已写入 ${outFile}`);
+        return all;
+      })();
     }
-    const outFile = join(mkdtempSync(join(tmpdir(), "flightlog-corpus-")), "corpus-report.json");
-    writeFileSync(outFile, JSON.stringify({ root, reports: cache }, null, 2));
-    console.log(`[corpus] 明细已写入 ${outFile}`);
     return cache;
   }
 
-  it("全部 76 个日志与 pymavlink 黄金清单逐项一致（全部消息条数/横幅/机型/版本/参数数/覆盖度）", { timeout: TIMEOUT }, () => {
-    const all = reports();
+  it("全部 76 个日志与 pymavlink 黄金清单逐项一致（全部消息条数/横幅/机型/版本/参数数/覆盖度）", { timeout: TIMEOUT }, async () => {
+    const all = await reports();
     const problems = all.flatMap((r) => r.problems.map((p) => `${r.file}: ${p}`));
 
     expect(problems).toEqual([]);

@@ -43,7 +43,13 @@ export function makeFinding(init: FindingInit): Finding {
   };
 }
 
-/** 数据不足 / 不适用 / 缺消息时的统一构造：severity 必须是 unknown。 */
+/**
+ * 数据不足 / 不适用 / 缺消息时的统一构造：severity 必须是 unknown。
+ *
+ * ⚠️ `axis` 必须能传进来：分轴规则在"无法判断/不适用"时同样要带上轴，
+ * 否则 UI 无法按轴分组，而 `Finding.axis` 的语义会变成"只有判定成功时才有"——
+ * 那样"Pitch 无法判断"和"Yaw 不适用"在报告里就只剩标题里的一行字。
+ */
 export function unknownFinding(args: {
   ruleId: string;
   title: string;
@@ -52,12 +58,14 @@ export function unknownFinding(args: {
     "not_applicable" | "checked_but_not_supported" | "missing_required" | "insufficient_data"
   >;
   note: string;
+  axis?: Finding["axis"];
 }): Finding {
   return makeFinding({
     ruleId: args.ruleId,
     title: args.title,
     severity: "unknown",
     status: args.status,
+    axis: args.axis ?? null,
     phenomenon: "未能完成检查",
     impact: "无法判断该方面是否存在问题，不代表通过",
     note: args.note,
