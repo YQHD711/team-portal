@@ -78,8 +78,10 @@ export function buildDiagnosisRecord(result: DiagnosisResult): FlightDiagnosisIn
     vehicleKind: meta.vehicleKind,
     firmwareVersion: meta.firmwareVersion,
     versionNumeric: meta.versionNumeric,
-    parseMs: parseStats.parseMs,
-    analyzeMs: parseStats.analyzeMs,
+    // ⚠️ 必须取整：parseStats 里的毫秒是 performance.now() 差值（小数，线上实测 69.89999999990687）。
+    // 契约里这两个字段是整数毫秒；服务端虽已按 double 容错，载荷也要如实取整。
+    parseMs: Math.round(parseStats.parseMs),
+    analyzeMs: Math.round(parseStats.analyzeMs),
     decodedTypes: parseStats.decodedTypes,
     totalTypes: parseStats.totalTypes,
     critical: report.summary.critical,

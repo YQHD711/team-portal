@@ -72,7 +72,7 @@ test("真 .bin 切片：全链路跑通并出首屏报告（不是「尚未接�
   console.log(`[e2e] 首屏报告渲染完成；console.error=${consoleErrors.length} 条`);
 });
 
-test("负向对照：数据不足时一条都不许显示「通过」，且必须给出原因", async ({ page }) => {
+test("负向对照：未通过的结论一条都不许显示「通过」，且必须给出原因", async ({ page }) => {
   await openDiagnosisTab(page);
   await page.getByTestId("diagnosis-file-input").setInputFiles(SLICE);
   await expect(page.getByTestId("diagnosis-report")).toBeVisible({ timeout: 30_000 });
@@ -90,16 +90,18 @@ test("负向对照：数据不足时一条都不许显示「通过」，且必�
     if (status !== "passed") {
       // 未通过的一律不能带"通过"等级徽标
       expect(severity).not.toBe("通过");
+      // 而且必须给出原因，不能只丢一个"未知"
+      await expect(card.getByTestId("finding-note")).toBeVisible();
     }
   }
 
-  // 切片只有约 3.7 s 数据（VIBE/PID 各 37 条，低于规则最小样本门槛）
-  // → 必须**全部**落在"无法判断"一侧，一条"通过"都不该有
-  const passed = await page.locator('[data-testid="finding-card"][data-status="passed"]').count();
-  expect(passed).toBe(0);
+  // 切片只有约 3.7 s 数据（VIBE/PID 各 37 条，低于最小样本门槛）→ 必须真的存在"数据不足"的结论。
+  // 注意：**不能**再断言"一条通过都没有** —— 参数类规则（如导航器参数）在短切片上照样可以判通过，
+  // 那是正确行为。本用例守的是"未通过的不得显示为通过"，不是"不许有通过"。
+  const insufficient = page.locator('[data-testid="finding-card"][data-status="insufficient_data"]');
+  expect(await insufficient.count()).toBeGreaterThan(0);
+  await expect(insufficient.first().getByTestId("finding-note")).toBeVisible();
 
-  // 缺数据的结论必须带原因说明（不允许只给个"未知"）
-  await expect(page.getByTestId("finding-note").first()).toBeVisible();
   await expect(page.getByText(/原因[：:]/).first()).toBeVisible();
 });
 

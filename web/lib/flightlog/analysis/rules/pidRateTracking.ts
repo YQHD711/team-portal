@@ -13,24 +13,18 @@
  *
  * 另一个实测教训：悬停飞行时指令角速度极小（quad 实测 roll Tar RMS 仅 3.2 deg/s），
  * 此时 Err/Tar 天然 > 1。若不设激励门槛，会对**健康日志误报**——这是必须避免的失败模式。
+ * （注：这个门槛是**比值判据**的补丁；绝对量判据不该有它，见契约 §0.5.7 原则一。）
  */
 
-import type { ChartRequest, Finding } from "../../types/report";
 import type { Rule, RuleContext } from "../../types/rule";
-import type { TimeWindow } from "../../types/log";
-import { makeFinding, suggestion, unknownFinding } from "../finding";
+import { unknownFinding } from "../finding";
 import { longestWindow } from "../windows";
 import {
   computeRateAxisEvidence,
   spectrumCapabilityNote,
-  type RateAxisEvidence,
   type RateAxisSpec,
 } from "../rateAxisEvidence";
-import { PID_RATE } from "../thresholds";
-
-const RULE_ID = "pid_rate_tracking";
-const TITLE = "速率环跟踪质量";
-const DOC = "https://ardupilot.org/copter/docs/tuning-process-instructions.html";
+import { buildAxisFinding, PID_RULE_ID, PID_RULE_TITLE } from "./pidAxisFinding";
 
 const PARAM_MAP = {
   rollRateP: "ATC_RAT_RLL_P",
@@ -44,106 +38,6 @@ const AXES: readonly RateAxisSpec[] = [
   { axis: "yaw", message: "PIDY", label: "Yaw", paramName: PARAM_MAP.yawRateP },
 ];
 
-function chartsFor(spec: RateAxisSpec, window: TimeWindow): ChartRequest[] {
-  return [
-    {
-      id: `${RULE_ID}-${spec.axis}`,
-      kind: "timeseries",
-      title: `${spec.label} 速率环：指令 / 实际 / 误差`,
-      signals: [
-        { series: spec.message, field: "Tar", label: "指令 Tar" },
-        { series: spec.message, field: "Act", label: "实际 Act" },
-        { series: spec.message, field: "Err", label: "误差 Err" },
-      ],
-      window,
-      thresholds: [],
-      peakMarkers: [],
-      highlightWindow: null,
-      spectrum: null,
-    },
-  ];
-}
-
-function buildAxisFinding(
-  ev: RateAxisEvidence,
-  capNote: string | null,
-  currentP: number | null,
-): Finding {
-  const title = `${TITLE}（${ev.spec.label}）`;
-  const charts = chartsFor(ev.spec, ev.window);
-  const common = {
-    ruleId: RULE_ID,
-    title,
-    axis: ev.spec.axis,
-    window: ev.window,
-    evidence: ev.evidence,
-    metrics: ev.metrics,
-    docLinks: [DOC],
-    charts,
-    note: capNote,
-  };
-
-  if (!ev.excited) {
-    return makeFinding({
-      ...common,
-      severity: "unknown",
-      status: "insufficient_data",
-      phenomenon: `本次飞行 ${ev.spec.label} 轴指令过小：Tar RMS 仅 ${ev.tarRmsDegPerSec.toFixed(2)} deg/s（门槛 ${PID_RATE.minExcitationDegPerSec} deg/s），无法评价跟踪质量`,
-      impact: "无法判断该轴跟踪是否正常，不代表通过",
-      note: `指令激励 ${ev.tarRmsDegPerSec.toFixed(2)} deg/s 低于评估门槛 ${PID_RATE.minExcitationDegPerSec} deg/s：激励不足时 Err/Tar 天然可大于 1，因此不做判定，结果不代表通过。${capNote ?? ""}`.trim(),
-    });
-  }
-
-  const severity =
-    ev.ratio >= PID_RATE.errRatioCritical
-      ? "critical"
-      : ev.ratio >= PID_RATE.errRatioWarning
-        ? "warning"
-        : "ok";
-
-  if (severity === "ok") {
-    return makeFinding({
-      ...common,
-      severity: "ok",
-      status: "passed",
-      phenomenon: `${ev.spec.label} 轴跟踪良好：Err/Tar = ${ev.ratio.toFixed(3)}（指令 RMS ${ev.tarRmsDegPerSec.toFixed(2)} deg/s）`,
-      impact: "速率环能够跟随指令，不构成姿态控制风险",
-    });
-  }
-
-  const extraNote =
-    severity === "critical" && ev.sampleRateHz !== null && ev.sampleRateHz < 20
-      ? `高增益振荡通常表现为高频抖动，本次记录率不足以致命；若怀疑高频振荡请开启 INS_LOG_BAT_MASK=1 后复飞。${capNote ?? ""}`.trim()
-      : capNote;
-
-  return makeFinding({
-    ...common,
-    note: extraNote,
-    severity,
-    status: "fired",
-    phenomenon: `${ev.spec.label} 轴跟踪偏差偏大：Err/Tar = ${ev.ratio.toFixed(3)}（Err RMS ${ev.errRms.toFixed(4)} ${ev.unit}，指令 RMS ${ev.tarRmsDegPerSec.toFixed(2)} deg/s）`,
-    impact:
-      "跟踪偏差会直接表现为姿态抖动与定位精度下降，并随参数与机械状态恶化而放大",
-    suggestions: [
-      suggestion(1, "确认滤波配置（按滤波规则给出的顺序，前一步未验证不做后一步）"),
-      suggestion(
-        2,
-        `降低 ${ev.spec.label} 轴速率环 P（保守从 -20% 起步），复飞后再按误差 RMS 变化继续调整`,
-        {
-          param: {
-            name: ev.spec.paramName,
-            from: currentP,
-            to: currentP !== null ? currentP * 0.8 : 0,
-            reason: "跟踪误差偏大时优先降低 P；若降 P 后误差反而增大，再考虑 D/FF",
-          },
-          verify: `${ev.spec.label} 轴 rate error RMS 下降 ≥30%`,
-        },
-      ),
-      suggestion(3, "若仍不跟踪，检查重心 / 推力不对称（I 项饱和方向）与舵面、电机一致性"),
-    ],
-  });
-}
-
 /** 固定翼/车辆默认没有 yaw **速率**控制器：YAW2SRV_* 是协调转弯阻尼，不是速率环。 */
 const NO_YAW_RATE_VEHICLES: readonly string[] = ["plane", "rover"];
 
@@ -153,8 +47,8 @@ export function hasYawRateController(ctx: RuleContext): boolean {
 }
 
 export const pidRateTrackingRule: Rule = {
-  id: RULE_ID,
-  title: TITLE,
+  id: PID_RULE_ID,
+  title: PID_RULE_TITLE,
   category: "pid",
   appliesTo: [
     {
@@ -174,8 +68,8 @@ export const pidRateTrackingRule: Rule = {
     if (!window) {
       return [
         unknownFinding({
-          ruleId: RULE_ID,
-          title: TITLE,
+          ruleId: PID_RULE_ID,
+          title: PID_RULE_TITLE,
           status: "insufficient_data",
           note: "没有可用的飞行（arm）时间段，无法评估速率环跟踪质量",
         }),
@@ -189,8 +83,8 @@ export const pidRateTrackingRule: Rule = {
         // 缺 yaw 速率环 ≠ 数据缺失：固定翼就是没有这个环，如实说"不适用"而不是"缺数据"
         if (spec.axis === "yaw" && !yawApplicable) {
           return unknownFinding({
-            ruleId: RULE_ID,
-            title: `${TITLE}（${spec.label}）`,
+            ruleId: PID_RULE_ID,
+            title: `${PID_RULE_TITLE}（${spec.label}）`,
             status: "not_applicable",
             axis: spec.axis,
             note:
@@ -199,8 +93,8 @@ export const pidRateTrackingRule: Rule = {
           });
         }
         return unknownFinding({
-          ruleId: RULE_ID,
-          title: `${TITLE}（${spec.label}）`,
+          ruleId: PID_RULE_ID,
+          title: `${PID_RULE_TITLE}（${spec.label}）`,
           status: ev.kind === "missing" ? "missing_required" : "insufficient_data",
           axis: spec.axis,
           note: ev.detail,
