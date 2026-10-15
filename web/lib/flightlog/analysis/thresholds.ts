@@ -10,6 +10,40 @@
 
 import type { VehicleKind } from "../types/log";
 
+/**
+ * 速率环**调参取证**的判据与分级门槛。
+ *
+ * 实测 76 份真实语料（仅统计高指令样本 |Tar| ≥ 0.3·RMS）：
+ *   Err/Tar        : p10 0.044 / p25 0.209 / **p50 0.575** / p75 0.967 / p90 1.121
+ *   Tar→Act 滞后    : p25 1 / **p50 2**（10 Hz 记录 = 200 ms）/ p75 5 / p90 10 个采样
+ *   |mean(I)|/IMAX : p50 0.029 / p90 0.201
+ *   RMS(D)/RMS(Err): p50 0.030 / p90 0.507
+ *
+ * 中位数那一行是自洽的：0.5 Hz 指令 + 200 ms 纯延迟 → 误差 ≈ 2π×0.5×0.2 = 0.63 ≈ 实测 0.58。
+ * **结论：这批日志的速率环误差主要由相位滞后贡献，不是 P 不够** ——
+ * 所以建议里 FF 排在 P 之前（前馈不引入相位滞后，加 P 会）。
+ */
+export const PID_TUNING = {
+  /** 高低指令分界：只有 |Tar| ≥ 该比例 × RMS(Tar) 的样本才计入比值统计（否则低指令时段放大比值） */
+  highCommandFraction: 0.3,
+  /** 滞后显著的门槛（采样数）：≥1 即认为存在可补偿的滞后 */
+  lagSignificantSamples: 1,
+  maxLagSamples: 10,
+  /** FF 起点值上限：不超过 P 增益的 60%（再高就是前馈主导，模型误差有风险） */
+  ffMaxRatioOfP: 0.6,
+  /** RMS(D项)/RMS(Err) 超过该值说明 D 在放大噪声 */
+  dOverErrWarn: 0.5,
+  /** |mean(I)|/IMAX 超过该值要先查重心/推力对称性 */
+  iBiasWarn: 0.15,
+  /** 求不出指令主频时的兜底频率（Hz） */
+  defaultDominantHz: 0.5,
+  /**
+   * 跟踪质量分级（仅高指令样本的 Err/Tar），按实测分位数定档：
+   * A < 0.20（≈p25，紧跟）、B < 0.40、C < 0.70、D ≥ 0.70（≈p70，明显滞后）
+   */
+  gradeBands: { aMax: 0.2, bMax: 0.4, cMax: 0.7 },
+} as const;
+
 export const VIBRATION = {
   /** ArduPilot 官方：Vibe 理想 < 15 m/s² */
   stdWarning: 15,
