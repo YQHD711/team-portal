@@ -1,6 +1,8 @@
 "use client";
 
-/** 房间平面图编辑器：工具栏/元素面板/画布/物料面板，管理历史与保存；物料支持拖拽与点选挂载、格位详情 */
+/** 房间平面图编辑器：工具栏/元素面板/画布/物料面板，管理历史与保存；物料支持拖拽与点选挂载、格位详情。
+ * ⚠️ 真机事实（e2e 必踩）：**调色板只在「编辑平面图」模式下渲染**；非编辑模式页面上只有
+ * `楼层概览 / 编辑平面图 / 连线关 / 物料清单`，找不到任何元素按钮 —— e2e 必须先点「编辑平面图」。 */
 import { useCallback, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ElementKind, ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
@@ -17,6 +19,8 @@ import { ConnectionLines } from "./ConnectionLines";
 import { useMountingState } from "./useMountingState";
 import { PropertyDialog } from "./PropertyPanel";
 import { usePlannerShortcuts } from "./usePlannerShortcuts";
+import { usePlannerClipboard } from "./usePlannerClipboard";
+import { CodeGenButton } from "./CodeGenButton";
 import { historyReducer, removeElem } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
 
@@ -82,7 +86,8 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     return [...cur.walls, ...cur.doors, ...cur.windows, ...cur.items].find(e => e.id === id) ?? null;
   };
 
-  usePlannerShortcuts(selected, undo, redo, deleteSelected);
+  const { copy, paste } = usePlannerClipboard(layout, selected ? [selected] : [], commit, setSelected, setMsg);
+  usePlannerShortcuts(selected, undo, redo, deleteSelected, copy, paste);   // Ctrl+C/V/Z 共用焦点守卫
 
   // ── 物料挂载/卸下：PUT locationCode 后按响应刷新列表与画布热点 ──
   const mountMaterial = async (id: number, code: string) => {
@@ -147,6 +152,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
 
   return (
     <div className="space-y-3">
+      <CodeGenButton layout={layout} materials={items} roomCode={row.roomCode} onApply={commit} />
       <PlannerToolbar
         roomCode={row.roomCode} roomName={roomName} onRoomName={setRoomName}
         width={layout.width} height={layout.height}
