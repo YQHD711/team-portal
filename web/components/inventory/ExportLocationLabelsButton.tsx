@@ -10,7 +10,7 @@
  * 复用：`elementCells`（既有几何）+ `buildLocationLabelsPdf`（既有 PDF 能力，含模板驱动页面尺寸）。
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ItemElement, RoomLayout } from "./layoutTypes";
 import { usesCells } from "./layoutTypes";
@@ -18,7 +18,7 @@ import { elementCells } from "./elementGeometry";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
 import { chooseExportTemplate } from "@/lib/labelSuitability";
 import { progressText } from "@/lib/locationLabelPdf";
-import { buildLocationLabelsVectorPdf } from "@/lib/locationLabelVector";
+import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import {
   buildLocationLabelsPdf, collectLocationSlots, describeBatch, downloadPdf, labelFileName,
 } from "@/lib/locationLabelPdf";
@@ -42,6 +42,7 @@ export function roomLocationCodes(items: readonly ItemElement[]): { name: string
 export function ExportLocationLabelsButton({ layout, roomName, template: override }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const lastProgressAt = useRef(0);   // 进度节流用（见 onProgress 注释）
   // 团队默认模板（管理员可在设计器里改尺寸）→ 导出页面尺寸随之变化；接口不可用时**降级**用内置默认（不阻塞导出）
   const [template, setTemplate] = useState<LabelTemplate>(override ?? DEFAULT_TEMPLATE);
   useEffect(() => {
@@ -60,13 +61,26 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     if (slots.length === 0) { setMsg("本屋没有可导出的库位（都未指定库位）"); return; }
     if (!confirm(describeBatch(slots, skipped))) return;
     setBusy(true);
+    // ⚠️ 导出边界：**绝不允许静默产出扫不出的标签**（编码过长 + 模板 dpi 太低 → 每模块像素不足）
+    const bad = await findUnscannableCodes(slots, template).catch(() => [] as string[]);
+    if (bad.length > 0 && !confirm(unscannableWarning(bad, template))) { setBusy(false); setMsg("已取消导出：编码过长，建议提高模板 dpi 或缩短编码"); return; }
     // ⚠️ **点击后立刻反馈**：首次导出要 await import() jsPDF + qrcode-generator（几百 KB chunk），
     // 冷启动这段"什么都不显示"的等待最容易被用户当成"点了没反应"。
     setMsg("正在准备生成组件…");
     try {
       // 结构优化：文字走 PDF 矢量、只光栅二维码小图（单价从 ~48ms 降下来；页面尺寸仍=模板尺寸）
       const bytes = await buildLocationLabelsVectorPdf(slots, template, {
-        onProgress: (done, total) => setMsg(`正在生成 ${done}/${total}…`),   // 进度可见（大房间时用户知道还在动）
+        // ⚠️ **进度节流**：setMsg 是 RoomPlanner 的 state → 每次更新都会重渲染整个编辑器（含 Konva 画布）。
+        // 270 张 / chunkSize 2 = 135 次进度 → 135 次重渲染；真实房间里这就是"点下去就开始卡"的来源。
+        // 时间节流后 ≤4 次/秒（≈10 次），画布不再被进度轰炸。
+        // 【实验1·临时】关掉进度上报：验证"每块的长任务是否由 setMsg→重渲染 造成"
+        // ⚠️ **进度节流**：setMsg 是 RoomPlanner 的 state → 每次更新都会重渲染编辑器（含 Konva 画布）。
+        onProgress: (done, total) => {
+          const now = Date.now();
+          if (done < total && now - lastProgressAt.current < 250) return;
+          lastProgressAt.current = now;
+          setMsg(progressText(done, total));
+        },
       });
       downloadPdf(bytes, labelFileName(roomName));
       setMsg(`已导出 ${slots.length} 张库位标签（跳过 ${skipped} 个未指定库位）`);
