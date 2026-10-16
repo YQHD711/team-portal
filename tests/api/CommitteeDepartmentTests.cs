@@ -14,22 +14,29 @@ namespace api;
 /// （部长只能管/看本部门、物料按部门流转、Wiki 按 TargetFolder 比对部门名）。
 /// 给管理员塞一个部门，只要有一处忘了先按 role 短路，就会悄悄改变管理员的权限。
 /// </summary>
-public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Program>>
+public class CommitteeDepartmentTests
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    // 保活：host 必须在测试期间活着。若只 `_ = Client(dbPath)` 丢弃引用，
+    // factory 可能被 GC，启动种子还没跑完就被回收 → 查询拿到空集（实测的随机红之一）。
+    private readonly List<WebApplicationFactory<Program>> _hosts = [];
 
-    public CommitteeDepartmentTests(WebApplicationFactory<Program> factory) => _factory = factory;
-
-    private HttpClient Client(string dbPath) => _factory.WithWebHostBuilder(b =>
+    // ⚠️ 每次调用都新建 factory：用 class fixture 时 host 会被缓存，`UseSetting` 的 dbPath 被忽略，
+    // 于是"本次 dbPath"其实没被迁移/播种 → 查询拿到空集（本仓库实测：与其它测试并行时随机红）
+    private HttpClient Client(string dbPath)
     {
-        b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
-        b.UseSetting("Jwt:Key", new string('k', 40));
-        b.UseSetting("Jwt:Issuer", "TeamPortal");
-        b.UseSetting("Jwt:Audience", "TeamPortal");
-        // 让启动时的 SeedAdmin 真的建出管理员 —— 管理委员会的分配正是在那之后跑的
-        b.UseSetting("Admin:Username", "boss");
-        b.UseSetting("Admin:Password", "pw123456");
-    }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var factory = new WebApplicationFactory<Program>();
+        _hosts.Add(factory);   // 保活到测试结束
+        return factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
+            b.UseSetting("Jwt:Key", new string('k', 40));
+            b.UseSetting("Jwt:Issuer", "TeamPortal");
+            b.UseSetting("Jwt:Audience", "TeamPortal");
+            // 让启动时的 SeedAdmin 真的建出管理员 —— 管理委员会的分配正是在那之后跑的
+            b.UseSetting("Admin:Username", "boss");
+            b.UseSetting("Admin:Password", "pw123456");
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    }
 
     private static DbContextOptions<AppDbContext> Options(string dbPath)
         => new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;

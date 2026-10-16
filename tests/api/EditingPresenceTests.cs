@@ -14,6 +14,10 @@ namespace api;
 /// 「谁正在编辑房间」在线状态：心跳可见、**过期自动消失**（否则会出现幽灵编辑者）、
 /// 离开/保存后立刻清除。服务层用注入时间做确定性验证，端点层用短 TTL 走真实 HTTP。
 /// </summary>
+<<<<<<< Updated upstream
+=======
+[Collection(SerializedCollection.Name)]   // 独占执行：避免与其它测试类并行时互相干扰（见 SerializedCollection）
+>>>>>>> Stashed changes
 public class EditingPresenceTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
@@ -81,7 +85,11 @@ public class EditingPresenceTests : IClassFixture<WebApplicationFactory<Program>
     public async Task Endpoints_HeartbeatThenPollThenLeave_AndTtlExpiry()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"tp-presence-{Guid.NewGuid():N}.db");
+<<<<<<< Updated upstream
         var factory = _factory.WithWebHostBuilder(b =>
+=======
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+>>>>>>> Stashed changes
         {
             b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
             b.UseSetting("Jwt:Key", TestToken.JwtKey);
@@ -93,6 +101,7 @@ public class EditingPresenceTests : IClassFixture<WebApplicationFactory<Program>
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         var opts = new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+<<<<<<< Updated upstream
         await using (var seed = new AppDbContext(opts))
         {
             seed.Database.Migrate();
@@ -106,6 +115,26 @@ public class EditingPresenceTests : IClassFixture<WebApplicationFactory<Program>
         var created = await client.PostAsJsonAsync("/api/storage/layouts", new
         {
             roomCode = "1096", roomName = "在线状态房", floor = 1, cabinetCount = 1, shelfCount = 1, positionCount = 1
+=======
+        int userId;
+        await using (var seed = new AppDbContext(opts))
+        {
+            seed.Database.Migrate();
+            // ⚠️ 不要写死 Id：应用启动种子先占用了 Id=1（admin），写死会撞 UNIQUE(Users.Id)
+            var editor = new User { Username = "editor-" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Role = "admin" };
+            seed.Users.Add(editor);
+            await seed.SaveChangesAsync();
+            userId = editor.Id;
+        }
+
+        // 不调登录接口（限流 5 次/60 秒/IP，会让并行测试互相打成 429），直接签发 token
+        client.DefaultRequestHeaders.Authorization = new("Bearer", TestToken.Make(userId, "editor", "admin"));
+
+        var created = await client.PostAsJsonAsync("/api/storage/layouts", new
+        {
+            roomCode = "880" + Guid.NewGuid().ToString("N")[..3].Replace("a","1").Replace("b","2").Replace("c","3").Replace("d","4").Replace("e","5").Replace("f","6"),   // 纯数字且唯一
+            roomName = "在线状态房", floor = 1, cabinetCount = 1, shelfCount = 1, positionCount = 1
+>>>>>>> Stashed changes
         });
         var layout = await created.Content.ReadFromJsonAsync<StorageLayout>();
 

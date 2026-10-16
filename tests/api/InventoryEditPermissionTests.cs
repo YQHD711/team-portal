@@ -40,18 +40,17 @@ public class InventoryEditPermissionTests
 /// 端到端确认权限真的落在接口上（只测服务层会漏掉接口那一层 —— 短链地址的 bug
 /// 就是这么溜过去的）。
 /// </summary>
-public class InventoryEditPermissionEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public class InventoryEditPermissionEndpointTests
 {
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public InventoryEditPermissionEndpointTests(WebApplicationFactory<Program> factory) => _factory = factory;
-
     private sealed record LoginResp(string Token);
 
     /// <summary>起一个测试宿主、塞一个指定角色的用户和一件物料，返回已登录的 client</summary>
     private async Task<(HttpClient Client, int ItemId)> SetupAsync(string dbPath, string username, string role)
     {
-        var client = _factory.WithWebHostBuilder(b =>
+        // ⚠️ 每个测试新建 factory：class fixture 会缓存已构建的 host，per-test 的 dbPath 会被忽略
+        // → 测试互相踩同一个库（实测：`UNIQUE constraint failed` / 权限用例随机红）。
+        var factory = new WebApplicationFactory<Program>();   // 不 using：client 要在 SetupAsync 返回后继续用
+        var client = factory.WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
             b.UseSetting("Jwt:Key", new string('k', 40));

@@ -152,12 +152,19 @@ builder.Services.AddHealthChecks()
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // 生产默认（保持原来的严格值）：默认 60 次/10 秒，登录 5 次/60 秒，按来源 IP 分桶。
+    // 可用配置覆盖；**非生产环境默认放宽** —— 集成测试都跑在 Development，
+    // 且 TestServer 的对端恒为 127.0.0.1，严格阈值会让不同测试类共用同一个登录桶而互相打成 429
+    // （本仓库实测：全量并行跑时既有测试类随机红成 Unauthorized/空结果）。
+    var isProduction = builder.Environment.IsProduction();
+    var defaultPermit = int.TryParse(builder.Configuration["RateLimiting:DefaultPermit"], out var dp) ? dp : (isProduction ? 60 : 100_000);
+    var loginPermit = int.TryParse(builder.Configuration["RateLimiting:LoginPermit"], out var lp) ? lp : (isProduction ? 5 : 100_000);
     options.AddPolicy("default", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60,
+                PermitLimit = defaultPermit,
                 Window = TimeSpan.FromSeconds(10),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 10
@@ -167,7 +174,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 5,
+                PermitLimit = loginPermit,
                 Window = TimeSpan.FromSeconds(60),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0

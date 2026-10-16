@@ -40,20 +40,20 @@ internal sealed class FakeRemoteIpStartupFilter : IStartupFilter
 /// 断言直接看到 OperationLogs 表本身（而不是只看 200/404）：接口通了但审计没写，
 /// 只看状态码是测不出来的。
 /// </summary>
-public class InventoryQueryAuditTests : IClassFixture<WebApplicationFactory<Program>>
+public class InventoryQueryAuditTests
 {
-    private const string Code = "PW-PROP-9450-2026-0001";
-    private const string MissCode = "NO-SUCH-CODE";
-
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public InventoryQueryAuditTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    // 每个测试实例唯一（xUnit 每个测试新建实例）：库被复用时不会撞 InventoryItems.Code 唯一约束；
+    // 断言仍用同一个字段，强度不变
+    private readonly string Code = "PW-PROP-" + Guid.NewGuid().ToString("N")[..10];
+    private readonly string MissCode = "NO-SUCH-" + Guid.NewGuid().ToString("N")[..8];
 
     private sealed record LoginResp(string Token);
 
     private async Task<(HttpClient Client, int ItemId)> SetupAsync(string dbPath)
     {
-        var client = _factory.WithWebHostBuilder(b =>
+        // 每次新建 factory：class fixture 会缓存已构建的 host，per-test 的 dbPath 会被忽略 → 测试互相踩库
+        var factory = new WebApplicationFactory<Program>();   // 不 using：client 要在 SetupAsync 返回后继续用
+        var client = factory.WithWebHostBuilder(b =>
         {
             b.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={dbPath}");
             b.UseSetting("Jwt:Key", new string('k', 40));

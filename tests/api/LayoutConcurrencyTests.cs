@@ -16,6 +16,10 @@ namespace api;
 /// 两个客户端各自加载同一房间后依次保存，**后保存的把先保存的改动整段抹掉**
 /// （实验：A 的 `FROM_A` 元素在 B 保存后完全消失）。这里把四种情形钉住。
 /// </summary>
+<<<<<<< Updated upstream
+=======
+[Collection(SerializedCollection.Name)]   // 独占执行：避免与其它测试类并行时互相干扰（见 SerializedCollection）
+>>>>>>> Stashed changes
 public class LayoutConcurrencyTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
@@ -26,9 +30,20 @@ public class LayoutConcurrencyTests : IClassFixture<WebApplicationFactory<Progra
     private static string LayoutJson(string marker) =>
         $"{{\"width\":900,\"height\":600,\"items\":[{{\"id\":\"it1\",\"name\":\"{marker}\"}}]}}";
 
+<<<<<<< Updated upstream
     private static object SaveBody(string marker, int? expectedVersion, bool? force = null) => new
     {
         roomCode = "1097", roomName = "并发实验房", floor = 1,
+=======
+    /// <summary>每次唯一的房间号：万一 host/库被复用，也不会撞"房间已存在"（跨类泄漏免疫）</summary>
+    private static int _roomSeq;
+    /// <summary>房间号必须是纯数字（见 IsValidLayout）；用"基准 + 序号"保证每次唯一，避免库被复用时撞号</summary>
+    private static string UniqueRoomCode() => (900000 + Interlocked.Increment(ref _roomSeq)).ToString();
+
+    private static object SaveBody(string marker, int? expectedVersion, bool? force = null, string? roomCode = null) => new
+    {
+        roomCode = roomCode ?? UniqueRoomCode(), roomName = "并发实验房", floor = 1,
+>>>>>>> Stashed changes
         cabinetCount = 1, shelfCount = 1, positionCount = 1,
         description = marker, layoutJson = LayoutJson(marker),
         expectedVersion, force
@@ -47,6 +62,7 @@ public class LayoutConcurrencyTests : IClassFixture<WebApplicationFactory<Progra
         }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         var opts = new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+<<<<<<< Updated upstream
         await using (var seed = new AppDbContext(opts))
         {
             seed.Database.Migrate();
@@ -58,6 +74,20 @@ public class LayoutConcurrencyTests : IClassFixture<WebApplicationFactory<Progra
         }
 
         client.DefaultRequestHeaders.Authorization = new("Bearer", TestToken.Make(1, "planner", "admin"));
+=======
+        int userId;
+        await using (var seed = new AppDbContext(opts))
+        {
+            seed.Database.Migrate();
+            // ⚠️ 不要写死 Id：应用启动种子先占用了 Id=1（admin），写死会撞 UNIQUE(Users.Id)
+            var planner = new User { Username = "planner-" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Role = "admin" };
+            seed.Users.Add(planner);
+            await seed.SaveChangesAsync();
+            userId = planner.Id;
+        }
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", TestToken.Make(userId, "planner", "admin"));
+>>>>>>> Stashed changes
 
         var created = await client.PostAsJsonAsync("/api/storage/layouts", SaveBody("initial", null));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -119,7 +149,11 @@ public class LayoutConcurrencyTests : IClassFixture<WebApplicationFactory<Progra
         {
             await using var db = new AppDbContext(opts);
             row = await db.OperationLogs.AsNoTracking()
+<<<<<<< Updated upstream
                 .Where(o => o.Action == "force-overwrite").OrderByDescending(o => o.Id).FirstOrDefaultAsync();
+=======
+                .Where(o => o.Action == "force-overwrite" && o.TargetId == id.ToString()).OrderByDescending(o => o.Id).FirstOrDefaultAsync();
+>>>>>>> Stashed changes
             if (row is null) await Task.Delay(250);
         }
         Assert.NotNull(row);
