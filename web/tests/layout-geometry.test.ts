@@ -55,7 +55,7 @@ describe("元素模型：行 × 列 与类型适配", () => {
     expect(cellSummary(el({ rows: 1, cols: 1 }))).toBe("整体挂载");
     expect(cellAxes(el()).rowLabel).toBe("层");
     expect(cellAxes(el({ type: "cabinet", rows: 4, cols: 2 }))).toMatchObject({ rowLabel: "层", colLabel: "格" });
-    expect(cellAxes(el({ type: "workbench", rows: 1, cols: 3 }))).toMatchObject({ rowLabel: "排", colLabel: "区" });
+    expect(cellAxes(el({ type: "workbench", rows: 2, cols: 3 }))).toMatchObject({ rowLabel: "桌上/桌下", colLabel: "区" });
   });
 
   it("新建元素带上类型默认格位（cm 默认尺寸）", () => {
@@ -64,10 +64,12 @@ describe("元素模型：行 × 列 与类型适配", () => {
     const cabinet = createElement("cabinet", room, 1) as ItemElement;
     const bench = createElement("workbench", room, 2) as ItemElement;
     const device = createElement("device", room, 3) as ItemElement;
+    const drawer = createElement("drawer", room, 4) as ItemElement;
     expect([shelf.w, shelf.h, shelf.rows, shelf.cols]).toEqual([200, 60, 4, 8]);
     expect([cabinet.w, cabinet.h, cabinet.rows, cabinet.cols]).toEqual([100, 60, 4, 2]);
-    expect([bench.rows, bench.cols]).toEqual([1, 3]);
+    expect([bench.rows, bench.cols]).toEqual([2, 3]);   // 桌上/桌下 = 2 排（码结构不变）
     expect(usesCells(device)).toBe(false);
+    expect([drawer.rows, drawer.cols]).toEqual([4, 1]);        // 1 位 × 4 屉（A2）
     // 墙/门/窗没有格位字段
     expect("type" in createElement("wall", room, 0)).toBe(false);
   });
@@ -139,7 +141,7 @@ describe("格位几何与编码", () => {
   it("格位名称按类型显示 层位/层格/排区", () => {
     expect(cellLabelAt(el(), 2, 4)).toBe("3层05位");
     expect(cellLabelAt(el({ type: "cabinet" }), 1, 0)).toBe("2层01格");
-    expect(cellLabelAt(el({ type: "workbench", rows: 1, cols: 3 }), 0, 1)).toBe("1排02区");
+    expect(cellLabelAt(el({ type: "workbench", rows: 2, cols: 3 }), 0, 1)).toBe("桌上02区");   // rowNames 逐行名（码结构不变）
     expect(cellLabelAt(el({ rows: 1, cols: 1 }), 0, 0)).toBe("201-A");
     expect(cellLabelFromLoc(el(), "201-A-3-05")).toBe("3层05位");
     expect(cellLabelFromLoc(el(), "201-A")).toBe("201-A");

@@ -11,10 +11,9 @@ namespace TeamPortal.Mcp;
 public class FlightTools
 {
     private readonly FlightService _flight;
-    private readonly FlightLogService _flightLog;
     private readonly IHttpContextAccessor _http;
-    public FlightTools(FlightService flight, FlightLogService flightLog, IHttpContextAccessor http)
-    { _flight = flight; _flightLog = flightLog; _http = http; }
+    public FlightTools(FlightService flight, IHttpContextAccessor http)
+    { _flight = flight; _http = http; }
 
     [McpServerTool(Name = "flight_list_batteries")]
     public async Task<object> ListBatteries() => await _flight.GetBatteries();
@@ -38,14 +37,4 @@ public class FlightTools
         => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _flight.UpdateIncident(id, type, severity, description, null, resolution);
     [McpServerTool(Name = "flight_delete_incident")]
     public async Task<object> DeleteIncident(int id) => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _flight.DeleteIncident(id);
-
-    [McpServerTool(Name = "flight_list_logs")]
-    public async Task<object?> ListLogs() => await _flightLog.ListLogs();
-    [McpServerTool(Name = "flight_download_log")]
-    public async Task<object?> DownloadLog(string filename)
-    {
-        var file = _flightLog.GetFile(filename);
-        if (file is null || file.Value.Bytes is null) return null;
-        return new { filename, size = file.Value.Bytes.Length };
-    }
 }

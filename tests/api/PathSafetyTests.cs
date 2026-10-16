@@ -1,11 +1,13 @@
-using Microsoft.Extensions.Configuration;
 using TeamPortal.Services;
 
 namespace api;
 
 /// <summary>
-/// 路径与外部命令参数安全:git clone 仓库地址白名单、飞行日志文件名解析。
-/// 两者都直接消费用户输入,旧实现分别是命令行拼接与 Path.Combine 裸拼。
+/// 路径与外部命令参数安全:git clone 仓库地址白名单。
+/// 直接消费用户输入,旧实现是命令行拼接。
+///
+/// 说明:飞行日志文件名解析(`FlightLogService.ResolveSafePath`)的用例已随"日志上传功能删除"
+/// 一并移除 —— 被测类型已不存在。知识库/Wiki 侧各自的路径防护另有测试覆盖。
 /// </summary>
 public class PathSafetyTests
 {
@@ -24,30 +26,4 @@ public class PathSafetyTests
     [InlineData("   ")]
     public void ValidateCloneUrl_RejectsEverythingElse(string url)
         => Assert.ThrowsAny<Exception>(() => WikiGeneratorService.ValidateCloneUrl(url));
-
-    private static FlightLogService FlightLogSvc(string dir)
-        => new(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["FlightLogs:Dir"] = dir })
-            .Build());
-
-    [Theory]
-    [InlineData("flight.tlog", true)]
-    [InlineData("..\\..\\..\\evil.tlog", false)]
-    [InlineData("../../evil.tlog", false)]
-    [InlineData("sub/evil.tlog", false)]
-    [InlineData("sub\\evil.tlog", false)]
-    [InlineData(".hidden.tlog", false)]
-    [InlineData("", false)]
-    [InlineData("   ", false)]
-    public void ResolveSafePath_RejectsEscapes(string name, bool allowed)
-    {
-        var dir = Path.Combine(Path.GetTempPath(), $"tp-flightlogs-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(dir);
-
-        var resolved = FlightLogSvc(dir).ResolveSafePath(name);
-
-        Assert.Equal(allowed, resolved is not null);
-        if (resolved is not null)
-            Assert.StartsWith(Path.GetFullPath(dir), resolved, StringComparison.OrdinalIgnoreCase);
-    }
 }

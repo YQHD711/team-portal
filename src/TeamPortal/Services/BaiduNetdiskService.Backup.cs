@@ -11,7 +11,8 @@ public partial class BaiduNetdiskService
 {
     /// <summary>
     /// 创建系统完整备份并上传到百度网盘。
-    /// 备份内容：SQLite 数据库 + 系统设置 + 知识库 + Wiki 文档 + 飞行日志。
+    /// 备份内容：SQLite 数据库 + 系统设置 + 知识库 + Wiki 文档。
+    /// （飞行日志已下线，`data/flightlogs` 不再打包 —— 见下面的说明注释）
     /// </summary>
     /// <returns>网盘中的备份文件路径</returns>
     public async Task<string> BackupSystem(CancellationToken ct = default)
@@ -50,9 +51,8 @@ public partial class BaiduNetdiskService
 
             // 3. Knowledge base + Wiki documents
             AddDirectoryToZip(zip, Path.Combine(dataDir, "knowledge"), "knowledge/");
-
-            // 4. Flight logs
-            AddDirectoryToZip(zip, Path.Combine(dataDir, "flightlogs"), "flightlogs/");
+            // 说明：飞行日志已下线（旧上传功能删除），data/flightlogs 不再进备份 ——
+            // 该目录可能不存在，AddDirectoryToZip 本身也必须能容忍缺失（见注入的 dataDir 探测）
         }
 
         var zipSize = new FileInfo(zipPath).Length;

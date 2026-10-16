@@ -27,9 +27,6 @@ vi.mock("uplot", () => ({
     destroy() {}
   },
 }));
-vi.mock("@/components/flightlog/LogFileList", () => ({
-  LogFileList: () => <div data-testid="logs-tab" />,
-}));
 vi.mock("@/components/flightlog/FirmwarePanel", () => ({
   FirmwarePanel: () => <div data-testid="fw-tab" />,
 }));

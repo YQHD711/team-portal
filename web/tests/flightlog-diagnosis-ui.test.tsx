@@ -20,7 +20,6 @@ vi.mock("uplot", () => ({
     destroy() {}
   },
 }));
-vi.mock("@/components/flightlog/LogFileList", () => ({ LogFileList: () => <div data-testid="logs-tab" /> }));
 vi.mock("@/components/flightlog/FirmwarePanel", () => ({ FirmwarePanel: () => <div data-testid="fw-tab" /> }));
 // 报告出来后会挂载诊断历史（拉 /api/flight-diagnoses）：空列表替身，避免测试去发真实请求
 vi.mock("@/lib/api", () => ({
@@ -186,15 +185,16 @@ describe("诊断报告 UI", () => {
     expect(pickSeries(doc, { series: "VIBE", field: "VibeX" })).toBeNull();
   });
 
-  it("/flightlog 页：默认标签仍是「日志文件」，切到「诊断」出现诊断面板", async () => {
+  it("/flightlog 页：默认「诊断」，切到「固件下载」出现固件面板（「日志文件」Tab 已下线）", async () => {
     render(<FlightLogPage />);
-
-    expect(screen.getByRole("tab", { name: "日志文件" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("logs-tab")).toBeInTheDocument();
-    expect(screen.queryByTestId("diagnosis-dropzone")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "诊断" }));
+    // 默认即诊断：占位 dropzone 直接可见；日志上传功能已删除 → Tab 与组件都不应存在
+    expect(screen.getByRole("tab", { name: "诊断" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("diagnosis-dropzone")).toBeInTheDocument();
-    expect(screen.getByTestId("diagnosis-empty")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "日志文件" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("logs-tab")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "固件下载" }));
+    expect(screen.getByTestId("fw-tab")).toBeInTheDocument();
+    expect(screen.queryByTestId("diagnosis-dropzone")).not.toBeInTheDocument();
   });
 });
