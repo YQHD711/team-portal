@@ -1,5 +1,4 @@
 "use client";
-
 /** 平面图画布：cm 网格、元素渲染、Transformer、缩放/平移/选择；支持物料拖拽挂载、点选挂载与格位命中 */
 import { useEffect, useRef, useState } from "react";
 import { Layer, Stage, Transformer } from "react-konva";
@@ -15,7 +14,6 @@ import { ZoomControls } from "./ZoomControls";
 import { hitItemElement, pad2, type ElementCell } from "./elementGeometry";
 import { useCellCenters, type CellCenter } from "./useCellCenters";
 import { useStageView } from "./useStageView";
-
 interface PlannerCanvasProps {
   layout: RoomLayout;
   items: MaterialItem[];
@@ -35,17 +33,15 @@ interface PlannerCanvasProps {
   /** 追加到画布容器的类名（父级控制高度） */
   className?: string;
 }
-
 interface HoverCell {
   el: ItemElement;
   /** 格位元素：命中的格子；整体挂载元素：null */
   cell: ElementCell | null;
 }
-
 /** 稳定的空回调：避免每次渲染换引用导致上报 effect 反复重建 */
 const NOOP = () => {};
-
 export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, onDragEnd, onTransformEnd, onMountMaterial, onAutoLoc, onCellCenters, onCellHover, pendingMount, onCellSelect, className = "" }: PlannerCanvasProps) {
+  if (typeof window !== "undefined") { const w = window as unknown as { __plannerRenders?: number }; w.__plannerRenders = (w.__plannerRenders ?? 0) + 1; }   // 组件体内渲染计数
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const trRef = useRef<Konva.Transformer>(null);
@@ -198,3 +194,4 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     </div>
   );
 }
+

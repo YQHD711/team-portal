@@ -41,6 +41,36 @@ export function fieldValue(el: LabelElement, data: LabelData): string {
   }
 }
 
+/**
+ * ⚠️ **每模块最少像素**：扫码枪/手机的可靠阈值远低于此（二维码在每模块 3–4px 仍很稳），
+ * 取 6 留足余量。它是"该用多少 dpi"的**唯一依据**，而不是拍一个 dpi 数字。
+ */
+export const QR_MIN_PX_PER_MODULE = 6;
+/** 静区宽度（模块数）：标准要求 4，这里与既有渲染保持一致 */
+export const QR_QUIET_MODULES = 3;
+
+/**
+ * **自适应光栅尺寸**：取"能让每个模块 ≥ QR_MIN_PX_PER_MODULE 像素的最小像素数"，
+ * 并以模板 dpi 对应的像素数封顶。
+ *  - 短编码（模块少）→ 自动用很低 dpi（省掉大量光栅与 PNG 编码）
+ *  - 长编码（模块多）→ 自动提高 dpi，保证每模块仍 ≥K，不会静默扫不出
+ * 返回该二维码应光栅成的**正方形总像素**（含静区）。
+ */
+export function qrRasterPx(boxMm: number, moduleCount: number, maxDpi: number): number {
+  const needPx = (moduleCount + QR_QUIET_MODULES * 2) * QR_MIN_PX_PER_MODULE;
+  const dpiForNeed = (needPx / boxMm) * 25.4;
+  const dpi = Math.min(maxDpi, Math.max(1, Math.ceil(dpiForNeed)));
+  const capPx = Math.round((boxMm * maxDpi) / 25.4);
+  // 规则优先级：**先满足 ≥K/模块，但模板 dpi 是硬上限**。
+  // 若编码长到"即使模板 dpi 也给不了 K/模块"，只能取封顶值（物理上无解）——
+  // 这种情况应在上层校验里提示"编码过长/模板 dpi 过低"，而不是在这里偷偷突破封顶。
+  return needPx <= capPx ? Math.max(needPx, Math.round((boxMm * dpi) / 25.4)) : capPx;
+}
+
+/** 实际每模块像素（与 qrPng 的 scale 计算一致；供测试断言 ≥K） */
+export function qrModuleScale(pxTotal: number, moduleCount: number): number {
+  return Math.max(1, Math.floor(pxTotal / (moduleCount + QR_QUIET_MODULES * 2)));
+}
 /** 把二维码模块画成一张小 PNG（data URL）：只光栅这一小块，不画整张标签 */
 export function qrPng(moduleCount: (r: number, c: number) => boolean, count: number, pxTotal: number, quiet: number): string {
   const canvas = document.createElement("canvas");
@@ -88,7 +118,8 @@ export async function buildLocationLabelsVectorPdf(
         })(0, "M");
         m.addData(data.url);
         m.make();
-        const png = qrPng((r, c) => m.isDark(r, c), m.getModuleCount(), px(el.w), 3);
+        // 自适应：短编码自动降 dpi（省成本），长编码自动升 dpi（保证 ≥K 像素/模块）
+        const png = qrPng((r, c) => m.isDark(r, c), m.getModuleCount(), qrRasterPx(el.w, m.getModuleCount(), dpi), QR_QUIET_MODULES);
         doc.addImage(png, "PNG", el.x, el.y, el.w, el.h);
       } else {
         const fontPt = el.fontSizePt ?? 7;
@@ -103,8 +134,43 @@ export async function buildLocationLabelsVectorPdf(
     const done = i + 1;
     if (done % Math.max(1, opts.chunkSize ?? 2) === 0 || done === slots.length) {
       opts.onProgress?.(done, slots.length);
-      if (done < slots.length) await new Promise(r => setTimeout(r, 0));
+      if (done < slots.length) await nextFrame();   // 双 rAF：setTimeout(0) 在重渲染压力下可能来不及出帧
     }
   }
   return doc.output("arraybuffer") as unknown as ArrayBuffer;
+}
+
+/** 让出到"能绘制"：优先双 rAF（给合成器出帧机会），无 rAF 环境退回宏任务 */
+function nextFrame(): Promise<void> {
+  if (typeof requestAnimationFrame !== "function") return new Promise(r => setTimeout(r, 0));
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+/**
+ * **导出边界的物理无解检查**：模板 dpi 封顶后，若某个编码的二维码**每模块 < QR_MIN_PX_PER_MODULE 像素**，
+ * 那这个标签**可能就是扫不出的**（编码太长 + 模板 dpi 太低）。
+ * 与 `locationLabelSuitability` 同一条原则：**绝不允许静默产出不可用的标签**——UI 必须显式告知并由用户决定。
+ * 返回在"当前模板 dpi"下无法达到每模块 K 像素的编码清单（空 = 全部可扫）。
+ */
+export async function findUnscannableCodes(
+  slots: readonly LocationSlot[],
+  template: LabelTemplate = DEFAULT_TEMPLATE,
+): Promise<string[]> {
+  const qrMod = await import("qrcode-generator");
+  const boxes = template.elements.filter(e => e.type === "qr");
+  if (boxes.length === 0) return slots.map(s => s.code);      // 没有二维码元素：全部不可用（另一条校验也会拦）
+  const boxMm = Math.min(...boxes.map(e => e.w));
+  const capPx = Math.round((boxMm * template.dpi) / 25.4);
+  const bad: string[] = [];
+  for (const slot of slots) {
+    const q = (qrMod.default as unknown as (t: number, l: string) => { addData(d: string): void; make(): void; getModuleCount(): number })(0, "M");
+    q.addData(slot.code); q.make();
+    if (qrModuleScale(capPx, q.getModuleCount()) < QR_MIN_PX_PER_MODULE) bad.push(slot.code);
+  }
+  return bad;
+}
+
+/** 用户可见的告警文案（导出前弹确认，允许用户决定） */
+export function unscannableWarning(codes: readonly string[], template: LabelTemplate, sample = 3): string {
+  const list = codes.slice(0, sample).join("、") + (codes.length > sample ? ` 等 ${codes.length} 个` : "");
+  return `${codes.length} 个库位编码过长，当前模板（${template.dpi} dpi）下二维码可能扫不出：${list}。\n\n建议提高模板 dpi 或缩短编码。仍要继续导出吗？`;
 }
