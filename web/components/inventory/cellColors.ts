@@ -11,6 +11,7 @@ export const FULL_FILL: Record<ItemType, string> = {
   workbench: "#7c4dff",
   device: "#047857",
   pegboard: "#4d7c0f",
+  drawer: "#7c2d12",
 };
 
 /**

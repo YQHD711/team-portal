@@ -1,5 +1,6 @@
 /** 库位平面图数据类型与元素定义（编辑器与查看器共用）；画布坐标单位统一为厘米（cm） */
 import {
+  Layers,
   Grid3x3,
   Boxes, Wrench, Archive, Cpu, BrickWall, DoorOpen, AppWindow,
   type LucideIcon,
@@ -14,9 +15,11 @@ export interface PosElement {
   w: number;
   h: number;
   rotation: number;
+  /** 父容器 id（**1 层嵌套**）：子元素坐标仍是绝对 cm，移动父元素时由 moveWithChildren 统一传播 */
+  parentId?: string;
 }
 
-export type ItemType = "shelf" | "workbench" | "cabinet" | "device" | "pegboard";
+export type ItemType = "shelf" | "workbench" | "cabinet" | "device" | "pegboard" | "drawer";
 export type ElementKind = "wall" | "door" | "window" | ItemType;
 
 /**
@@ -70,6 +73,8 @@ export interface ElementDef {
   /** 行/列的业务称呼，用于界面文案 */
   rowLabel?: string;
   colLabel?: string;
+  /** **可选**逐行名称（**只影响显示，码结构不变**）：工作台 ["桌上","桌下"] → 标签「桌上02区」；长度与 rows 不符时回落 rowLabel */
+  rowNames?: string[];
   hint: string;
 }
 
@@ -82,6 +87,12 @@ export const ELEMENT_DEFS: Record<ElementKind, ElementDef> = {
     rows: 4, cols: 8, rowLabel: "层", colLabel: "位",
     hint: "俯视为占地，行列即「层 × 位」，可挂载到具体层位",
   },
+  drawer: {
+    label: "可堆叠抽屉", icon: Layers, color: "#92400e", w: 80, h: 60,
+    // 1 位 × N 层：层=第几屉，位恒为 1 → 编码 6011-L-3-01（四段不变）
+    rows: 4, cols: 1, rowLabel: "屉", colLabel: "位",
+    hint: "可堆叠抽屉：每屉一个格位；可放进其它容器（1 层嵌套）",
+  },
   pegboard: {
     label: "洞洞板", icon: Grid3x3, color: "#84cc16", w: 120, h: 80,
     rows: 6, cols: 6, rowLabel: "层", colLabel: "位",
@@ -89,7 +100,8 @@ export const ELEMENT_DEFS: Record<ElementKind, ElementDef> = {
   },
   workbench: {
     label: "工作台", icon: Wrench, color: "#a855f7", w: 160, h: 80,
-    rows: 1, cols: 3, rowLabel: "排", colLabel: "区",
+    // 桌上/桌下 = 第 1/2 排（**码结构不变**：6011-C-1-02 桌上2区 / 6011-C-2-02 桌下2区）
+    rows: 2, cols: 3, rowLabel: "桌上/桌下", colLabel: "区", rowNames: ["桌上", "桌下"],
     hint: "桌面/工作台：台面按区划分，1×1 即整张台面",
   },
   cabinet: {
@@ -104,7 +116,7 @@ export const ELEMENT_DEFS: Record<ElementKind, ElementDef> = {
   },
 };
 
-export const ITEM_TYPES: ItemType[] = ["shelf", "workbench", "cabinet", "device", "pegboard"];
+export const ITEM_TYPES: ItemType[] = ["shelf", "workbench", "cabinet", "device", "pegboard", "drawer"];
 
 /** 默认画布：900 × 600 cm（9m × 6m） */
 export const DEFAULT_CANVAS = { width: 900, height: 600 };

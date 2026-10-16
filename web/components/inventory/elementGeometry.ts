@@ -3,7 +3,7 @@
  * 所有类型共用「行 × 列」模型：行=层/抽屉层/排，列=位/格/区；1×1 表示整体挂载（无格位细分）。
  */
 import type { ItemElement } from "./layoutTypes";
-import { cellAxes, colsOf, rowsOf, usesCells } from "./layoutTypes";
+import { ELEMENT_DEFS, cellAxes, colsOf, rowsOf, usesCells } from "./layoutTypes";
 
 export const CELL_PAD = 4;
 /** 整体挂载（1×1）元素的计数 key */
@@ -122,7 +122,10 @@ export function itemHitCells(el: ItemElement): ElementCell[] {
 export function cellLabelAt(el: ItemElement, row: number, col: number): string {
   if (!usesCells(el)) return el.locCode || "整体";
   const { rowLabel, colLabel } = cellAxes(el);
-  return `${row + 1}${rowLabel}${pad2(col + 1)}${colLabel}`;
+  // 逐行名称：只影响显示；长度与 rows 不符或缺失 → **回落 rowLabel**（不静默取错项）
+  const names = ELEMENT_DEFS[el.type].rowNames;
+  const rowName = names && names.length === rowsOf(el) ? names[row] : null;
+  return rowName ? `${rowName}${pad2(col + 1)}${colLabel}` : `${row + 1}${rowLabel}${pad2(col + 1)}${colLabel}`;
 }
 
 /** 由四段库位编码解析格位名称 */

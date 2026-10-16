@@ -1,8 +1,9 @@
 "use client";
 
 /** 房间平面图编辑器：工具栏/元素面板/画布/物料面板，管理历史与保存；物料支持拖拽与点选挂载、格位详情。
- * ⚠️ 真机事实（e2e 必踩）：**调色板只在「编辑平面图」模式下渲染**；非编辑模式页面上只有
- * `楼层概览 / 编辑平面图 / 连线关 / 物料清单`，找不到任何元素按钮 —— e2e 必须先点「编辑平面图」。 */
+ * ⚠️ 真机事实（e2e 必踩）：**调色板只在「编辑平面图」模式下渲染**（非编辑模式页面上只有
+ * `楼层概览/编辑平面图/连线关/物料清单`）→ e2e 必须先点「编辑平面图」。
+ * ⚠️ 位移**只能**走 `applyMoved`（带子元素一起走）；删除**只能**走 `deleteById`（不静默丢子元素）。 */
 import { useCallback, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ElementKind, ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
@@ -21,15 +22,14 @@ import { PropertyDialog } from "./PropertyPanel";
 import { usePlannerShortcuts } from "./usePlannerShortcuts";
 import { usePlannerClipboard } from "./usePlannerClipboard";
 import { CodeGenButton } from "./CodeGenButton";
-import { historyReducer, removeElem } from "./usePlannerHistory";
+import { applyMoved, deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layoutNesting";
+import { historyReducer } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
-
 interface RoomPlannerProps {
   layout: RoomLayoutRow;
   onSaved: () => void;
   onBack: () => void;
 }
-
 export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) {
   const [hist, dispatch] = useReducer(historyReducer, undefined, () => ({
     layout: parseLayout(row.layoutJson) ?? defaultLayout(row.roomCode),
@@ -54,7 +54,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
 
-  // ── 元素增删改 ──
   const addElement = (kind: ElementKind) => {
     const cur = hist.layout;
     const el = createElement(kind, cur, cur.items.length + cur.walls.length + cur.doors.length + cur.windows.length);
@@ -68,18 +67,24 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     commit(next);
     setSelected(el.id);
   };
-  const deleteSelected = () => {
-    if (!selected) return;
-    commit(removeElem(hist.layout, selected));
+  // 删除**唯一入口**（工具栏、Delete 键、属性面板删除按钮都走这里）：有子元素时不静默
+  const deleteById = (id: string) => {
+    const r = deleteElementSafe(hist.layout, id);
+    if (r.kind === "blocked") {
+      if (!confirm(deleteConfirmText(r.children))) { setMsg("已取消：请先把子元素移出容器"); return; }
+      commit(deleteWithChildren(hist.layout, id));
+    } else commit(r.layout);
     setSelected(null);
   };
+  const deleteSelected = () => { if (selected) deleteById(selected); };
   const clearAll = () => {
     if (!confirm("清空画布上的所有元素？")) return;
     commit({ ...hist.layout, walls: [], doors: [], windows: [], items: [] });
     setSelected(null);
   };
-  const onDragEnd = (el: PosElement | ItemElement) => commit(withElement(hist.layout, el));
-  const onTransformEnd = (el: PosElement | ItemElement) => commit(withElement(hist.layout, el));
+  // ⚠️ 位移**只能**走 applyMoved：它会带着子元素一起走（绕过它子元素会漂移）
+  const onDragEnd = (el: PosElement | ItemElement) => commit(applyMoved(hist.layout, el));
+  const onTransformEnd = (el: PosElement | ItemElement) => commit(applyMoved(hist.layout, el));
   const onPropertySave = (el: PosElement | ItemElement) => { commit(withElement(hist.layout, el)); setEditId(null); };
   const findElem = (id: string): PosElement | ItemElement | null => {
     const cur = hist.layout;
@@ -139,7 +144,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
       setSaving(false);
     }
   };
-
   const dblEdit = (id: string) => { setSelected(id); setEditId(id); };
   const editEl = editId ? findElem(editId) : null;
   const panelProps = {
@@ -183,7 +187,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
       {editEl && (
         <PropertyDialog key={editEl.id} element={editEl} roomCode={row.roomCode}
           onSave={onPropertySave}
-          onDelete={(id) => { commit(removeElem(hist.layout, id)); setEditId(null); setSelected(null); }}
+          onDelete={(id) => { deleteById(id); setEditId(null); }}
           onDetail={(el) => { setEditId(null); setDetail({ el, cell: null }); }}
           onClose={() => setEditId(null)} />
       )}
