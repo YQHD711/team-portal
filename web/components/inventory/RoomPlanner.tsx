@@ -1,5 +1,4 @@
 "use client";
-
 /** 房间平面图编辑器：工具栏/元素面板/画布/物料面板，管理历史与保存；物料支持拖拽与点选挂载、格位详情。
  * ⚠️ 真机事实（e2e 必踩）：**调色板只在「编辑平面图」模式下渲染**（非编辑模式页面上只有
  * `楼层概览/编辑平面图/连线关/物料清单`）→ e2e 必须先点「编辑平面图」。
@@ -26,6 +25,7 @@ import { deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layo
 import { useNestActions } from "./useNestActions";
 import { NestActionsButton } from "./NestActionsButton";
 import { UnderTableToggle } from "./UnderTableToggle";
+import { ExportLocationLabelsButton } from "./ExportLocationLabelsButton";
 import { historyReducer } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
 interface RoomPlannerProps {
@@ -52,7 +52,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const workRef = useRef<HTMLDivElement>(null);
   const { items, loadError, applyLocation, setItemAnchors, setCellCenters, hoverKey, setHoverKey, lines } =
     useMountingState(row.roomCode, layout.items);
-
   const commit = useCallback((next: RoomLayout) => dispatch({ type: "commit", next }), []);
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
@@ -158,6 +157,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   return (
     <div className="space-y-3">
       <CodeGenButton layout={layout} materials={items} roomCode={row.roomCode} onApply={commit} />
+      <ExportLocationLabelsButton layout={layout} roomName={row.roomName} />
       <NestActionsButton layout={layout} selected={selected} selectedHasParent={!!findElem(selected ?? "")?.parentId} onNest={nest} onDetach={detach} />
       <UnderTableToggle layout={layout} selected={selected} materials={items} commit={commit} setMsg={setMsg} />
       <PlannerToolbar
