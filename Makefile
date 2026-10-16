@@ -29,7 +29,7 @@ lint-csharp:
 	dotnet format style --verify-no-changes src/TeamPortal/ 2>/dev/null || dotnet format style src/TeamPortal/
 
 lint-web:
-	cd web && npx eslint . --ext .ts,.tsx
+	cd web && npx eslint .
 
 # === Health ===
 health:

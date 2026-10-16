@@ -35,6 +35,26 @@ jobs:
       - run: cd web && npm ci
       - run: cd web && npx vitest run
 
+  # Lint 门禁：react-hooks/rules-of-hooks 等规则必须真的被 CI 跑起来。
+  # 此前 CI 完全没有 lint → "钩子放进回调"这类真 bug 只能靠 e2e 整页崩才发现（本仓库真实发生过）。
+  # 失败即 CI 失败（**不设 continue-on-error**）；等级与存量降级理由见 web/eslint.config.mjs。
+  lint-web:
+    name: Lint (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # flat config 下 `--ext` 不再适用，直接 `eslint .`
+      - run: npx eslint .
+
   # 部署脚本语法 + 行尾守卫：CRLF 会让服务器上的 bash 报 `$'\r'` 语法错误，
   # 而 deploy.sh 只在部署那一刻才被执行 —— 必须在合并前拦住。
   test-deploy-scripts:
@@ -71,7 +91,7 @@ jobs:
   # 服务器零构建：deploy/deploy.sh 拉取镜像直接启动，彻底规避 1.8G 内存 OOM
   build-push:
     name: Build & Push Images (ghcr)
-    needs: [test-csharp, test-web, e2e-smoke]
+    needs: [test-csharp, test-web, lint-web, e2e-smoke]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -123,7 +143,7 @@ jobs:
   # ── 告警：任何环节失败都推飞书群（需配置 secret FEISHU_WEBHOOK_URL，未配置则静默跳过）──
   notify:
     name: Notify (Feishu)
-    needs: [test-csharp, test-web, e2e-smoke, build-push]
+    needs: [test-csharp, test-web, lint-web, e2e-smoke, build-push]
     if: failure()
     runs-on: ubuntu-latest
     steps:
