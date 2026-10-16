@@ -15,7 +15,7 @@
  * 于是：rows=1+开启 → 俯1/正1（无桌下行，正常）；rows=2+开启 → 俯1/正2；rows=3+开启 → 俯2/正3。
  */
 
-import type { ItemElement, MaterialItem } from "./layoutTypes";
+import type { ItemElement, MaterialItem, RoomLayout } from "./layoutTypes";
 import { colsOf, rowsOf } from "./layoutTypes";
 
 /** 是否有桌下区：**缺省即开启**（老数据没有该字段 → 按默认 true 处理） */
@@ -73,4 +73,9 @@ export function withUnderTable(el: ItemElement, enabled: boolean): ItemElement {
     return { ...el, underTableEnabled: true, rows };
   }
   return { ...el, underTableEnabled: false };
+}
+
+/** 布局级：改某个工作台的桌下开关（调用方只 commit 一次 → 一条撤销记录） */
+export function setUnderTable(layout: RoomLayout, id: string, enabled: boolean): RoomLayout {
+  return { ...layout, items: layout.items.map(i => (i.id === id ? withUnderTable(i, enabled) : i)) };
 }

@@ -107,3 +107,30 @@ describe("② 俯/正视图的格位集（本次纠正的核心断言）", () =>
     expect(elementCells({ ...b, rows: topRows(b) })).toHaveLength(3);
   });
 });
+
+describe("③ 开关动作：警告条件 + 单条历史（可一次撤销）", () => {
+  it("有桌下库位/物料 → 影响非零（UI 据此弹警告）；无 → 直接关", () => {
+    const withData = bench({ rows: 2, cols: 3 });
+    expect(underTableImpact(withData, [mat(1, "6011-C-2-01")]).items).toHaveLength(1);
+    const empty = bench({ rows: 2, cols: 3 });
+    expect(underTableImpact(empty, []).items).toHaveLength(0);      // 无 N/M → 不打扰用户
+    expect(underTableImpact(empty, []).cells).toBe(3);              // 但仍会提示库位数（>0）
+  });
+
+  it("关闭是**一条**历史记录（redo/undo 一次回退）", async () => {
+    const { historyReducer } = await import("@/components/inventory/usePlannerHistory");
+    const l = { width: 900, height: 600, unit: "cm", walls: [], doors: [], windows: [], items: [bench({ rows: 2 })] };
+    const next = { ...l, items: [withUnderTable(l.items[0], false)] };
+    const after = historyReducer({ layout: l, past: [], future: [] }, { type: "commit", next });
+    expect(after.past).toHaveLength(1);
+    expect(historyReducer(after, { type: "undo" }).layout.items[0].underTableEnabled).toBeUndefined();  // 回到开启（缺省）
+  });
+
+  it("开启时 rows=1 → 自动提为 2，且同样只产生一条记录", async () => {
+    const { historyReducer } = await import("@/components/inventory/usePlannerHistory");
+    const l = { width: 900, height: 600, unit: "cm", walls: [], doors: [], windows: [], items: [bench({ rows: 1 })] };
+    const next = { ...l, items: [withUnderTable(l.items[0], true)] };
+    expect(next.items[0].rows).toBe(2);
+    expect(historyReducer({ layout: l, past: [], future: [] }, { type: "commit", next }).past).toHaveLength(1);
+  });
+});
