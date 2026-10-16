@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { ItemElement, MaterialItem } from "./layoutTypes";
 import { ELEMENT_DEFS, cellAxes, cellSummary, colsOf, rowsOf, usesCells } from "./layoutTypes";
+import { frontRows } from "./tableZones";
 import { cellKey, cellLabelAt, cellSizeCm } from "./elementGeometry";
 import { elementStats, materialsByCell } from "./locationCodes";
 import { cellClasses } from "./cellColors";
@@ -38,7 +39,7 @@ export function ElementDetail({ element, items, initialCell, focusItemId, onClos
   const { threshold } = useLowStock();
   const split = usesCells(element);
   const { rowLabel, colLabel } = cellAxes(element);
-  const rows = split ? rowsOf(element) : 1;
+  const rows = split ? frontRows(element) : 1;        // 正视图：开启时含桌下行（桌下可挂物料、有编码）
   const cols = split ? colsOf(element) : 1;
   const size = cellSizeCm(element);
   const stats = useMemo(() => elementStats(element, items), [element, items]);

@@ -25,6 +25,7 @@ import { CodeGenButton } from "./CodeGenButton";
 import { deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layoutNesting";
 import { useNestActions } from "./useNestActions";
 import { NestActionsButton } from "./NestActionsButton";
+import { UnderTableToggle } from "./UnderTableToggle";
 import { historyReducer } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
 interface RoomPlannerProps {
@@ -56,7 +57,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
   const { move, nest, detach } = useNestActions(layout, selected, commit, setMsg);
-
   const addElement = (kind: ElementKind) => {
     const cur = hist.layout;
     const el = createElement(kind, cur, cur.items.length + cur.walls.length + cur.doors.length + cur.windows.length);
@@ -95,7 +95,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     const cur = hist.layout;
     return [...cur.walls, ...cur.doors, ...cur.windows, ...cur.items].find(e => e.id === id) ?? null;
   };
-
   const { copy, paste } = usePlannerClipboard(layout, selected ? [selected] : [], commit, setSelected, setMsg);
   usePlannerShortcuts(selected, undo, redo, deleteSelected, copy, paste);   // Ctrl+C/V/Z 共用焦点守卫
   // ── 物料挂载/卸下：PUT locationCode 后按响应刷新列表与画布热点 ──
@@ -160,6 +159,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     <div className="space-y-3">
       <CodeGenButton layout={layout} materials={items} roomCode={row.roomCode} onApply={commit} />
       <NestActionsButton layout={layout} selected={selected} selectedHasParent={!!findElem(selected ?? "")?.parentId} onNest={nest} onDetach={detach} />
+      <UnderTableToggle layout={layout} selected={selected} materials={items} commit={commit} setMsg={setMsg} />
       <PlannerToolbar
         roomCode={row.roomCode} roomName={roomName} onRoomName={setRoomName}
         width={layout.width} height={layout.height}

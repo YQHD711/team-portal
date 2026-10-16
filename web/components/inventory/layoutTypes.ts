@@ -34,6 +34,8 @@ export interface ItemElement extends PosElement {
   rows?: number;
   /** 格位列数（货架=位，柜子=格，桌面=区），缺省 1 */
   cols?: number;
+  /** 工作台**可选**桌下区：缺省 = 开启；关闭后正视图无桌下行（数据保留，重新开启恢复） */
+  underTableEnabled?: boolean;
 }
 
 /** 房间平面图（与后端 LayoutJson 字段对应，坐标单位 cm） */

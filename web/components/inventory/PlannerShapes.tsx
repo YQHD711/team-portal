@@ -4,7 +4,8 @@
 import { Group, Rect, Shape, Text } from "react-konva";
 import type Konva from "konva";
 import type { ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
-import { ELEMENT_DEFS, cellSummary, usesCells } from "./layoutTypes";
+import { ELEMENT_DEFS, cellSummary, rowsOf, usesCells } from "./layoutTypes";
+import { hasUnderTable, topRows } from "./tableZones";
 import { elementCells, headerHeight, type ElementCell } from "./elementGeometry";
 import { cellCounts } from "./locationCodes";
 import { GRID_STEP_CM, MAJOR_STEP_CM, cm } from "./layoutUnits";
@@ -113,16 +114,17 @@ interface ItemShapeProps extends ShapeProps {
   /** 所查询物料：画布上把它的格位再圈一层 */
   focusItem?: MaterialItem | null;
 }
-
 /** 物品元素：类型色块 + 名称/编码/格位规格；有格位时渲染 行×列 网格与物料数量 */
 export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblClick, onDragEnd, onTransformEnd, highlight, focus, focusItem, scale = 1, onCellHover, onCellClick }: ItemShapeProps) {
   const def = ELEMENT_DEFS[el.type];
   const counts = cellCounts(el, items);
   const totalQty = [...counts.values()].reduce((s, n) => s + n, 0);
-  const cells = usesCells(el) ? elementCells(el) : [];
+  // ⚠️ 俯视图**不画桌下**：只按 topRows 行铺格位（桌上那一行铺满整个 footprint；编码仍是第 1 段）
+  const topEl = topRows(el) < rowsOf(el) ? { ...el, rows: topRows(el) } : el;
+  const cells = usesCells(el) ? elementCells(topEl) : [];
   const top = headerHeight(el);
   const headerH = Math.min(el.h - 2, Math.max(10, top));
-  const meta = [el.locCode, cellSummary(el)].filter(Boolean).join(" · ");
+  const meta = [el.locCode, cellSummary(topEl)].filter(Boolean).join(" · ");
   // 屏幕上放不下就省掉小字：名称始终画，规格行与尺寸行按屏幕像素决定
   const showMeta = el.h * scale >= 26 && el.w * scale >= 96 && el.h > 30;
   const showDims = selected && el.h > 46 && el.h * scale >= 40;
@@ -166,10 +168,10 @@ export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblC
         <Text text={`${cm(el.w)} × ${cm(el.h)} cm`} x={4} y={el.h - 11} width={el.w - 8} fontSize={9}
           fill="rgba(255,255,255,0.9)" listening={false} ellipsis />
       )}
+      {/* 「含桌下」角标已改由 DOM 覆盖层绘制（UnderTableBadges）—— 屏幕固定尺寸才读得清 */}
     </Group>
   );
 }
-
 /** Transformer 缩放结束后：把 scale 归一化回宽高与旋转 */
 function handleTransformEnd(el: PosElement, onTransformEnd: (el: PosElement) => void) {
   return (e: Konva.KonvaEventObject<Event>) => {
