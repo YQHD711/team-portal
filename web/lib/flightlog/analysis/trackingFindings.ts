@@ -51,6 +51,8 @@ export interface ChannelArgs {
   docLinks: readonly string[];
   /** 通过（ok）与触发（fired）时给的调参/改进建议（六要素） */
   suggestions: readonly Suggestion[];
+  /** 该通道**实际**采用的激励口径文案（不同平台不同：PX4 低激励且误差小判无法评价）；不传则用绝对量判据的默认文案 */
+  excitationPolicyNote?: string;
   /** unknown 一侧（无法判断）时的建议：默认给"先补齐判据所需数据"，**绝不带参数数值** */
   unknownAdvice?: readonly Suggestion[];
   /** 偏差列专用：整段恒为 0 → 说明没有数据（不是"跟踪完美"） */
@@ -83,8 +85,9 @@ function evidenceFor(args: ChannelArgs): EvidenceStep[] {
       pair.isDeviation
         ? "该列是**偏差列**（目标恒为 0），无指令激励概念；用飞行是否真的产生偏差来判定"
         : args.minExcitation === undefined
-          ? `目标${yawStd ? "标准差" : " RMS"} ${pair.excitement.toFixed(3)} ${args.excitationUnit}`
-            + "；本通道是**绝对量判据**，不设激励门槛（指令多小都看），只看样本数与绝对误差"
+          ? args.excitationPolicyNote
+            ?? `目标${yawStd ? "标准差" : " RMS"} ${pair.excitement.toFixed(3)} ${args.excitationUnit}`
+              + "；本通道是**绝对量判据**，不设激励门槛（指令多小都看），只看样本数与绝对误差"
           : `目标${yawStd ? "标准差" : " RMS"} ${pair.excitement.toFixed(3)} ${args.excitationUnit}`
             + `（门槛 ${args.minExcitation} ${args.excitationUnit}；比值判据在小分母下会放大，故先确认指令够大）`,
     ),
@@ -104,15 +107,19 @@ function evidenceFor(args: ChannelArgs): EvidenceStep[] {
 
 function metricsFor(args: ChannelArgs): Record<string, number> {
   const { pair } = args;
-  return {
+  const metrics: Record<string, number> = {
     errRms: pair.errorRms,
     maxAbsErr: pair.maxAbsError,
     targetRms: pair.targetRms,
     excitement: pair.excitement,
-    errRatio: Number.isFinite(pair.ratio) ? pair.ratio : -1,
     samples: pair.samples,
     sampleRateHz: pair.sampleRateHz ?? 0,
   };
+  // ⚠️ **绝对量判据下不要输出 errRatio**：早先为了类型完整写了 `Number.isFinite(ratio) ? ratio : -1`，
+  //    结果卡片上出现「errRatio -1.00」——RMS 比值不可能是 −1，那是个哨兵值被当成指标展示了。
+  //    没有这个量就**不输出**，让 UI 直接不显示（比显示一个假数字好）。
+  if (Number.isFinite(pair.ratio)) metrics.errRatio = pair.ratio;
+  return metrics;
 }
 
 /** 生成一条通道结论（含激励门槛、恒 0 守卫、分档与建议） */

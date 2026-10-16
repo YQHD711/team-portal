@@ -22,7 +22,7 @@ import type { Suggestion } from "../types/report";
 import type { RuleContext, SeriesWindow } from "../types/rule";
 import type { TimeWindow } from "../types/log";
 import { suggestion } from "./finding";
-import { computeSpectrum } from "./spectrum";
+import { crossCorrelationLag, dominantHzOf, highCommandRatio, medianDt } from "./trackingSignatures";
 import { meanOf, rms } from "./stats";
 import { PID_TUNING, PID_RATE } from "./thresholds";
 import type { RateAxisSpec } from "./rateAxisEvidence";
@@ -49,34 +49,6 @@ export interface RateTuningMetrics {
   assumptions: string[];
 }
 
-/** 互相关求滞后（正 = Act 滞后于 Tar）。返回采样数与相关系数峰值。 */
-function crossCorrelationLag(
-  tar: Float64Array,
-  act: Float64Array,
-  maxLag = 10,
-): { lag: number; corr: number } {
-  let bestLag = 0;
-  let bestCorr = -Infinity;
-  for (let lag = -maxLag; lag <= maxLag; lag++) {
-    let num = 0;
-    let d1 = 0;
-    let d2 = 0;
-    for (let i = 0; i < tar.length; i++) {
-      const j = i + lag;
-      if (j < 0 || j >= act.length) continue;
-      num += tar[i] * act[j];
-      d1 += tar[i] * tar[i];
-      d2 += act[j] * act[j];
-    }
-    const corr = num / Math.sqrt(Math.max(d1 * d2, 1e-30));
-    if (corr > bestCorr) {
-      bestCorr = corr;
-      bestLag = lag;
-    }
-  }
-  return { lag: bestLag, corr: bestCorr };
-}
-
 export function gradeOf(errRatio: number): Grade {
   const b = PID_TUNING.gradeBands;
   if (errRatio < b.aMax) return "A";
@@ -96,33 +68,16 @@ export function collectRateTuning(
   const err: SeriesWindow | null = ctx.windowed(spec.message, "Err", window);
   if (!tar || !act || !err || err.values.length < PID_RATE.minSamples) return null;
 
-  const tarRms = rms(tar.values);
-  if (tarRms <= 1e-9) return null;
-
-  // 只统计高指令样本（|Tar| ≥ 0.3·RMS）：低指令时段 Err/Tar 天然被放大
-  const thr = PID_TUNING.highCommandFraction * tarRms;
-  const ev: number[] = [];
-  const tv: number[] = [];
-  for (let i = 0; i < tar.values.length; i++) {
-    if (Math.abs(tar.values[i]) >= thr) {
-      ev.push(err.values[i]);
-      tv.push(tar.values[i]);
-    }
-  }
-  if (ev.length < 30) return null;
-  const errRatio = rms(Float64Array.from(ev)) / Math.max(rms(Float64Array.from(tv)), 1e-9);
+  // 签名算法与 PX4 共用（analysis/trackingSignatures.ts）：只统计高指令样本
+  const ratio = highCommandRatio(tar.values, err.values, PID_TUNING.highCommandFraction);
+  if (!ratio || rms(tar.values) <= 1e-9) return null;
+  const errRatio = ratio.errRatio;
 
   const { lag } = crossCorrelationLag(tar.values, act.values, PID_TUNING.maxLagSamples);
-  // 采样间隔由窗口内时间戳估计
-  const times = err.timeSec;
-  const dt = times.length > 1 ? (times[times.length - 1] - times[0]) / (times.length - 1) : 0;
+  const dt = medianDt(err.timeSec);
   const lagMs = dt > 0 ? lag * dt * 1000 : 0;
 
-  const spectrum = computeSpectrum(tar.timeSec, tar.values, {
-    minHz: 0.2,
-    maxHz: 20,
-    maxSamples: 4096,
-  });
+  const dominantHz = dominantHzOf(tar.timeSec, tar.values) ?? PID_TUNING.defaultDominantHz;
 
   const p = ctx.windowed(spec.message, "P", window);
   const d = ctx.windowed(spec.message, "D", window);
@@ -138,7 +93,7 @@ export function collectRateTuning(
       : 0;
 
   const assumptions: string[] = [];
-  if (!spectrum) assumptions.push("无法从指令求主频，滞后→误差的换算用了默认频率");
+  if (dominantHz === PID_TUNING.defaultDominantHz) assumptions.push("无法从指令求主频，滞后→误差的换算用了默认频率");
   if (!p) assumptions.push("日志里没有 P 项输出，P 增益只能取参数值");
   if (!i || !imax) assumptions.push("缺少 I 项输出或 IMAX 参数，I 项偏置未评估");
 
@@ -146,7 +101,7 @@ export function collectRateTuning(
     errRatio,
     lagSamples: lag,
     lagMs,
-    dominantHz: spectrum?.peakHz ?? PID_TUNING.defaultDominantHz,
+    dominantHz,
     pOverErr,
     dOverErr,
     iBiasRatio,
