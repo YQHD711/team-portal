@@ -60,7 +60,9 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     if (slots.length === 0) { setMsg("本屋没有可导出的库位（都未指定库位）"); return; }
     if (!confirm(describeBatch(slots, skipped))) return;
     setBusy(true);
-    setMsg("正在生成 PDF…");
+    // ⚠️ **点击后立刻反馈**：首次导出要 await import() jsPDF + qrcode-generator（几百 KB chunk），
+    // 冷启动这段"什么都不显示"的等待最容易被用户当成"点了没反应"。
+    setMsg("正在准备生成组件…");
     try {
       // 结构优化：文字走 PDF 矢量、只光栅二维码小图（单价从 ~48ms 降下来；页面尺寸仍=模板尺寸）
       const bytes = await buildLocationLabelsVectorPdf(slots, template, {
