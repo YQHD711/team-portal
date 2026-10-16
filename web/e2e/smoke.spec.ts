@@ -182,9 +182,6 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
     }
     if (path.startsWith("/api/chat/sessions/")) return json([]);
     if (path === "/api/storage/layouts") return json(layouts);
-    if (path === "/api/flightlogs") {
-      return json({ logs: [{ filename: "flight-01.tlog", size: 204800, modified: 1780000000 }] });
-    }
     if (path === "/api/wiki/tasks" && method === "GET") {
       return json([
         {
@@ -378,9 +375,10 @@ test.describe("冒烟流程", () => {
     await expect(page.getByRole("link", { name: "飞行日志 / 固件" })).toBeVisible();
     await expect(page.getByRole("banner").getByRole("heading", { name: "飞行日志 / 固件" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("heading", { name: "飞行日志 / 固件" })).toBeVisible();
-    // 默认仍是日志文件 Tab，且日志列表正常渲染
-    await expect(page.getByRole("tab", { name: "日志文件" })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText("flight-01.tlog")).toBeVisible();
+    // 日志上传功能已删除：不再有「日志文件」Tab；默认落在「诊断」
+    await expect(page.getByRole("tab", { name: "日志文件" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "诊断" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("diagnosis-dropzone")).toBeVisible();
 
     await page.getByRole("tab", { name: "固件下载" }).click();
     await expect(page.getByLabel("机型")).toHaveValue("Plane");

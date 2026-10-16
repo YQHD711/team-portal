@@ -10,6 +10,7 @@
 
 import type uPlot from "uplot";
 import type { ChartRequest, SignalRef } from "@/lib/flightlog/types/report";
+import { quatToEulerDeg } from "@/lib/flightlog/ulog/quaternion";
 import type { LogDocument, LogEvent } from "@/lib/flightlog/types/log";
 
 export interface SeriesInput {
@@ -19,15 +20,44 @@ export interface SeriesInput {
   color?: string;
 }
 
+/**
+ * 应用 `SignalRef.derive`：把原始列换成图表要显示的物理量。
+ *
+ * ⚠️ 为什么必须显式声明（task-34 的真实 bug）：PX4 姿态是**四元数**，之前图上的"实际"
+ * 直接画了 `q[0]`（w 分量）→ 平飞时 0.7、滚转角 0°，与弧度制的指令线量纲完全不同，
+ * 看起来像"跟踪极差"。这里统一走 `quatToEulerDeg`——**与规则指标同一份实现**，
+ * 保证"图上的线和算出的指标"永远是同一个量。
+ */
+function applyDerive(doc: LogDocument, ref: SignalRef, values: Float64Array): Float64Array | null {
+  if (!ref.derive) return values;
+  if (ref.derive.kind === "rad-to-deg") {
+    return Float64Array.from(values, (v) => (v * 180) / Math.PI);
+  }
+  const [w, x, y, z] = ref.derive.quatFields;
+  const series = doc.series[`${ref.series}:${ref.instance ?? 0}`];
+  const cols = [w, x, y, z].map((f) => series?.fields[f]);
+  if (cols.some((c) => c === undefined)) return null;   // 缺列 → 显式失败，不猜
+  const [qw, qx, qy, qz] = cols as Float64Array[];
+  const n = Math.min(qw.length, qx.length, qy.length, qz.length);
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const euler = quatToEulerDeg(qw[i], qx[i], qy[i], qz[i]);
+    out[i] = ref.derive.axis === "roll" ? euler.roll : ref.derive.axis === "pitch" ? euler.pitch : euler.yaw;
+  }
+  return out;
+}
+
 /** 按 SignalRef 从 LogDocument 取一条曲线；没有该消息/字段时返回 null（缺数据必须显式表达） */
 export function pickSeries(doc: LogDocument, ref: SignalRef): SeriesInput | null {
   const key = `${ref.series}:${ref.instance ?? 0}`;
   const s = doc.series[key];
-  const values = s?.fields[ref.field];
-  if (!s || !values) return null;
+  const raw = s?.fields[ref.field];
+  if (!s || !raw) return null;
+  const derived = applyDerive(doc, ref, raw);
+  if (derived === null) return null;
   return {
     label: ref.label ?? `${ref.series}.${ref.field}${ref.instance ? `#${ref.instance}` : ""}`,
-    values,
+    values: derived,
     timeSec: s.timeSec,
     color: ref.color,
   };

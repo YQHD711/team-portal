@@ -36,7 +36,6 @@ async function mockApi(page: Page) {
         teamName: "雏鹰之翼", teamSubtitle: "航模队", systemTitle: "系统",
         description: "", logoUrl: null, primaryColor: null, theme: "indigo",
       });
-    if (p === "/api/flightlogs") return json({ logs: [] });
     return json({});
   });
 }

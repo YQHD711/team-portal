@@ -14,6 +14,9 @@ import { px4AttitudeTrackingRule } from "@/lib/flightlog/analysis/rules/px4/px4A
 import { px4FfPolicy } from "@/lib/flightlog/analysis/rules/px4/px4ParamNames";
 import { px4SaturationRule } from "@/lib/flightlog/analysis/rules/px4/px4SaturationRule";
 import { parseUlog } from "@/lib/flightlog/ulog/parseUlog";
+import { createRuleContext } from "@/lib/flightlog/analysis/context";
+import { pickSeries } from "@/components/flightlog/diagnosis/chartData";
+import { px4AnglePair } from "@/lib/flightlog/analysis/rules/px4/px4AnglePair";
 import { DT, MC_PARAMS, N, gradeOf, px4Doc, px4RateDoc, runRule } from "./flightlog-px4-fixture";
 
 describe("PX4 速率环", () => {
@@ -133,6 +136,73 @@ describe("PX4 角度环（四元数 → 欧拉角）", () => {
     const roll = runRule(px4AttitudeTrackingRule, doc).find((f) => f.axis === "roll")!;
     expect(["missing_required", "insufficient_data"]).toContain(roll.status);
     expect(roll.suggestions.length).toBeGreaterThan(0);
+  });
+});
+
+describe("⚠️ 取证通道回归（图表 vs 指标必须是同一个物理量）", () => {
+  it("图表的「实际」= 欧拉角序列（与指标同源），且**不是** q0；两条线同为度", () => {
+    const doc = px4Doc({ errRatio: 0.1, rollDeg: 30, cmdDiffDeg: 0, cmdAmpDeg: 3 });
+    const ctx = createRuleContext(doc);
+    const window = ctx.armedWindows()[0] ?? { startSec: 0, endSec: N * DT };
+    const pair = px4AnglePair(ctx, "roll", window, 100)!;
+    const [finding] = runRule(px4AttitudeTrackingRule, doc);
+    const [cmdRef, actRef] = finding.charts[0].signals;
+    const cmd = pickSeries(doc, cmdRef)!;
+    const act = pickSeries(doc, actRef)!;
+
+    // ① 实际序列 == 欧拉角（按时间对齐后的误差 = 指令 − 实际，逐点一致）
+    const n = Math.min(pair.error.length, act.values.length);
+    let maxDiff = 0;
+    for (let i = 0; i < n; i += 1) {
+      const cmdDeg = cmd.values[i];
+      maxDiff = Math.max(maxDiff, Math.abs(cmdDeg - act.values[i] - pair.error[i]));
+    }
+    expect(maxDiff).toBeLessThan(1e-6);
+
+    // ② 负向对照：原始 q[0]（w 分量）≈0.97 —— 拿它当滚转角画出来就是"两条线量纲不同"的根源
+    const rawQ0 = pickSeries(doc, { series: "vehicle_attitude", field: "q[0]" })!;
+    expect(rawQ0.values[0]).toBeGreaterThan(0.9);
+    // ③ 30° 滚转：实际线必须是 30° 量级，不是 q0≈cos(15°)≈0.97
+    const actMean = act.values.reduce((s: number, v: number) => s + v, 0) / act.values.length;
+    expect(actMean).toBeGreaterThan(25);
+    expect(actMean).toBeLessThan(35);
+
+    // ③ 指令线是弧度→度：基准角 30°（±3° 正弦）→ 均值也在 30° 量级
+    const cmdMean = cmd.values.reduce((s: number, v: number) => s + v, 0) / cmd.values.length;
+    expect(cmdMean).toBeGreaterThan(25);
+    expect(cmdMean).toBeLessThan(35);
+
+    // ④ 图表标签必须说清单位，不能再出现"四元数 q0"当成实际姿态
+    expect(cmd.label).toContain("度");
+    expect(act.label).toContain("欧拉角");
+  });
+
+  it("三个轴都必须是欧拉角：pitch/yaw 同样不能拿 q 分量顶替", () => {
+    // ④ 三个轴都要这样：pitch/yaw 同样不能拿 q 分量顶替（q 分量只会在 [−1,1] 内）
+    const multi = px4Doc({ errRatio: 0.1, rollDeg: 20, yawDeg: 40, cmdDiffDeg: 0, cmdAmpDeg: 3 });
+    const findings = runRule(px4AttitudeTrackingRule, multi);
+    for (const [idx, axis] of [[0, "roll"], [1, "pitch"], [2, "yaw"]] as const) {
+      const chart = findings.find((f) => f.charts[0]?.id.endsWith(axis))!.charts[0];
+      const actValues = pickSeries(multi, chart.signals[1])!.values;
+      expect(Math.abs(actValues[0]), `${axis} 实际线像是 q 分量而不是角度`).toBeGreaterThan(1);
+      const rawCol = multi.series["vehicle_attitude:0"].fields[`q[${idx}]`];
+      if (rawCol) expect(Math.abs(actValues[0] - rawCol[0])).toBeGreaterThan(1e-9);
+    }
+  });
+
+  it("绝对量判据的指标里**不得输出 errRatio**（曾经输出 −1 哨兵被当指标展示）", () => {
+    const doc = px4Doc({ errRatio: 0.1, rollDeg: 30, cmdDiffDeg: 0, cmdAmpDeg: 3 });
+    const [finding] = runRule(px4AttitudeTrackingRule, doc);
+    expect(finding.metrics.errRms).toBeDefined();
+    expect(finding.metrics.errRatio).toBeUndefined();
+  });
+
+  it("卡片文案与实际行为一致：说清「低激励且误差小 → 无法评价」", () => {
+    const doc = px4Doc({ errRatio: 0.1, rollDeg: 30, cmdDiffDeg: 0, cmdAmpDeg: 3 });
+    const [finding] = runRule(px4AttitudeTrackingRule, doc);
+    const text = finding.evidence.map((e) => e.detail).join("\n");
+    expect(text).toContain("低激励");
+    expect(text).not.toContain("不设激励门槛");
   });
 });
 

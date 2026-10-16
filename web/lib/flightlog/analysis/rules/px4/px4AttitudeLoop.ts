@@ -19,6 +19,7 @@ import { stdDev } from "../../stats";
 import { dataGapStep, tuningStep, unknownWithAdvice } from "../tuningSteps";
 import { PX4_MIN_ANGLE_CMD_STD_DEG } from "./px4Excitation";
 import { px4AnglePair, type Px4AngleAxis } from "./px4AnglePair";
+import { px4AngleChart } from "./px4AttitudeChart";
 import { px4Family, resolvePx4AngleGain } from "./px4ParamNames";
 import { PX4_ATT_RULE_ID, PX4_ATT_TITLE, PX4_FW_DOC, PX4_MC_DOC } from "./px4RateTitles";
 
@@ -107,7 +108,7 @@ function axisFinding(ctx: RuleContext, axis: Px4AngleAxis, label: string, window
   const suggestions = [
     tuningStep({
       order: 1,
-      signature: `${label} 轴角度误差 RMS ${pair.errorRms.toFixed(2)}°（绝对量判据，不设激励门槛）`,
+      signature: `${label} 轴角度误差 RMS ${pair.errorRms.toFixed(2)}°（绝对量判据；激励不足且误差小时判"无法评价"，所以本结论已先过激励门槛）`,
       current: gain.name === null
         ? `未探测到该机型族的角度环增益参数（${family === "fw" ? "FW_*_TC" : "MC_*_P"}）`
         : `${gain.name}=${gain.value}`,
@@ -145,20 +146,16 @@ function axisFinding(ctx: RuleContext, axis: Px4AngleAxis, label: string, window
     excitationUnit: "°",
     warning: thresholds.warn,
     critical: thresholds.crit,
-    chart: {
-      id: `${PX4_ATT_RULE_ID}-${axis}`,
-      kind: "timeseries",
-      title: `${label} 角度环：指令 / 实际（度）`,
-      signals: [
-        { series: "vehicle_attitude_setpoint", field: AXES.find((a) => a.axis === axis)?.field ?? "roll_body", label: "指令" },
-        { series: "vehicle_attitude", field: "q[0]", label: "实际（四元数 q0）" },
-      ],
-      window,
-      thresholds: [],
-      peakMarkers: [],
-      highlightWindow: null,
-      spectrum: null,
-    },
+    /**
+     * ⚠️ 文案必须与**行为**一致（task-34 修）：PX4 角度环不是"完全不看激励"，
+     * 而是「低激励 **且误差小** → 无法评价；低激励但**误差大** → 照常 fired；有激励 → A/B/C/D」。
+     * 之前这里复用了 ArduPilot 的"不设激励门槛"默认文案，跟实现说的不是一件事。
+     */
+    excitationPolicyNote:
+      `目标 RMS ${pair.excitement.toFixed(3)}°（本次指令变化 std 见结论 note）；`
+      + "本通道口径：**低激励且误差小 → 无法评价（没动≠跟得好）；低激励但误差大 → 照常报警；"
+      + "有足够激励 → 按绝对误差 RMS 分 A/B/C/D**",
+    chart: px4AngleChart(PX4_ATT_RULE_ID, axis, label, window),
     docLinks: [doc],
     suggestions,
   });

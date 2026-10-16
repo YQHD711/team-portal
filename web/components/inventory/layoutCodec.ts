@@ -79,6 +79,8 @@ function normItems(v: unknown, warnings?: string[]): ItemElement[] {
       locCode: typeof o.locCode === "string" ? o.locCode : "",
       rows: intIn(o.rows ?? o.shelfCount, 1, ROWS_MAX, type === "shelf" || type === "pegboard" ? DEFAULT_ROWS : 1),
       cols: intIn(o.cols ?? o.positionCount, 1, COLS_MAX, type === "shelf" || type === "pegboard" ? DEFAULT_COLS : 1),
+      // 嵌套：必须显式保留，否则加载时会被白名单式重建静默丢掉
+      parentId: typeof o.parentId === "string" && o.parentId ? o.parentId : undefined,
     });
   }
   return out;
