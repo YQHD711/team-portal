@@ -185,6 +185,8 @@ builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
 builder.Services.AddHttpClient<AiClient>();
 builder.Services.AddScoped<FlightDiagnosisService>();
+// 房间布局"谁在编辑"在线状态：内存态 + TTL 心跳（不上 WebSocket）
+builder.Services.AddSingleton<EditingPresenceService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddHttpClient<WikiGeneratorService>();
@@ -383,6 +385,7 @@ app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapStudyEndpoints();
 app.MapInventoryEndpoints();
+app.MapEditingPresenceEndpoints();
 app.MapAiEndpoints();
 app.MapFirmwareEndpoints();
 app.MapFirmwareAdminEndpoints();
