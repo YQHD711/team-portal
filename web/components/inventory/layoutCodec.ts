@@ -81,6 +81,7 @@ function normItems(v: unknown, warnings?: string[]): ItemElement[] {
       cols: intIn(o.cols ?? o.positionCount, 1, COLS_MAX, type === "shelf" || type === "pegboard" ? DEFAULT_COLS : 1),
       // 嵌套：必须显式保留，否则加载时会被白名单式重建静默丢掉
       parentId: typeof o.parentId === "string" && o.parentId ? o.parentId : undefined,
+      underTableEnabled: typeof o.underTableEnabled === "boolean" ? o.underTableEnabled : undefined,
     });
   }
   return out;
