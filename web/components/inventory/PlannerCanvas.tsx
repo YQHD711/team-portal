@@ -8,6 +8,8 @@ import type { Box } from "konva/lib/shapes/Transformer";
 import { Hand } from "lucide-react";
 import type { ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
 import { GridShape, ItemShape, PosShape } from "./PlannerShapes";
+import { UnderTableBadges } from "./UnderTableBadges";
+import { useStageTransformPublisher } from "./useStageTransformPublisher";
 import { DropHighlight } from "./DropHighlight";
 import { ZoomControls } from "./ZoomControls";
 import { hitItemElement, pad2, type ElementCell } from "./elementGeometry";
@@ -53,18 +55,16 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
   const [panMode, setPanMode] = useState(false);
   const { view, fit, zoomBy, onWheel, onTouchStart, onTouchMove, onTouchEnd, consumeStageDrag } =
     useStageView({ stageRef, width: size.w, height: size.h, contentW: layout.width, contentH: layout.height });
-
   useCellCenters(layout, items, view, stageRef, onCellCenters ?? NOOP);
-
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
     setSize({ w: el.clientWidth, h: el.clientHeight });
-    return () => ro.disconnect();
+    useStageTransformPublisher(stageRef, wrapRef, view, size);   // 发布真实变换给 e2e（权威值）
+  return () => ro.disconnect();
   }, []);
-
   // Transformer 挂载到选中元素
   useEffect(() => {
     const tr = trRef.current;
@@ -73,10 +73,8 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     tr.nodes(node && !panMode ? [node] : []);
     tr.getLayer()?.batchDraw();
   }, [selected, layout, panMode]);
-
   const boundBox = (oldBox: Box, newBox: Box) =>
     newBox.width < 8 || newBox.height < 8 ? oldBox : newBox;
-
   // ── 世界坐标：屏幕像素 → 画布 cm ──
   const toWorld = (p: { x: number; y: number }) => ({ x: (p.x - view.x) / view.scale, y: (p.y - view.y) / view.scale });
   const hitCell = (p: { x: number; y: number }): HoverCell | null => {
@@ -92,7 +90,6 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     if (!loc) return "";
     return cell ? `${loc}-${cell.row + 1}-${pad2(cell.col + 1)}` : loc;
   };
-
   // HTML5 拖放事件绑在外层 div（原生 DOM）：Konva Stage 的事件代理对 DragEvent 支持不可靠
   const dragWorld = (e: React.DragEvent<HTMLDivElement>) => {
     const canvas = stageRef.current?.getContent();
@@ -123,7 +120,6 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     const code = resolveCode(hit.el, hit.cell);
     if (code) onMountMaterial(id, code);
   };
-
   /** 点选挂载（触屏/鼠标通用）：有 pendingMount 就挂载，否则选中元素并上报格位 */
   const handleCellClick = (el: ItemElement, cell: ElementCell | null) => {
     if (pendingMount && onMountMaterial) {
@@ -134,7 +130,6 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     onSelect(el.id);
     onCellSelect?.(el, cell);
   };
-
   const shapeProps = (id: string) => ({
     selected: selected === id,
     draggable: !panMode,
@@ -147,7 +142,19 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     onDragEnd,
     onTransformEnd,
   });
-
+  // ⚠️ 发布**真实变换**给 e2e（权威值，不是为测试造的标记）：Konva stage 的实际 x/y/scale。
+  // 背景：e2e 曾三次因"按 canvas 宽推导缩放/按居中假设偏移"得出错误坐标（纵向/横向/缩放各一次），
+  // 而"角标反解偏移"是**循环论证**（角标由同一份 view 算出，会把同一个错误再确认一遍）。
+  useEffect(() => {
+    const st = stageRef.current;
+    const wrap = wrapRef.current;
+    if (!st || !wrap) return;
+    const layer = st.getLayers()[0];
+    const ox = st.x() + (layer?.x() ?? 0);
+    const oy = st.y() + (layer?.y() ?? 0);
+    const sc = (layer?.scaleX() ?? 1) * (st.scaleX() ?? 1);
+    wrap.setAttribute("data-stage-transform", `${ox.toFixed(2)},${oy.toFixed(2)},${sc.toFixed(6)}`);
+  }, [view, size]);
   return (
     <div ref={wrapRef} className={`relative flex-1 overflow-hidden rounded-xl border border-border bg-white ${className}`}
       style={{ touchAction: "none" }}
@@ -177,7 +184,7 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
           <Transformer ref={trRef} rotateEnabled boundBoxFunc={boundBox} />
         </Layer>
       </Stage>
-
+      <UnderTableBadges items={layout.items} view={view} size={size} />
       <ZoomControls scale={view.scale} onZoom={zoomBy} onFit={fit}
         className="bottom-2 right-2 max-lg:bottom-auto max-lg:right-auto max-lg:left-2 max-lg:top-2">
         <button onClick={() => setPanMode(v => !v)} title="平移模式（锁定元素拖动，适合触屏）"
