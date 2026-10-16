@@ -80,3 +80,30 @@ describe("关闭不静默 + 可撤销的开启", () => {
     expect(frontRows(on)).toBe(2);
   });
 });
+
+describe("② 俯/正视图的格位集（本次纠正的核心断言）", () => {
+  it("**俯视图不渲染桌下格位**：只按 topRows 行铺格位（全部 row=0）", async () => {
+    const { elementCells } = await import("@/components/inventory/elementGeometry");
+    const b = bench({ rows: 2, cols: 3 });
+    const topEl = { ...b, rows: topRows(b) };
+    const topCells = elementCells(topEl);
+    expect(topCells).toHaveLength(3);                              // 只有桌上 3 个位
+    expect(topCells.every(c => c.row === 0)).toBe(true);           // **没有任何桌下（row=1）格位**
+    expect(topCells.every(c => c.code.startsWith("6011-C-1-"))).toBe(true);
+  });
+
+  it("正视图（frontRows）仍有桌下两行，且桌下格位有编码", async () => {
+    const { elementCells } = await import("@/components/inventory/elementGeometry");
+    const b = bench({ rows: 2, cols: 3 });
+    const cells = elementCells({ ...b, rows: frontRows(b) });
+    expect(cells).toHaveLength(6);
+    expect(cells.some(c => c.code === "6011-C-2-03")).toBe(true);   // 桌下第 2 行有码
+  });
+
+  it("关闭开关后正视图也只剩桌上（俯仍 1 行）", async () => {
+    const { elementCells } = await import("@/components/inventory/elementGeometry");
+    const b = bench({ rows: 2, cols: 3, underTableEnabled: false });
+    expect(elementCells({ ...b, rows: frontRows(b) })).toHaveLength(3);
+    expect(elementCells({ ...b, rows: topRows(b) })).toHaveLength(3);
+  });
+});
