@@ -56,13 +56,13 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
   const { view, fit, zoomBy, onWheel, onTouchStart, onTouchMove, onTouchEnd, consumeStageDrag } =
     useStageView({ stageRef, width: size.w, height: size.h, contentW: layout.width, contentH: layout.height });
   useCellCenters(layout, items, view, stageRef, onCellCenters ?? NOOP);
+  useStageTransformPublisher(stageRef, wrapRef, view, size);   // 发布真实变换给 e2e（权威值）
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
     setSize({ w: el.clientWidth, h: el.clientHeight });
-    useStageTransformPublisher(stageRef, wrapRef, view, size);   // 发布真实变换给 e2e（权威值）
   return () => ro.disconnect();
   }, []);
   // Transformer 挂载到选中元素
