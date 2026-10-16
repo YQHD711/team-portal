@@ -22,7 +22,9 @@ import { PropertyDialog } from "./PropertyPanel";
 import { usePlannerShortcuts } from "./usePlannerShortcuts";
 import { usePlannerClipboard } from "./usePlannerClipboard";
 import { CodeGenButton } from "./CodeGenButton";
-import { applyMoved, deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layoutNesting";
+import { deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layoutNesting";
+import { useNestActions } from "./useNestActions";
+import { NestActionsButton } from "./NestActionsButton";
 import { historyReducer } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
 interface RoomPlannerProps {
@@ -53,6 +55,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const commit = useCallback((next: RoomLayout) => dispatch({ type: "commit", next }), []);
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
+  const { move, nest, detach } = useNestActions(layout, selected, commit, setMsg);
 
   const addElement = (kind: ElementKind) => {
     const cur = hist.layout;
@@ -78,13 +81,15 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   };
   const deleteSelected = () => { if (selected) deleteById(selected); };
   const clearAll = () => {
-    if (!confirm("清空画布上的所有元素？")) return;
+    const nested = hist.layout.items.filter(i => i.parentId).length;          // 规则②：清空也要点名被连带删掉的子元素
+    const total = hist.layout.items.length + hist.layout.walls.length + hist.layout.doors.length + hist.layout.windows.length;
+    if (!confirm(`将删除 ${total} 个元素，其中含 ${nested} 个位于容器内的子元素。\\n\\n可一次撤销。继续？`)) return;
     commit({ ...hist.layout, walls: [], doors: [], windows: [], items: [] });
     setSelected(null);
   };
   // ⚠️ 位移**只能**走 applyMoved：它会带着子元素一起走（绕过它子元素会漂移）
-  const onDragEnd = (el: PosElement | ItemElement) => commit(applyMoved(hist.layout, el));
-  const onTransformEnd = (el: PosElement | ItemElement) => commit(applyMoved(hist.layout, el));
+  const onDragEnd = move;                       // 位移唯一入口（applyMoved）
+  const onTransformEnd = move;
   const onPropertySave = (el: PosElement | ItemElement) => { commit(withElement(hist.layout, el)); setEditId(null); };
   const findElem = (id: string): PosElement | ItemElement | null => {
     const cur = hist.layout;
@@ -93,7 +98,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
 
   const { copy, paste } = usePlannerClipboard(layout, selected ? [selected] : [], commit, setSelected, setMsg);
   usePlannerShortcuts(selected, undo, redo, deleteSelected, copy, paste);   // Ctrl+C/V/Z 共用焦点守卫
-
   // ── 物料挂载/卸下：PUT locationCode 后按响应刷新列表与画布热点 ──
   const mountMaterial = async (id: number, code: string) => {
     if (await applyLocation(id, code)) setPending(null);
@@ -119,7 +123,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     commit(withElement(hist.layout, { ...el, locCode: code }));
     return code;
   }, [hist.layout, row.roomCode, commit]);
-
   // ── 保存：LayoutJson 全量序列化；汇总计数取全部元素的格位上限（兼容后端旧字段）──
   const handleSave = async () => {
     setSaving(true);
@@ -153,10 +156,10 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     onUnmount: unmountMaterial, onPick: pickMaterial, pendingId: pending?.id ?? null,
     onDetail: (el: ItemElement) => setDetail({ el, cell: null }),
   };
-
   return (
     <div className="space-y-3">
       <CodeGenButton layout={layout} materials={items} roomCode={row.roomCode} onApply={commit} />
+      <NestActionsButton layout={layout} selected={selected} selectedHasParent={!!findElem(selected ?? "")?.parentId} onNest={nest} onDetach={detach} />
       <PlannerToolbar
         roomCode={row.roomCode} roomName={roomName} onRoomName={setRoomName}
         width={layout.width} height={layout.height}
@@ -168,7 +171,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
       />
       <ElementPanel onAdd={addElement} variant="strip" />
       <MountStatusBar pending={pending} loadError={loadError} onCancel={() => setPending(null)} />
-
       <div ref={workRef} className="relative flex flex-col gap-3 lg:h-[calc(100vh-260px)] lg:min-h-[460px] lg:flex-row">
         <ElementPanel onAdd={addElement} />
         <PlannerCanvas layout={layout} items={items} selected={selected}
@@ -183,7 +185,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
         </MobileDrawer>
         {showLines && <ConnectionLines containerRef={workRef} lines={lines} hoverKey={hoverKey} />}
       </div>
-
       {editEl && (
         <PropertyDialog key={editEl.id} element={editEl} roomCode={row.roomCode}
           onSave={onPropertySave}
@@ -191,7 +192,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
           onDetail={(el) => { setEditId(null); setDetail({ el, cell: null }); }}
           onClose={() => setEditId(null)} />
       )}
-
       {detail && (
         <ElementDetail element={detail.el} items={items} initialCell={detail.cell} onClose={() => setDetail(null)} />
       )}

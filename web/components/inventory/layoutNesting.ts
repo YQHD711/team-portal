@@ -45,6 +45,8 @@ export function canNest(layout: RoomLayout, childId: string, parentId: string): 
   if (!parent || !child) return { ok: false, reason: "元素不存在" };
   if (!isItem(parent)) return { ok: false, reason: "墙/门/窗不能作为容器" };
   if (child.parentId) return { ok: false, reason: "只支持 1 层嵌套：该元素已在容器内" };
+  // ⚠️ 目标容器自身也必须在"顶层"：否则会形成 2 层链（测试抓到的缺口）
+  if (parent.parentId) return { ok: false, reason: "只支持 1 层嵌套：目标容器自身已在容器内" };
   if (hasChildren(layout, childId)) return { ok: false, reason: "该元素自身有子元素，不能再放进别人里面" };
   return { ok: true };
 }
