@@ -60,17 +60,37 @@ export function collectLocationSlots(
 
 /** 批量导出前的预览统计（供 confirm 文案：将导出 N 张、跳过 M 个空位） */
 export function describeBatch(slots: readonly LocationSlot[], skipped: number): string {
+  // 单价来自**结构优化后的实测**：矢量文字 + 仅二维码光栅 ≈11.5ms/张（304 张 3.5s）；取 15ms 保守估算
+  const estSec = Math.max(1, Math.ceil((slots.length * 15) / 1000));
+  const eta = `预计约 ${estSec} 秒（可离开本页，生成完成会自动下载）。`;
   const warn = slots.length > 200 ? `\n\n⚠️ ${slots.length} 张偏多，请确认（会打成几百页）。` : "";
-  return `将导出 ${slots.length} 张库位标签，跳过 ${skipped} 个未指定库位。${warn}`;
+  return `将导出 ${slots.length} 张库位标签，跳过 ${skipped} 个未指定库位。${eta}${warn}`;
 }
 
 /**
  * **批量多页 PDF**：每页一张标签，页面尺寸 = 模板尺寸（显式设置，不靠默认值）。
  * 返回 `ArrayBuffer`，由调用方决定下载（测试可直接解析字节）。
+ *
+ * ⚠️ **分块 + 让出事件循环**：大房间（几百张）时每张都要 canvas 渲染 + PNG 编码，
+ * 一次同步跑完会把主线程占住 → 浏览器弹"页面没有响应"。这里每 `chunkSize` 张 `await` 一次，
+ * 并通过 `onProgress` 把「正在生成 x/N」报给 UI。
  */
+export interface BuildProgressOptions {
+  /** 每生成多少张让出一次主线程（默认 8；越小越不卡、越大越快） */
+  chunkSize?: number;
+  /** 进度回调：`done` 已完成张数、`total` 总张数（UI 显示「正在生成 12/340」） */
+  onProgress?: (done: number, total: number) => void;
+}
+
+/** 让出事件循环（等一个宏任务），避免长时间占住主线程 */
+function yieldToBrowser(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 export async function buildLocationLabelsPdf(
   slots: readonly LocationSlot[],
   template: LabelTemplate = DEFAULT_TEMPLATE,
+  opts: BuildProgressOptions = {},
 ): Promise<ArrayBuffer> {
   // 与 exportLabelPdf 同样动态 import：只有真的要导出时才下载这两个包
   const [pdfMod, qrMod] = await Promise.all([import("jspdf"), import("qrcode-generator")]);
@@ -78,12 +98,20 @@ export async function buildLocationLabelsPdf(
   // ⚠️ 显式页面尺寸（模板驱动）：绝不用 jsPDF 默认（默认是 A4，会毁掉标签机打印）
   const doc = new pdfMod.jsPDF({ unit: "mm", format: [w, h], orientation: w >= h ? "landscape" : "portrait", compress: true });
 
-  slots.forEach((slot, i) => {
-    const data = toLocationLabelData(slot);
+  // ⚠️ 分块 + 让出事件循环（见函数注释）：避免大房间导出时"页面没有响应"
+  const chunkSize = Math.max(1, opts.chunkSize ?? 2);
+  const total = slots.length;
+  for (let i = 0; i < total; i++) {
+    const data = toLocationLabelData(slots[i]);
     const png = renderLabelPng(data, createQrMatrix(data.url, qrMod.default), template);
     if (i > 0) doc.addPage([w, h]);                 // **每页**都显式给定尺寸，不靠默认
     doc.addImage(png, "PNG", 0, 0, w, h);           // 满版，无页边距
-  });
+    const done = i + 1;
+    if (done % chunkSize === 0 || done === total) {
+      opts.onProgress?.(done, total);
+      if (done < total) await yieldToBrowser();     // 把线程还给浏览器（输入/重绘/进度刷新）
+    }
+  }
 
   return doc.output("arraybuffer") as unknown as ArrayBuffer;
 }
@@ -111,4 +139,9 @@ export function downloadPdf(bytes: ArrayBuffer, filename: string): void {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** 进度回调打包成 UI 文案（供按钮复用，避免两处写同一条格式） */
+export function progressText(done: number, total: number): string {
+  return `正在生成 ${done}/${total}…`;
 }

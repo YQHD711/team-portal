@@ -62,6 +62,7 @@ describe("库位标签数据适配", () => {
     expect(skipped).toBe(1);
     expect(describeBatch(slots, skipped)).toContain("将导出 2 张");
     expect(describeBatch(slots, skipped)).toContain("跳过 1 个");
+    expect(describeBatch(slots, skipped)).toContain("预计约");   // 点之前就知道要等多久
   });
 
   it("张数很多时给出提醒（防误点打几百页）", () => {

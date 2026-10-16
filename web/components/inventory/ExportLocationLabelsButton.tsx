@@ -17,6 +17,8 @@ import { usesCells } from "./layoutTypes";
 import { elementCells } from "./elementGeometry";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
 import { chooseExportTemplate } from "@/lib/labelSuitability";
+import { progressText } from "@/lib/locationLabelPdf";
+import { buildLocationLabelsVectorPdf } from "@/lib/locationLabelVector";
 import {
   buildLocationLabelsPdf, collectLocationSlots, describeBatch, downloadPdf, labelFileName,
 } from "@/lib/locationLabelPdf";
@@ -60,7 +62,10 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     setBusy(true);
     setMsg("正在生成 PDF…");
     try {
-      const bytes = await buildLocationLabelsPdf(slots, template);
+      // 结构优化：文字走 PDF 矢量、只光栅二维码小图（单价从 ~48ms 降下来；页面尺寸仍=模板尺寸）
+      const bytes = await buildLocationLabelsVectorPdf(slots, template, {
+        onProgress: (done, total) => setMsg(`正在生成 ${done}/${total}…`),   // 进度可见（大房间时用户知道还在动）
+      });
       downloadPdf(bytes, labelFileName(roomName));
       setMsg(`已导出 ${slots.length} 张库位标签（跳过 ${skipped} 个未指定库位）`);
     } catch (err) {
