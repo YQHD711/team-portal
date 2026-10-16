@@ -148,7 +148,8 @@ export function useNotifications() {
 
   // SSE 实时订阅:SSE 失败/断开时 fallback 到 30s 轮询;新通知自动入列
   useEffect(() => {
-    let es: EventSource | null = null;
+    // 旧实现用 EventSource（无法带 Authorization 头），已改为 fetch+reader；
+    // 这里曾残留一个未使用的 `let es` —— 删除（lint prefer-const 命中的就是它）
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let closed = false;
 
