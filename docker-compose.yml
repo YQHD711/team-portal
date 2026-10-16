@@ -28,6 +28,10 @@ services:
       - no-new-privileges:true
     depends_on:
       - backend
+    networks:
+      teamportal:
+        # 静态 IP：后端 ForwardedHeaders__KnownProxies 必须能精确指到这个地址
+        ipv4_address: 172.28.0.2
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
@@ -55,10 +59,13 @@ services:
       - ConnectionStrings__DefaultConnection=Data Source=/data/teamportal.db
       # CORS 从 .env 读取 (默认回退 localhost,生产部署覆盖 .env 即可)
       - Cors__Origins=${CORS__ORIGINS:-http://localhost:3000}
-      # 反向代理(nginx)之后的真实客户端 IP 只在 X-Forwarded-For 里。不配置这些可信网段时，
-      # 后端会忽略该头，审计日志与登录限流拿到的都是代理容器 IP（表现为所有记录同一个 IP）。
-      # 默认信任 Docker 常见私网 + 回环；要收窄可用 .env 的 FORWARDEDHEADERS__KNOWNNETWORKS 覆盖。
-      - ForwardedHeaders__KnownNetworks=${FORWARDEDHEADERS__KNOWNNETWORKS:-172.16.0.0/12;10.0.0.0/8;192.168.0.0/16;127.0.0.1}
+      # 真实客户端 IP 只在 X-Forwarded-For 里。后端只信任**本栈真正的代理容器**：固定子网 + 静态 IP
+      # 让地址确定（frontend=172.28.0.2），所以用 KnownProxies 精确指定。
+      # ⚠️ 不要改成 172.16.0.0/12 / 10.0.0.0/8 那种"信任所有私网"：那等于任意私网来源都能伪造来源 IP、
+      # 并绕开按 IP 分桶的登录限流（审计 #22）。
+      # ForwardLimit=1：只信任最右那一条（可信代理自己追加的），客户端在左边伪造多少条都不影响结果。
+      - ForwardedHeaders__KnownProxies=${FORWARDEDHEADERS__KNOWNPROXIES:-172.28.0.2}
+      - ForwardedHeaders__ForwardLimit=${FORWARDEDHEADERS__FORWARDLIMIT:-1}
     volumes:
       - ./data:/data
       # 把宿主机 ArduPilot WebTools 静态文件挂进 backend 容器(详见 deploy/README-WEBTOOLS.md)
@@ -72,3 +79,13 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      teamportal:
+        ipv4_address: 172.28.0.3
+
+# 固定子网：KnownProxies 要写确定的地址，而 Docker 默认随机分配 172.x 网段，配置就没法写死。
+networks:
+  teamportal:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

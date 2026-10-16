@@ -333,10 +333,12 @@ app.UseTeamPortalExceptionHandler();
 
 // Forwarded Headers：必须在其它中间件之前 —— 限流按 RemoteIpAddress 分桶、审计按它记 IP，
 // 晚注册会让它们都拿到代理容器 IP（所有用户共用同一个限流桶）。
-// 只信任显式配置的代理网段（见 ForwardedHeadersSetup 的说明）；未配置时不注册该中间件。
+// 只信任显式配置的**真实代理地址**（KnownProxies，compose 用固定子网+静态 IP 提供默认值）；
+// 未配置时不注册该中间件（直连部署的正常状态）。
 var forwarded = ForwardedHeadersSetup.Create(
     builder.Configuration["ForwardedHeaders:KnownNetworks"],
-    builder.Configuration["ForwardedHeaders:KnownProxies"]);
+    builder.Configuration["ForwardedHeaders:KnownProxies"],
+    int.TryParse(builder.Configuration["ForwardedHeaders:ForwardLimit"], out var forwardLimit) ? forwardLimit : 1);
 if (forwarded is not null)
 {
     app.UseForwardedHeaders(forwarded);
@@ -346,8 +348,9 @@ else if (!app.Environment.IsDevelopment())
     // 直连（无代理）时这是正常状态；但在反代后忘了配置会表现为「所有审计 IP 都是同一个」，
     // 属于排查成本很高的静默故障，所以启动就提示。
     app.Logger.LogWarning(
-        "未配置 ForwardedHeaders:KnownNetworks / KnownProxies：审计日志与登录限流将使用直连对端 IP。" +
-        "部署在 nginx / docker 反向代理之后时请设置 ForwardedHeaders__KnownNetworks（如 172.16.0.0/12;10.0.0.0/8;127.0.0.1）。");
+        "未配置 ForwardedHeaders:KnownProxies：审计日志与登录限流将使用直连对端 IP（代理后部署时全是代理地址）。" +
+        "请设置 ForwardedHeaders__KnownProxies=<真实代理容器 IP>（compose 已用固定子网+静态 IP 给默认值）；" +
+        "**不要**填 172.16.0.0/12 / 10.0.0.0/8 这类所有私网 —— 那会让来源 IP 可被任意私网来源伪造（审计 #22）。");
 }
 
 app.UseRequestLogging();

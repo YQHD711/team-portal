@@ -44,6 +44,27 @@ public class ForwardedHeadersSetupTests
         => Assert.Null(ForwardedHeadersSetup.Create(config, config));
 
     [Fact]
+    public void Create_DefaultsToOneTrustedHop()
+    {
+        // 默认只信任紧邻的一跳：最右那条（可信代理自己追加的）才算数，
+        // 客户端在左边伪造多少条都不会改变结果（否则任何人都能冒充别人的 IP）。
+        var options = ForwardedHeadersSetup.Create(null, "172.28.0.2")!;
+
+        Assert.Equal(1, options.ForwardLimit);
+    }
+
+    [Theory]
+    [InlineData(2, 2)]
+    [InlineData(0, 1)]     // 非法值兜底为 1，绝不退化成"信任整条链"
+    [InlineData(-5, 1)]
+    public void Create_ForwardLimitIsExplicitAndClamped(int configured, int expected)
+    {
+        var options = ForwardedHeadersSetup.Create(null, "172.28.0.2", configured)!;
+
+        Assert.Equal(expected, options.ForwardLimit);
+    }
+
+    [Fact]
     public void ParseNetworks_SingleIp_BecomesHostNetwork()
     {
         var networks = ForwardedHeadersSetup.ParseNetworks("10.255.1.5").ToList();

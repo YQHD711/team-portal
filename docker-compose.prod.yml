@@ -16,6 +16,9 @@ services:
     environment:
       - NODE_ENV=production
       - API_PROXY_URL=http://backend:8080
+    networks:
+      teamportal-prod:
+        ipv4_address: 172.29.0.3
 
   backend:
     ports: []
@@ -25,10 +28,17 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - Cors__Origins=https://${DOMAIN:-localhost}
-      # 信任 docker 内网代理(nginx)的 X-Forwarded-* 头;直接模式(无代理)勿配置此项。
-      # 网段必须覆盖 nginx 容器所在的 docker 网络(常见为 172.16.0.0/12 或 10.0.0.0/8),
-      # 否则该头会被忽略、审计里全是代理容器 IP。可用 .env 覆盖成实际网段。
-      - ForwardedHeaders__KnownNetworks=${FORWARDEDHEADERS__KNOWNNETWORKS:-172.16.0.0/12;10.0.0.0/8;192.168.0.0/16;127.0.0.1}
+      # 真实客户端 IP 只在 X-Forwarded-For 里；只信任**真正的代理容器**（compose 固定子网 + 静态 IP）：
+      #  - nginx   (172.29.0.2)：/api/ 由 nginx 直连 backend，后端看到的对端就是它
+      #  - frontend(172.29.0.3 / 172.28.0.2)：Next 服务端 SSR 转发 /api 时对端是它
+      #    （两个地址都要列：prod.yml 是 docker-compose.yml 的叠加，服务会同时加入两张网络）
+      # ⚠️ 不要退回"信任 172.16.0.0/12 / 10.0.0.0/8"那套：任意私网来源都能伪造 IP（审计 #22）。
+      # ForwardLimit=1：只信任最右一条（相邻代理自己写的），客户端在左边伪造多少条都不影响结果。
+      - ForwardedHeaders__KnownProxies=${FORWARDEDHEADERS__KNOWNPROXIES:-172.29.0.2;172.29.0.3;172.28.0.2}
+      - ForwardedHeaders__ForwardLimit=${FORWARDEDHEADERS__FORWARDLIMIT:-1}
+    networks:
+      teamportal-prod:
+        ipv4_address: 172.29.0.4
 
   # ── Nginx 反向代理 ──
   nginx:
@@ -56,6 +66,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      teamportal-prod:
+        ipv4_address: 172.29.0.2
 
   # ── Certbot 自动续期 ──
   certbot:
@@ -71,3 +84,10 @@ services:
         sleep 12h & wait $${!};
       done'
     restart: unless-stopped
+
+# 固定子网：KnownProxies 必须能精确指到 nginx / frontend 容器
+networks:
+  teamportal-prod:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
