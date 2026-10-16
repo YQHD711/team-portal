@@ -10,6 +10,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { PosElement, ItemElement, RoomLayout } from "./layoutTypes";
 import { applyPaste, copyBuffer, type ClipboardBuffer } from "./layoutClipboard";
+import { deepCopySubtree, pasteRejection } from "./layoutNesting";
 
 type Copyable = PosElement | ItemElement;
 
@@ -38,12 +39,29 @@ export function usePlannerClipboard(
   const paste = useCallback(() => {
     const buf = clipRef.current;
     if (!buf) return;
+    // ⚠️ 顺序依赖（task-38）：容器内的元素**没有独立位置** —— 照旧原地偏移会生成 parentId 指向旧容器、
+    // 坐标却在容器外的**孤儿**。v1 明确拒绝并给两条出路（不做自动语义推断）。
+    const rejected = pasteRejection(layout, buf.elements);
+    if (rejected) { setMsg(rejected); return; }
+    // 容器：深拷贝整棵子树（新容器 id + 子元素全新 id + parentId 重映射 + 相对偏移不变）
+    const root = buf.elements[0];
+    if (root && layout.items.some(i => i.parentId === root.id)) {
+      const nth = buf.pasteIndex + 1;
+      const copy = deepCopySubtree(layout, root.id, { dx: 24 * nth, dy: 18 * nth });
+      if (copy) {
+        clipRef.current = { ...buf, pasteIndex: nth };   // 连续粘贴递增偏移
+        commit(copy.layout);                            // 一次提交 = 一条撤销记录
+        setSelected(copy.rootId);
+        setMsg("已复制容器及其子元素（可一次撤销）");
+        return;
+      }
+    }
     const { layout: next, next: advanced, pasted } = applyPaste(layout, buf);
     clipRef.current = advanced;                  // 连续粘贴递增偏移
     commit(next);                                // 一次提交 = 一条撤销记录
     setSelected(pasted[0]?.id ?? null);          // 粘贴后选中新元素
-    setMsg(`已粘贴 ${pasted.length} 个元素（同类型、偏移 ${pasted.length > 0 ? "递增" : ""}）`);
-  }, [layout, commit, setSelected]);
+    setMsg(`已粘贴 ${pasted.length} 个元素（同类型、偏移递增）`);
+  }, [layout, commit, setSelected, setMsg]);
 
   return { copy, paste, hasBuffer };
 }

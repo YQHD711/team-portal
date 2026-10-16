@@ -13,7 +13,7 @@ import { FULL_FILL } from "@/components/inventory/cellColors";
 import { findElementByLoc } from "@/components/inventory/locationCodes";
 import { cellLabelAt } from "@/components/inventory/elementGeometry";
 import {
-  applyMoved, canNest, childrenOf, clampInside, deepCopySubtree, deleteElementSafe,
+  applyMoved, canNest, childrenOf, clampInside, deepCopySubtree, deleteElementSafe, pasteRejection,
   deleteWithChildren, detachElement, findOrphans,
 } from "@/components/inventory/layoutNesting";
 
@@ -176,5 +176,50 @@ describe("C 逐行名称（rowNames）：只影响显示、码结构不变、缺
   it("**rowNames 长度与 rows 不符 → 回落 rowLabel**（不崩、不静默取错项）", () => {
     const bad = el({ id: "c2", type: "workbench", rows: 3, cols: 1 });
     expect(cellLabelAt(bad, 0, 0)).toBe("1桌上/桌下01区");   // ← 明确回落，不取 "桌上"
+  });
+});
+
+describe("粘贴守卫：容器内的元素没有独立位置（拒绝 → 不产生新元素、不产生孤儿）", () => {
+  const parent = el({ id: "p1", type: "cabinet", name: "B柜", x: 0, y: 0, w: 200, h: 200 });
+  const child = el({ id: "k1", type: "drawer", x: 20, y: 20, w: 60, h: 40, parentId: "p1" });
+  const l = layout([parent, child]);
+
+  it("复制子元素 → 返回可读拒绝原因（含父容器名 + 两条出路）", () => {
+    const msg = pasteRejection(l, [{ id: "k1" }]);
+    expect(msg).not.toBeNull();
+    expect(msg!).toContain("B柜");                     // 说清在哪个容器里
+    expect(msg!).toContain("复制整个容器");             // 出路 1
+    expect(msg!).toContain("移出容器");                 // 出路 2
+  });
+
+  it("自由元素不受影响（不该拦）", () => {
+    expect(pasteRejection(layout([el({ id: "a1", type: "shelf" })]), [{ id: "a1" }])).toBeNull();
+  });
+
+  it("**被拒绝时不产生任何新元素、也不产生孤儿**", () => {
+    const msg = pasteRejection(l, [{ id: "k1" }]);
+    if (!msg) throw new Error("本应被拒绝");
+    // 拒绝路径不触碰布局（等价于 UI 直接 return）
+    expect(l.items).toHaveLength(2);
+    expect(findOrphans(l)).toEqual([]);
+  });
+});
+
+describe("F 嵌套布局下 C 补码：不触碰任何已有编码", () => {
+  const parent = el({ id: "p1", type: "cabinet", name: "A柜", locCode: "6011-A", rows: 4, cols: 2, w: 200, h: 200 });
+  const child = el({ id: "k1", type: "drawer", locCode: "", rows: 4, cols: 1, parentId: "p1" });
+  const free = el({ id: "f1", type: "shelf", locCode: "", rows: 4, cols: 8 });
+  const l = layout([parent, child, free]);
+
+  it("只给空的补码；父柜的 6011-A 一字不改；子元素也能补到独立码", async () => {
+    const { planCodes, applyCodePlan } = await import("@/components/inventory/layoutCodeGen");
+    const plan = planCodes(l, [], "6011");
+    const out = applyCodePlan(l, plan);
+
+    expect(out.items.find(i => i.id === "p1")!.locCode).toBe("6011-A");        // 已贴标签：不变
+    expect(out.items.find(i => i.id === "k1")!.locCode).toBe("6011-B");        // 子元素补独立码
+    expect(out.items.find(i => i.id === "f1")!.locCode).toBe("6011-C");
+    expect(out.items.find(i => i.id === "k1")!.parentId).toBe("p1");           // 嵌套关系不受影响
+    expect(findOrphans(out)).toEqual([]);
   });
 });
