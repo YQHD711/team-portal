@@ -60,25 +60,7 @@ export interface SignalRef {
   instance?: number;
   label?: string;
   color?: string;
-  /**
-   * 派生变换：图表/证据要显示的**物理量**与原始列不是一回事时必须显式声明，避免"拿错通道"。
-   *
-   * 两个真实教训（task-34 修）：
-   *  - PX4 姿态是**四元数**：直接把 `q[0]`（w 分量）当滚转角画出来，平飞时是 0.7 而滚转角是 0°，
-   *    量纲完全不对；必须用 `euler-from-quaternion` 走**与规则指标同一份** `quatToEulerDeg`。
-   *  - PX4 的 `*_setpoint.roll_body` 是**弧度**：图上标「度」就必须 `rad-to-deg`，否则两条线量纲不同。
-   */
-  derive?: SignalDerive;
 }
-
-export type SignalDerive =
-  | { kind: "rad-to-deg" }
-  | {
-      kind: "euler-from-quaternion";
-      axis: "roll" | "pitch" | "yaw";
-      /** 四元数列名，顺序固定为 (w, x, y, z) */
-      quatFields: readonly [string, string, string, string];
-    };
 
 export interface ThresholdLine {
   value: number;
