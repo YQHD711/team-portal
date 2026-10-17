@@ -113,14 +113,16 @@ describe("元素属性弹窗（PropertyDialog）", () => {
     expect(screen.getByText("100×60")).toBeInTheDocument();
   });
 
-  it("正视详情与删除回调带上当前元素", () => {
-    const onDetail = vi.fn();
+  it("①② 合并后：面板内直接有格位图、没有「正视详情」按钮、删除回调带上当前元素", () => {
     const onDelete = vi.fn();
-    render(<PropertyDialog element={shelf} roomCode="201" onSave={vi.fn()} onDelete={onDelete} onDetail={onDetail} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByText("正视详情"));
-    expect(onDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "e1" }));
-    fireEvent.click(screen.getByText("删除"));
-    expect(onDelete).toHaveBeenCalledWith("e1");
+    const { container } = render(<PropertyDialog element={shelf} roomCode="201" items={[]} onSave={vi.fn()} onDelete={onDelete} onClose={vi.fn()} />);
+    // ① 已合并：格位图直接嵌在面板里（无需二次打开）
+    expect(container.querySelector("[data-testid=\"cell-grid\"]")).not.toBeNull();
+    // ④ 旧的「正视详情」按钮已删除（用户原话：点元素就该看到正视图）
+    expect(screen.queryByText("正视详情")).toBeNull();
+    // 删除按钮仍在，且回调带上当前元素
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    expect(onDelete).toHaveBeenCalledWith(shelf.id);
   });
 
   it("墙/门/窗不提供格位划分，只改长度与位置", () => {

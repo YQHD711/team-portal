@@ -23,8 +23,6 @@ import { usePlannerClipboard } from "./usePlannerClipboard";
 import { CodeGenButton } from "./CodeGenButton";
 import { deleteConfirmText, deleteElementSafe, deleteWithChildren } from "./layoutNesting";
 import { useNestActions } from "./useNestActions";
-import { NestActionsButton } from "./NestActionsButton";
-import { UnderTableToggle } from "./UnderTableToggle";
 import { ExportLocationLabelsButton } from "./ExportLocationLabelsButton";
 import { historyReducer } from "./usePlannerHistory";
 import type { RoomLayoutRow } from "./layoutRow";
@@ -158,8 +156,6 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
     <div className="space-y-3">
       <CodeGenButton layout={layout} materials={items} roomCode={row.roomCode} onApply={commit} />
       <ExportLocationLabelsButton layout={layout} roomName={row.roomName} />
-      <NestActionsButton layout={layout} selected={selected} selectedHasParent={!!findElem(selected ?? "")?.parentId} onNest={nest} onDetach={detach} />
-      <UnderTableToggle layout={layout} selected={selected} materials={items} commit={commit} setMsg={setMsg} />
       <PlannerToolbar
         roomCode={row.roomCode} roomName={roomName} onRoomName={setRoomName}
         width={layout.width} height={layout.height}
@@ -186,7 +182,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
         {showLines && <ConnectionLines containerRef={workRef} lines={lines} hoverKey={hoverKey} />}
       </div>
       {editEl && (
-        <PropertyDialog key={editEl.id} element={editEl} roomCode={row.roomCode}
+        <PropertyDialog key={editEl.id} element={editEl} roomCode={row.roomCode} items={items} nest={{ layout, selectedHasParent: !!editEl.parentId, onNest: nest, onDetach: detach }}
           onSave={onPropertySave}
           onDelete={(id) => { deleteById(id); setEditId(null); }}
           onDetail={(el) => { setEditId(null); setDetail({ el, cell: null }); }}
