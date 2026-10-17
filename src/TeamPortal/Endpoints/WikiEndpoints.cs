@@ -146,12 +146,20 @@ public static partial class WikiEndpoints
             }
 
             // 删除会连知识库里的项目目录一起清掉 —— 先把目录整体搬进回收站（可恢复），再删任务行
+            // ⚠️ 审计 #4：TargetFolder/ProjectName 来自任务创建时的用户输入，直接拼路径可把任意文件
+            // （含线上 SQLite 主库）搬进回收站。必须规范化并断言**最终路径落在知识库根目录之内**；
+            // 不用 StartsWith 前缀比较（审计 #33：前缀缺分隔符判定会误放行），按路径段用 GetRelativePath 判。
             var kbRoot = knowledge.BasePath;
-            var folders = new[]
+            var folders = KnowledgePathGuard.ResolveAllInside(kbRoot, new[]
             {
-                Path.Combine(kbRoot, task.TargetFolder, task.ProjectName),
-                Path.Combine(kbRoot, task.TargetFolder, $"{task.ProjectName}_EN"),
-            };
+                new[] { task.TargetFolder, task.ProjectName },
+                new[] { task.TargetFolder, $"{task.ProjectName}_EN" },
+            });
+            if (folders is null)
+            {
+                log.Warn("wiki", $"Wiki task {id} delete rejected: illegal project path (folder={task.TargetFolder}, project={task.ProjectName}) by {actor}");
+                return Results.Problem("项目路径非法（越出知识库目录），已拒绝删除", statusCode: 400);
+            }
             db.TrashItems.Add(trash.StashPaths(folders, $"Wiki 项目：{task.ProjectName}", "WikiTask", uid, actor, row: task));
             await db.SaveChangesAsync();
 
