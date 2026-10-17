@@ -116,7 +116,7 @@ export default function StorageLayoutPage() {
           {editing ? (
             <RoomPlanner layout={selected} onSaved={handleSaved} onBack={() => setEditing(false)} />
           ) : parsedLayout ? (
-            <PlannerViewer layout={parsedLayout} roomCode={selected.roomCode} items={roomItems}
+            <PlannerViewer layout={parsedLayout} roomCode={selected.roomCode} roomName={selected.roomName} items={roomItems}
               initialElementId={focus?.initialElementId} focusElementId={focus?.focusElementId}
               focusItem={focus?.focusItemId ? roomItems.find(i => i.id === focus.focusItemId) ?? null : null} />
           ) : (

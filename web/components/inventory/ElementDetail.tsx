@@ -14,9 +14,12 @@ import { elementStats, materialsByCell } from "./locationCodes";
 import { cellClasses } from "./cellColors";
 import { useLowStock } from "./LowStockProvider";
 import { formatArea, formatCellDims, formatDims } from "./layoutUnits";
+import { ElementLocationExportButton } from "./ElementLocationExportButton";
 
 interface ElementDetailProps {
   element: ItemElement;
+  /** 所属房间名（元素级库位标签导出的文件名用） */
+  roomName?: string;
   items: MaterialItem[];
   /** 初始选中的格位编码（从画布点进来时定位） */
   initialCell?: string | null;
@@ -34,7 +37,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ElementDetail({ element, items, initialCell, focusItemId, onClose }: ElementDetailProps) {
+export function ElementDetail({ element, items, initialCell, focusItemId, onClose, roomName }: ElementDetailProps) {
   const def = ELEMENT_DEFS[element.type];
   const { threshold } = useLowStock();
   const split = usesCells(element);
@@ -56,10 +59,12 @@ export function ElementDetail({ element, items, initialCell, focusItemId, onClos
     : element.locCode || "整体";
   const selectedItems = grouped.get(selectedKey) ?? [];
   const Icon = def.icon;
+  const canExportLabels = !!roomName;
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-black/50 backdrop-blur-sm sm:items-start sm:p-4"
       onClick={onClose}>
+      {canExportLabels && <div className="px-3 pt-2"><ElementLocationExportButton element={element} roomName={roomName ?? ""} /></div>}
       <div className="flex w-full flex-col rounded-none bg-surface shadow-xl sm:my-auto sm:max-w-3xl sm:rounded-2xl border border-border"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-border p-4">
