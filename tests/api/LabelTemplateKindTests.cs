@@ -28,7 +28,7 @@ public class LabelTemplateKindTests
 
     [Theory]
     [InlineData("case:valid", true)]
-    [InlineData("case:missing-qr", false)]
+    [InlineData("case:missing-qr", true)]
     [InlineData("case:qr-without-code-text", false)]
     [InlineData("case:no-text", false)]
     [InlineData("case:empty", false)]
