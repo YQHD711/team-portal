@@ -26,10 +26,17 @@ export async function fetchTemplates(): Promise<TemplateListResult> {
   }
 }
 
-/** 写入用的 body：完整模板（含完整 elements 数组），不带服务端负责的 id/updatedAt */
+/**
+ * 写入用的 body：完整模板（含完整 elements 数组），不带服务端负责的 id/updatedAt。
+ *
+ * ⚠️ **`kind` 必须一起发**：之前漏了它，于是设计器里把「用途」改成「库位标签」、
+ * 一点保存又变回「物料标签」——后端对 PUT 的语义是「kind 不传就保持原值」，
+ * 而新建走 POST 时 DTO 默认 material，所以怎么改都存不进去。
+ */
 export function toWritePayload(t: LabelTemplate): Record<string, unknown> {
   return {
     name: t.name,
+    kind: t.kind ?? "material",
     isDefault: t.isDefault === true,
     widthMm: t.widthMm,
     heightMm: t.heightMm,

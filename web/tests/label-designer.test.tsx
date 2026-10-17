@@ -135,6 +135,40 @@ describe("标签模板设计器：模板管理", () => {
     ]);
   });
 
+  /**
+   * 回归（用户实测：「我改为库位标签，但是一点保存就自动变回物料标签」）：
+   * 两个前端 bug 叠加 ——
+   *  ① `toWritePayload` 漏发 `kind` → 后端 POST 默认 material / PUT 视为"保持原值"
+   *  ② `normalizeTemplate` 漏读 `kind` → 即使后端存了 location，前端归一化后又变回 material
+   * 这个用例同时钉住载荷与保存后的界面值（用后端回显模拟）。
+   */
+  it("把「用途」改成库位标签 → 保存载荷 kind=location，保存后界面仍是库位标签（不再变回物料）", async () => {
+    await renderPage();
+    expect(screen.getAllByTestId("template-kind")).toHaveLength(1);   // 曾经被脚本复制成 3 个重复控件
+
+    fireEvent.change(screen.getByTestId("template-kind"), { target: { value: "location" } });
+    mockedPut.mockResolvedValue(tpl({ kind: "location" }));            // 模拟后端回显
+    fireEvent.click(screen.getByTestId("template-save"));
+
+    await waitFor(() => expect(mockedPut).toHaveBeenCalledTimes(1));
+    const [, body] = mockedPut.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body).toMatchObject({ kind: "location" });
+    await waitFor(() => expect(screen.getByTestId("template-kind")).toHaveValue("location"));
+  });
+
+  it("保存载荷始终带 kind；归一化也保留 kind（老模板缺字段 → material）", async () => {
+    const { normalizeTemplate } = await import("@/lib/labelTemplate");
+    expect(normalizeTemplate(tpl({ kind: "location" }))?.kind).toBe("location");
+    expect(normalizeTemplate(tpl())?.kind).toBe("material");
+
+    await renderPage();
+    fireEvent.change(screen.getByTestId("template-name"), { target: { value: "改名以触发可保存" } });
+    fireEvent.click(screen.getByTestId("template-save"));
+    await waitFor(() => expect(mockedPut).toHaveBeenCalledTimes(1));
+    const [, body] = mockedPut.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.kind).toBe("material");   // 不传会被后端当成"保持原值"，必须显式发
+  });
+
   it("设为默认：只发一次请求，列表里默认标识唯一", async () => {
     mockedGet.mockResolvedValue({ templates: [tpl(), tpl({ id: 2, name: "备选", isDefault: false })] });
     render(<LabelTemplatesPage />);
