@@ -47,9 +47,9 @@ public partial class WikiGeneratorService
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
-    public WikiGeneratorService(AppDbContext db, KnowledgeService knowledge, IConfiguration config, HttpClient http, ILogger<WikiGeneratorService> logger, WikiProgressTracker progress, AiToolCaller aiTools, AiClient ai)
+    public WikiGeneratorService(AppDbContext db, KnowledgeService knowledge, IConfiguration config, HttpClient http, ILogger<WikiGeneratorService> logger, WikiProgressTracker progress, AiToolCaller? aiTools = null, AiClient? ai = null)
     {
-        _db = db; _knowledge = knowledge; _config = config; _http = http; _logger = logger; _progress = progress; _aiTools = aiTools; _ai = ai;
+        _db = db; _knowledge = knowledge; _config = config; _http = http; _logger = logger; _progress = progress; _aiTools = aiTools!; _ai = ai!;
         _options = WikiSettingsStore.Load().Options;
     }
 

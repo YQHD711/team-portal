@@ -17,6 +17,7 @@ public partial class WikiGeneratorService
 {
     private async Task<string> CallAiWithTools(string systemPrompt, string userMessage, List<ToolDef> tools, string taskDesc, string? modelName = null)
     {
+        var aiTools = _aiTools ?? throw new InvalidOperationException("AiToolCaller 未注入");
         // ReasoningEffort 不覆盖：让它跟随全局配置 AI:ReasoningEffort 的默认值（与收编前一致）
         var option = new AiOptions(
             Provider: await GetProviderAsync(),
@@ -41,7 +42,7 @@ public partial class WikiGeneratorService
             function = new { name = t.Name, description = t.Description, parameters = t.Parameters }
         }).ToList();
 
-        var result = await _aiTools.RunAsync(
+        var result = await aiTools.RunAsync(
             option,
             messages,
             toolDefs,

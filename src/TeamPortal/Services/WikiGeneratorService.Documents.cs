@@ -130,6 +130,7 @@ public partial class WikiGeneratorService
 
                 // 走通用 OpenAI 兼容层（单轮、无 tools）：不再自拼 /chat/completions，也不再写死模型。
                 // 原有参数保持不变：temperature 0.2 / max_tokens 16384（行为与收编前一致）。
+                var ai = _ai ?? throw new InvalidOperationException("AiClient 未注入");
                 var aiOpt = new AiOptions(
                     Provider: await GetProviderAsync(),
                     BaseUrl: await GetBaseUrl(),
@@ -145,11 +146,11 @@ public partial class WikiGeneratorService
                     new { role = "system", content = system },
                     new { role = "user", content = reviewPrompt }
                 };
-                var payload = _ai.BuildChatPayload(aiOpt, aiMessages, stream: false,
+                var payload = ai.BuildChatPayload(aiOpt, aiMessages, stream: false,
                     maxTokens: 16384, temperature: 0.2);
-                using var req = _ai.CreateChatRequest(aiOpt, payload);
+                using var req = ai.CreateChatRequest(aiOpt, payload);
 
-                var resp = await _ai.SendAsync(req);
+                var resp = await ai.SendAsync(req);
                 if (!resp.IsSuccessStatusCode) continue;
 
                 var body = await resp.Content.ReadAsStringAsync();
