@@ -50,7 +50,7 @@ public partial class WikiGeneratorService
     /// 生成一篇文档并**校验它真的落盘了**。
     ///
     /// 为什么必须校验：AI 有可能只回一段文本而不调用 write_doc（迭代耗尽、模型跑偏、被截断），
-    /// 此时 CallDeepSeekWithTools 正常返回、不抛异常，文档就"静默缺失"——任务照样算完成，
+    /// 此时 CallAiWithTools 正常返回、不抛异常，文档就"静默缺失"——任务照样算完成，
     /// 表现为「目录能点开但文档 404、知识库里也找不到」。所以这里核对文件，缺失就补一次
     /// 明确要求写文件的请求。
     /// </summary>
@@ -130,7 +130,7 @@ public partial class WikiGeneratorService
 
                 var payload = new
                 {
-                    model = "deepseek-v4-flash",
+                    model = _options.ContentModel,   // 不再写死模型：跟随 Wiki 设置（默认 deepseek-v4-flash，可换任意 OpenAI 兼容服务模型）
                     messages = new object[] {
                         new { role = "system", content = system },
                         new { role = "user", content = reviewPrompt }
@@ -268,7 +268,7 @@ public partial class WikiGeneratorService
             new("write_doc", "Write document. MUST call this.", new { path = new { type = "string", description = "Document path (without .md)" }, content = new { type = "string", description = "Full Markdown content" } }),
         };
 
-        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}", _currentModel);
+        await CallAiWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}", _currentModel);
     }
 
     private static List<CatalogItem> FlattenCatalog(List<CatalogItem> items)

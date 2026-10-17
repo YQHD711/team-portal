@@ -71,7 +71,7 @@ README:
             new("write_catalog", "Save the catalog JSON. MUST call this to complete.", new { json = new { type = "string", description = "Catalog JSON array" } }),
         };
 
-        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, "Catalog", _currentCatalogModel);
+        await CallAiWithTools(systemPrompt, userMessage, tools, "Catalog", _currentCatalogModel);
         return _catalogJson;
     }
 }

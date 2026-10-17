@@ -191,6 +191,7 @@ builder.Services.AddScoped<AiProxyService>();
 builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
 builder.Services.AddHttpClient<AiClient>();
+builder.Services.AddTransient<AiToolCaller>();   // 组合 AiClient（typed client=transient），故也 transient
 builder.Services.AddScoped<FlightDiagnosisService>();
 // 房间布局"谁在编辑"在线状态：内存态 + TTL 心跳（不上 WebSocket）
 builder.Services.AddSingleton<EditingPresenceService>();
