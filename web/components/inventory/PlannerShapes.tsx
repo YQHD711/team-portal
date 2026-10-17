@@ -168,7 +168,7 @@ export function ItemShape({ el, items, selected, draggable, ref, onClick, onDblC
         <Text text={`${cm(el.w)} × ${cm(el.h)} cm`} x={4} y={el.h - 11} width={el.w - 8} fontSize={9}
           fill="rgba(255,255,255,0.9)" listening={false} ellipsis />
       )}
-      {/* 「含桌下」角标已改由 DOM 覆盖层绘制（UnderTableBadges）—— 屏幕固定尺寸才读得清 */}
+        {/* 桌下提示不再用画布角标：改为属性面板「＋ 开启桌下存储」+ 正视图两层呈现 */}
     </Group>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 工作台「含桌下」开关（task-39 ③）。
+ * 工作台「桌下存储」开关（task-40 ①②：桌下层是**额外一层**，不是角标）。
  *
  * 只在**选中工作台**时出现（其它类型没有桌下概念）。
  *  - 关闭：若有桌下库位/物料 → **警告 + 确认**（取消则保持原状）；**绝不删数据**，编码与物料原样保留
@@ -50,7 +50,7 @@ export function UnderTableToggle({ layout, selected, materials, commit, setMsg }
   return (
     <label data-testid="under-table-toggle" className="flex items-center gap-1.5 text-xs">
       <input type="checkbox" data-testid="under-table-check" checked={on} onChange={onChange} className="h-3.5 w-3.5" />
-      含桌下（正视图显示桌下区）
+      ＋ 开启桌下存储
     </label>
   );
 }
