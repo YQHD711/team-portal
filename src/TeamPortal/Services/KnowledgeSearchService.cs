@@ -72,6 +72,7 @@ public partial class KnowledgeSearchService : IDisposable
     /// <summary>
     /// 按 wiki 任务的 Visibility 计算对调用者不可见的项目名(与知识库树的规则一致):
     /// 他部门的 department 可见项目 + 他人的 personal 项目。
+    /// **规则实现已收口到 <see cref="WikiProjectVisibility"/>**（审计 #13：读接口/MCP 也要用同一套）。
     /// </summary>
     private HashSet<string> InvisibleProjectNames(string? role, string? department, int userId)
     {
@@ -80,13 +81,7 @@ public partial class KnowledgeSearchService : IDisposable
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var deptProjects = db.WikiTasks
-                .Where(t => t.Visibility == "department" && t.TargetFolder != department)
-                .Select(t => t.ProjectName);
-            var personalProjects = db.WikiTasks
-                .Where(t => t.Visibility == "personal" && t.UserId != userId)
-                .Select(t => t.ProjectName);
-            return deptProjects.AsEnumerable().Union(personalProjects.AsEnumerable()).ToHashSet(StringComparer.Ordinal);
+            return WikiProjectVisibility.InvisibleProjectNames(db, role, department, userId);
         }
         catch (Exception ex)
         {
@@ -94,6 +89,27 @@ public partial class KnowledgeSearchService : IDisposable
             // 避免整库搜索因一次 DB 抖动而不可用。
             _logger.LogWarning(ex, "计算 wiki 项目可见性失败,本次搜索仅应用路径级 ACL");
             return new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// **单路径的 wiki 项目可见性判定**（供 `/api/knowledge/content`、`/download`、MCP `knowledge_read` 复用）。
+    /// 返回 true = 该路径不在"对他不可见的项目"里。DB 抖动时保守放行（与搜索层一致：路径级 ACL 仍在）。
+    /// </summary>
+    public bool IsWikiProjectVisibleTo(string relativePath, string? role, string? department, int userId)
+    {
+        if (role == "admin" || string.IsNullOrWhiteSpace(relativePath)) return true;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var invisible = WikiProjectVisibility.InvisibleProjectNames(db, role, department, userId);
+            return !WikiProjectVisibility.IsInvisibleProject(relativePath, invisible);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "计算 wiki 项目可见性失败,仅应用路径级 ACL");
+            return true;
         }
     }
 
