@@ -67,4 +67,27 @@ public class LabelTemplateMigrationTests : IDisposable
             Assert.Equal(5, t.Elements.Count);
         }
     }
+
+    /// <summary>
+    /// ③b 净增强：**加列前创建的老模板读出 `Kind == "material"`** —— 证明"老模板天然兼容"不只是"表建出来了"。
+    /// 关键点：插入时不写 Kind 列，靠**数据库列默认值**兜底（= 真实老库升级后的形态）。
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_OldRows_ReadAs_MaterialKind()
+    {
+        await using var db = new AppDbContext(Options());
+        db.Database.Migrate();
+
+        // 模拟"老代码写入的行"：INSERT 不带 Kind 列
+        var conn = db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "INSERT INTO LabelTemplates (Name, IsDefault, WidthMm, HeightMm, Dpi, Background, ElementsJson, UpdatedAt) VALUES ('老模板', 0, 80, 50, 203, '#FFFFFF', '[]', datetime('now'))";
+            cmd.ExecuteNonQuery();
+        }
+
+        var tpl = await db.LabelTemplates.AsNoTracking().SingleAsync(t => t.Name == "老模板");
+        Assert.Equal("material", tpl.Kind);      // 列默认值 = material → 老模板兼容
+    }
 }
