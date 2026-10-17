@@ -2,21 +2,28 @@
 
 /** 元素属性弹窗：cm 位置/尺寸/旋转 + 按类型的「行 × 列」格位；调用方按 element.id 加 key，切换元素时整体重挂载 */
 import { useState } from "react";
-import { LayoutGrid, X } from "lucide-react";
-import type { ItemElement, ItemType, PosElement } from "./layoutTypes";
+import { X } from "lucide-react";
+import { CellGrid, canUnderTable } from "./CellGrid";
+import { hasUnderTable, underTableImpact, withUnderTable } from "./tableZones";
+import type { ItemElement, ItemType, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
 import { ELEMENT_DEFS, ITEM_TYPES, cellAxes, cellSummary } from "./layoutTypes";
 import { COLS_MAX, MIN_ELEMENT_CM, ROOM_MAX_CM, ROWS_MAX } from "./layoutUnits";
 import { POS_PRESETS, SIZE_PRESETS } from "./layoutPresets";
 import { LengthPresets, NumField, PresetButtons, inputCls } from "./PropertyFields";
+import { NestActionsButton } from "./NestActionsButton";
 
 interface PropertyDialogProps {
   element: PosElement | ItemElement;
   roomCode: string;
+  /** 物料（格位图里显示每个格子的占用数）；缺省 [] 以兼容既有调用/测试 */
+  items?: MaterialItem[];
   onSave: (el: PosElement | ItemElement) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
-  /** 打开正视细节视图（仅物品元素） */
+  /** @deprecated 正视详情已合并进本面板（①②），保留字段仅为兼容既有调用 */
   onDetail?: (el: ItemElement) => void;
+  /** 容器归属（移入/移出容器）：选中元素的所有操作都收进这个面板，不再裸放工具栏 */
+  nest?: { layout: RoomLayout; selectedHasParent: boolean; onNest: (parentId: string) => void; onDetach: () => void };
 }
 
 type Draft = PosElement | ItemElement;
@@ -27,7 +34,8 @@ function kindOf(el: PosElement): "wall" | "door" | "window" {
   return "wall";
 }
 
-export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose, onDetail }: PropertyDialogProps) {
+export function PropertyDialog({ element, roomCode, items, onSave, onDelete, onClose, nest }: PropertyDialogProps) {
+  const mats = items ?? [];   // ① 内嵌格位图要显示占用数；未传时退化为空（不影响属性编辑）
   const [draft, setDraft] = useState<Draft>(() => ({ ...element }));
   const isItem = "type" in draft;
   const def = ELEMENT_DEFS[isItem ? draft.type : kindOf(draft)];
@@ -75,6 +83,13 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose, o
               <input value={item.locCode ?? ""} onChange={e => patch({ locCode: e.target.value })} placeholder={`${roomCode}-A`} className={inputCls} />
             </label>
 
+            {nest && (
+              <div className="rounded-xl border border-border bg-surface-subtle p-3">
+                <div className="mb-2 text-xs font-semibold text-muted">容器归属（把本元素放进某个容器）</div>
+                <NestActionsButton layout={nest.layout} selected={item.id} selectedHasParent={nest.selectedHasParent} onNest={nest.onNest} onDetach={nest.onDetach} />
+              </div>
+            )}
+
             <div className="rounded-xl border border-border bg-surface-subtle p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted">格位划分 · {cellSummary(item)}</span>
@@ -88,6 +103,20 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose, o
               </div>
               <p className="mt-2 text-[11px] leading-relaxed text-faint">{def.hint}</p>
             </div>
+
+            {/* ①② 桌下 = 真正多一层：按钮 + 立即预览（改的是草稿，保存后生效、可 Ctrl+Z 撤销） */}
+            {canUnderTable(item) && (
+              <button type="button" data-testid="toggle-under-table"
+                onClick={() => {
+                  const next = !hasUnderTable(item);
+                  if (!next) { const imp = underTableImpact(item, mats); if (!confirm(`桌下 ${imp.cells} 个库位、${imp.items} 件物料将不可见/不可用，确定关闭？`)) return; }
+                  patch(withUnderTable(item, next) as Partial<ItemElement>);
+                }}
+                className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                {hasUnderTable(item) ? "关闭桌下存储" : "＋ 开启桌下存储"}
+              </button>
+            )}
+            <CellGrid element={item} items={mats} />
           </div>
         ) : (
           <p className="text-sm text-muted">{def.label}用于划定房间范围，可直接改数值或在画布上拖动/缩放。</p>
@@ -118,12 +147,6 @@ export function PropertyDialog({ element, roomCode, onSave, onDelete, onClose, o
             <button onClick={() => onDelete(element.id)}
               className="rounded-lg px-3 py-2 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950">
               删除
-            </button>
-          )}
-          {item && onDetail && (
-            <button onClick={() => onDetail(item)}
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:border-sky-400 hover:text-sky-600">
-              <LayoutGrid className="h-4 w-4" />正视详情
             </button>
           )}
           <div className="flex-1" />
