@@ -32,6 +32,7 @@ public class LabelTemplateService
         var entity = new LabelTemplate
         {
             Name = req.Name.Trim(),
+            Kind = LabelTemplateSuitability.Normalize(req.Kind),
             WidthMm = req.WidthMm,
             HeightMm = req.HeightMm,
             Dpi = req.Dpi,
@@ -56,6 +57,8 @@ public class LabelTemplateService
         if (entity is null) return null;
 
         entity.Name = req.Name.Trim();
+        // kind 不传 -> 保持原值（老调用方 PUT 不带 kind，不会把库位模板降级）
+        if (!string.IsNullOrWhiteSpace(req.Kind)) entity.Kind = LabelTemplateSuitability.Normalize(req.Kind);
         entity.WidthMm = req.WidthMm;
         entity.HeightMm = req.HeightMm;
         entity.Dpi = req.Dpi;
@@ -127,6 +130,7 @@ public class LabelTemplateService
     {
         Id = entity.Id,
         Name = entity.Name,
+        Kind = entity.Kind,
         IsDefault = entity.IsDefault,
         WidthMm = entity.WidthMm,
         HeightMm = entity.HeightMm,

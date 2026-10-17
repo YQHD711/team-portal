@@ -135,8 +135,7 @@ export default function OperationLogsTab() {
               <th className="px-4 py-3 text-left font-medium text-muted w-24">操作人</th>
               <th className="px-4 py-3 text-left font-medium text-muted w-24">操作类型</th>
               <th className="px-4 py-3 text-left font-medium text-muted">目标</th>
-              <th className="px-4 py-3 text-left font-medium text-muted w-32 hidden sm:table-cell">来源IP</th>
-              <th className="px-4 py-3 text-left font-medium text-muted w-8"></th>
+                <th className="px-4 py-3 text-left font-medium text-muted w-8"></th>
             </tr></thead>
             <tbody className="divide-y divide-border-subtle">
               {loading && items.length === 0 ? (
@@ -164,7 +163,6 @@ export default function OperationLogsTab() {
                       ) : (o.data ? <span className="text-faint truncate block">{summarize(o.data)}</span> : null)}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-faint text-xs font-mono hidden sm:table-cell">{o.ipAddress || "—"}</td>
                   <td className="px-4 py-2.5 text-faint">
                     {o.data ? (expanded === o.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : null}
                   </td>
