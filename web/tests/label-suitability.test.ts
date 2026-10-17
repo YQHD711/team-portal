@@ -63,3 +63,40 @@ describe("适用性守卫（导出与 ③ 设计器校验共用同一判定）",
     expect(pick.notice).toBeNull();
   });
 });
+
+/**
+ * **共享 fixture（与 C# `tests/api/LabelTemplateKindTests.cs` 同一组 id）**：防跨语言漂移。
+ * `case:valid` / `case:missing-qr` / `case:qr-without-code-text` / `case:no-text` / `case:empty`
+ * 两侧规则一致；若将来不一致 → **取更严格的一侧并同步另一侧**（两侧注释同步写明）。
+ */
+describe("共享 fixture：库位标签适用性（与 C# 一一对应）", () => {
+  const mk = (id: string) => {
+    const qr = { id: "q", type: "qr" as const, x: 1, y: 1, w: 10, h: 10 };
+    const text = (field: string) => ({ id: "t", type: "text" as const, x: 1, y: 1, w: 10, h: 10, field: field as never });
+    const map: Record<string, unknown[]> = {
+      "case:valid": [qr, text("code")],
+      "case:missing-qr": [text("code")],
+      "case:qr-without-code-text": [qr, text("name")],
+      "case:no-text": [qr],
+      "case:empty": [],
+    };
+    return { ...DEFAULT_TEMPLATE, id: 1, name: "fixture", elements: map[id] } as never;
+  };
+  const cases = [["case:valid", true], ["case:missing-qr", false], ["case:qr-without-code-text", false], ["case:no-text", false], ["case:empty", false]] as const;
+  for (const [id, ok] of cases) {
+    it(`${id} → ${ok ? "适合" : "不适合"}（与 C# 同名用例对读）`, async () => {
+      const { locationLabelSuitability } = await import("@/lib/labelSuitability");
+      const r = locationLabelSuitability(mk(id));
+      expect(r.ok).toBe(ok);
+      if (!ok) expect(r.reasons.length).toBeGreaterThan(0);
+    });
+  }
+  it("候选来源：有 location 默认模板→用它；没有→null（调用方回落原逻辑）", async () => {
+    const { pickLocationTemplate } = await import("@/lib/labelSuitability");
+    const loc = { ...DEFAULT_TEMPLATE, id: 9, name: "库位", kind: "location", isDefault: true } as never;
+    const mat = { ...DEFAULT_TEMPLATE, id: 8, name: "物料", kind: "material", isDefault: true } as never;
+    expect(pickLocationTemplate([mat, loc])?.id).toBe(9);
+    expect(pickLocationTemplate([mat])).toBeNull();
+    expect(pickLocationTemplate([])).toBeNull();
+  });
+});
