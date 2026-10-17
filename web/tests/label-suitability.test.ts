@@ -73,3 +73,37 @@ describe("导出候选来源与回落", () => {
     expect(pickLocationTemplate([])).toBeNull();
   });
 });
+
+/**
+ * **回归测试（真实线上 bug）**：`GET /api/label-templates` 返回 `{ templates: [...] }`，
+ * 前端却按 `LabelTemplate[]` 使用 → `list.find is not a function` → 被 `.catch` 吞成
+ * "模板接口不可用" → 永远回落内置模板（含二维码）。`Kind` 功能因此在线上空转多轮。
+ * 这里锁死**后端真实形状**（`LabelTemplateEndpoints.cs:23`），别再退回成只认裸数组。
+ */
+describe("unwrapTemplates：后端包装形状 { templates } 必须解包", () => {
+  const mat = { ...DEFAULT_TEMPLATE, id: 1, name: "默认 80×50", isDefault: true, kind: "material" } as LabelTemplate;
+  const loc = { ...DEFAULT_TEMPLATE, id: 2, name: "库位 60×40", isDefault: true, kind: "location" } as LabelTemplate;
+
+  it("线上真实形状 { templates: [...] } → 取出数组（且 pickLocationTemplate 能选中库位模板）", async () => {
+    const { unwrapTemplates, pickLocationTemplate } = await import("@/lib/labelSuitability");
+    const res = { templates: [mat, loc] };
+    const list = unwrapTemplates(res);
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.map(t => t.id)).toEqual([1, 2]);
+    // 这一行就是"Kind 功能是否真的生效"的判定：bug 存在时 list 是空 → null
+    expect(pickLocationTemplate(list)?.id).toBe(2);
+  });
+
+  it("裸数组仍然接受（向后兼容，防止后端改回数组时两侧一起坏）", async () => {
+    const { unwrapTemplates } = await import("@/lib/labelSuitability");
+    expect(unwrapTemplates([mat, loc]).map(t => t.id)).toEqual([1, 2]);
+  });
+
+  it("异常输入不抛（null / undefined / 字符串 / 空对象 / 错误字段类型）→ []", async () => {
+    const { unwrapTemplates } = await import("@/lib/labelSuitability");
+    for (const bad of [null, undefined, "x", 42, {}, { templates: null }, { templates: "no" }]) {
+      expect(() => unwrapTemplates(bad)).not.toThrow();
+      expect(unwrapTemplates(bad)).toEqual([]);
+    }
+  });
+});

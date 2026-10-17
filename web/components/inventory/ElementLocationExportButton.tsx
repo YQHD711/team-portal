@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ItemElement } from "./layoutTypes";
 import { api } from "@/lib/api";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
-import { chooseExportTemplate, pickLocationTemplate } from "@/lib/labelSuitability";
+import { chooseExportTemplate, pickLocationTemplate, unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
 import { collectLocationSlots, describeBatch, downloadPdf, elementLabelFileName } from "@/lib/locationLabelPdf";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import { roomLocationCodes } from "./ExportLocationLabelsButton";
@@ -34,8 +34,8 @@ export function ElementLocationExportButton({ element, roomName, template: overr
 
   useEffect(() => {
     if (override) return;
-    api.get<LabelTemplate[]>("/api/label-templates")
-      .then(list => { const loc = pickLocationTemplate(list); const pick = chooseExportTemplate(loc ?? list.find(t => t.isDefault) ?? list[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); else if (!loc) setMsg(`还没有「库位标签」模板，当前使用「${pick.template.name}」（${pick.template.widthMm}×${pick.template.heightMm}mm）。可到标签模板设计器新建一个并选「库位标签」。`); })
+    api.get<LabelTemplatesResponse>("/api/label-templates")
+      .then(list => { const tpls = unwrapTemplates(list); const loc = pickLocationTemplate(tpls); const pick = chooseExportTemplate(loc ?? tpls.find(t => t.isDefault) ?? tpls[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); else if (!loc) setMsg(`还没有「库位标签」模板，当前使用「${pick.template.name}」（${pick.template.widthMm}×${pick.template.heightMm}mm）。可到标签模板设计器新建一个并选「库位标签」。`); })
       .catch(() => { const pick = chooseExportTemplate(null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); });
   }, [override]);
 
