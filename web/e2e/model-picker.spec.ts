@@ -50,14 +50,16 @@ test.describe("模型名下拉（真浏览器）", () => {
 
     const input = page.locator('input[aria-label="AI:ModelName"]');
     await expect(input).toHaveValue("deepseek-v4-pro");
+    // 候选不再内置：要等「获取可用模型」（= 服务商现行列表）拿到之后才有下拉按钮
+    await page.getByRole("button", { name: "获取可用模型" }).click();
     const toggle = page.getByTestId("model-input-toggle").first();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
     await toggle.click();
 
-    // 展开：4 条内置候选（只数弹层里的，页面上原生 select 的 option 也是 role=option）
+    // 展开：候选来自服务商现行列表（mock 的 /api/admin/ai/models 返回 3 个）—— 不再有内置硬编码列表
     const options = page.locator('[data-testid="model-input-options"] [role="option"]');
-    await expect(options).toHaveCount(4);
+    await expect(options).toHaveCount(3);
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     const hitLast = await page.evaluate(() => {
       const list = document.querySelector('[data-testid="model-input-options"]');
@@ -70,8 +72,8 @@ test.describe("模型名下拉（真浏览器）", () => {
     expect(hitLast).toBe("hit");
 
     // 选中候选 → 写回输入框并收起
-    await page.getByTestId("model-option-deepseek-reasoner").click();
-    await expect(input).toHaveValue("deepseek-reasoner");
+    await page.getByTestId("model-option-deepseek-v4-lite").click();
+    await expect(input).toHaveValue("deepseek-v4-lite");
     await expect(page.getByTestId("model-input-options")).toHaveCount(0);
 
     // 仍可自由输入（不是只能选的 select）
@@ -101,10 +103,10 @@ test.describe("模型名下拉（真浏览器）", () => {
     await expect(toggles).toHaveCount(2);
 
     await toggles.nth(1).click(); // 「文档生成模型」
-    await expect(page.locator('[data-testid="model-input-options"] [role="option"]')).toHaveCount(4);
-    await page.getByTestId("model-option-deepseek-chat").click();
+    await expect(page.locator('[data-testid="model-input-options"] [role="option"]')).toHaveCount(3);
+    await page.getByTestId("model-option-deepseek-v4-flash").click();
 
-    await expect(page.locator('input[aria-label="文档生成模型"]')).toHaveValue("deepseek-chat");
+    await expect(page.locator('input[aria-label="文档生成模型"]')).toHaveValue("deepseek-v4-flash");
     await expect(page.locator('input[aria-label="目录生成模型"]')).toHaveValue("deepseek-v4-pro");
     await expect(page.getByTestId("model-input-options")).toHaveCount(0);
   });
@@ -120,10 +122,12 @@ test.describe("模型名下拉（手机 390×844）", () => {
 
     const input = page.locator('input[aria-label="AI:ModelName"]');
     await input.scrollIntoViewIfNeeded();
+    // 先取服务商现行模型列表（候选不再内置）
+    await page.getByRole("button", { name: "获取可用模型" }).click();
     await page.getByTestId("model-input-toggle").first().click();
 
     const options = page.locator('[data-testid="model-input-options"] [role="option"]');
-    await expect(options).toHaveCount(4);
+    await expect(options).toHaveCount(3);
     const hitLast = await page.evaluate(() => {
       const list = document.querySelector('[data-testid="model-input-options"]');
       const last = list?.lastElementChild as HTMLElement | undefined;
@@ -135,7 +139,7 @@ test.describe("模型名下拉（手机 390×844）", () => {
     });
     expect(hitLast).toBe("hit");
 
-    await page.getByTestId("model-option-deepseek-chat").click();
-    await expect(input).toHaveValue("deepseek-chat");
+    await page.getByTestId("model-option-deepseek-v4-flash").click();
+    await expect(input).toHaveValue("deepseek-v4-flash");
   });
 });

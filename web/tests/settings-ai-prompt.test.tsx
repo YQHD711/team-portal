@@ -23,7 +23,11 @@ const settingsPayload = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGet.mockResolvedValue(settingsPayload);
+  // 模型候选来自服务商现行列表（组件不再内置任何厂商模型名）
+  mockGet.mockImplementation((url: string) =>
+    url === "/api/admin/ai/models"
+      ? Promise.resolve({ ok: true, error: null, baseUrl: "", models: [{ id: "vendor-model-1" }] })
+      : Promise.resolve(settingsPayload));
 });
 
 describe("系统设置：AI 提示词", () => {
@@ -39,7 +43,9 @@ describe("系统设置：AI 提示词", () => {
     const model = screen.getByLabelText("AI:ModelName");
     expect(model.tagName).toBe("INPUT");
     expect(model).toHaveValue("deepseek-v4-pro");
-    expect(screen.getByTestId("model-input-toggle")).toBeInTheDocument();
+    // 候选只在点「获取可用模型」后从服务商拉取（组件不再内置厂商模型名，模型名可自由填）
+    fireEvent.click(screen.getByRole("button", { name: "获取可用模型" }));
+    await waitFor(() => expect(screen.getByTestId("model-input-toggle")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("model-input-toggle"));
     expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
 

@@ -89,6 +89,20 @@ public partial class WikiGeneratorService
         return _config.GetValue<string>("AiService:BaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
     }
 
+    /// <summary>
+    /// 系统设置里的默认模型（`AI:ModelName`）—— Wiki 设置里模型留空时的回落目标。
+    /// 两处都为空时**明确报错**，而不是拿空字符串去请求（那只会得到难懂的 400/404）。
+    /// </summary>
+    private async Task<string> ResolveSystemModelAsync()
+    {
+        var v = await SettingEitherAsync("AI:ModelName", "AI:ModelName");
+        if (string.IsNullOrWhiteSpace(v)) v = _config.GetValue<string>("AiService:ModelName");
+        if (string.IsNullOrWhiteSpace(v))
+            throw new InvalidOperationException(
+                "未配置生成模型：请在「系统设置」填写模型名（AI:ModelName），或在「Wiki 设置」里指定模型。");
+        return v.Trim();
+    }
+
     public WikiGeneratorOptions GetOptions() => _options;
     public void UpdateOptions(WikiGeneratorOptions opts) { _options = opts; var s = new WikiSettingsStore { Options = opts }; s.Save(); }
 

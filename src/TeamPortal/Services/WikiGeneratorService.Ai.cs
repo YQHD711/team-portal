@@ -18,12 +18,18 @@ public partial class WikiGeneratorService
     private async Task<string> CallAiWithTools(string systemPrompt, string userMessage, List<ToolDef> tools, string taskDesc, string? modelName = null)
     {
         var aiTools = _aiTools ?? throw new InvalidOperationException("AiToolCaller 未注入");
+        // 模型解析顺序：任务级显式指定 → Wiki 设置 → **系统设置 AI:ModelName**。
+        // 最后一档是本次补的：Wiki 设置的模型字段现在允许留空（不再写死 deepseek-*），
+        // 留空就必须真的回落到系统设置，否则会拿空字符串去请求（model="" → 400）。
+        var model = modelName;
+        if (string.IsNullOrWhiteSpace(model)) model = _options.ContentModel;
+        if (string.IsNullOrWhiteSpace(model)) model = await ResolveSystemModelAsync();
         // ReasoningEffort 不覆盖：让它跟随全局配置 AI:ReasoningEffort 的默认值（与收编前一致）
         var option = new AiOptions(
             Provider: await GetProviderAsync(),
             BaseUrl: await GetBaseUrl(),
             ApiKey: await GetApiKey(),
-            Model: modelName ?? _options.ContentModel,
+            Model: model,
             Thinking: _options.ThinkingMode == "thinking",
             ReasoningEffort: "high",
             Temperature: _options.Temperature,

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { TaskQueue, isActiveTask, type WikiTaskInfo } from "@/components/wiki/TaskQueue";
-import WikiImportPage from "@/app/(protected)/wiki/import/page";
+import { WikiImportPanel } from "@/components/wiki/WikiImportPanel";
 import { api } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -100,7 +100,7 @@ describe("Wiki 导入页", () => {
       return Promise.resolve({});
     });
 
-    render(<WikiImportPage />);
+    render(<WikiImportPanel />);
     // 首屏请求：用 advance(0) 把微任务刷干净（fake timers 下 waitFor 不工作）
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     const initial = mockGet.mock.calls.filter(c => c[0] === "/api/wiki/tasks").length;
@@ -112,16 +112,21 @@ describe("Wiki 导入页", () => {
     expect(after).toBeGreaterThan(initial);
   });
 
-  it("生成模型是可自由填写的输入框（不是下拉），且提供常用名候选", async () => {
-    render(<WikiImportPage />);
+  it("生成模型是可自由填写的输入框（不是下拉），候选来自服务商现行列表", async () => {
+    const mockGetWithModels = mockGet as unknown as { mockImplementation: (fn: (u: string) => Promise<unknown>) => void };
+    mockGetWithModels.mockImplementation((url: string) =>
+      url === "/api/admin/ai/models"
+        ? Promise.resolve({ ok: true, error: null, baseUrl: "", models: [{ id: "vendor-model-1" }, { id: "vendor-model-2" }] })
+        : Promise.resolve([]));
+    render(<WikiImportPanel />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
     const input = screen.getByLabelText("生成模型");
     expect(input.tagName).toBe("INPUT");
 
-    // 常用名走统一的受控下拉（原生 datalist 点箭头不可靠，见 ModelInput）
+    // 候选来自 /api/admin/ai/models（不再内置任何厂商模型名）
     fireEvent.click(screen.getByTestId("model-input-toggle"));
-    expect(screen.getByTestId("model-option-deepseek-v4-pro")).toBeInTheDocument();
+    expect(screen.getByTestId("model-option-vendor-model-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("model-input-toggle"));
 
     fireEvent.change(input, { target: { value: "my-custom-model-7b" } });

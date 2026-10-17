@@ -9,7 +9,7 @@
  */
 
 import type { LabelTemplate } from "./labelTemplate";
-import { DEFAULT_TEMPLATE } from "./labelTemplate";
+import { LOCATION_FALLBACK_TEMPLATE } from "./locationTemplate";
 
 export interface Suitability {
   ok: boolean;
@@ -33,17 +33,17 @@ export function locationLabelSuitability(tpl: LabelTemplate | null | undefined):
 /**
  * 选出实际用于库位导出的模板：
  * - 团队默认模板适用 → 用它（管理员改尺寸 → 导出尺寸跟着变）
- * - 不适用 → **回落内置模板**并给出可见提示（不静默）
+ * - 不适用 → **回落内置库位模板**（60×40、无二维码）并给出可见提示（不静默）
  * - 没有默认模板（接口不可用等）→ 回落 + 提示
  */
 export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefined): { template: LabelTemplate; notice: string | null } {
   if (!apiDefault) {
-    return { template: DEFAULT_TEMPLATE, notice: "模板接口不可用，已用内置库位模板导出。" };
+    return { template: LOCATION_FALLBACK_TEMPLATE, notice: "模板接口不可用，已用内置库位模板导出。" };
   }
   const fit = locationLabelSuitability(apiDefault);
   if (!fit.ok) {
     return {
-      template: DEFAULT_TEMPLATE,
+      template: LOCATION_FALLBACK_TEMPLATE,
       notice: `团队默认模板不适合库位标签（${fit.reasons.join("；")}），已改用内置库位模板导出。`,
     };
   }
