@@ -50,6 +50,8 @@ test.describe("模型名下拉（真浏览器）", () => {
 
     const input = page.locator('input[aria-label="AI:ModelName"]');
     await expect(input).toHaveValue("deepseek-v4-pro");
+    // 候选不再内置：要等「获取可用模型」（= 服务商现行列表）拿到之后才有下拉按钮
+    await page.getByRole("button", { name: "获取可用模型" }).click();
     const toggle = page.getByTestId("model-input-toggle").first();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
@@ -120,6 +122,8 @@ test.describe("模型名下拉（手机 390×844）", () => {
 
     const input = page.locator('input[aria-label="AI:ModelName"]');
     await input.scrollIntoViewIfNeeded();
+    // 先取服务商现行模型列表（候选不再内置）
+    await page.getByRole("button", { name: "获取可用模型" }).click();
     await page.getByTestId("model-input-toggle").first().click();
 
     const options = page.locator('[data-testid="model-input-options"] [role="option"]');

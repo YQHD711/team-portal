@@ -21,6 +21,9 @@ const TPL = {
   id: 1, name: "含中文标签", isDefault: true, widthMm: 80, heightMm: 50, dpi: 600, background: "#FFFFFF",
   elements: [
     { id: "q", type: "qr", x: 3, y: 10, w: 30, h: 30 },
+    // 必须有一处引用 code 的文本，否则这个模板对库位标签**不适用** → 会回落到内置库位模板（无二维码），
+    // 这条用例要验的是"中文光栅化 + 二维码仍在"，所以模板本身必须被采用。
+    { id: "c", type: "text", x: 36, y: 12, w: 40, h: 8, fontSizePt: 10, field: "code" },
     { id: "t", type: "text", x: 36, y: 34, w: 40, h: 12, fontSizePt: 9, field: "name" },   // 元素名（中文）
   ],
 };

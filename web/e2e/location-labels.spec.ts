@@ -50,6 +50,8 @@ async function exportPdf(page: Page): Promise<Uint8Array> {
 const pageCount = (b: Uint8Array) => (Buffer.from(b).toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length;
 const boxesPt = (b: Uint8Array) => [...Buffer.from(b).toString("latin1").matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/g)].map(m => ({ w: +m[1], h: +m[2] }));
 const images = (b: Uint8Array) => (Buffer.from(b).toString("latin1").match(/\/Subtype\s*\/Image/g) ?? []).length;
+/** PDF 里所有图像对象的像素宽度（用来区分"二维码量级方图"和"中文光栅化长条") */
+const imgWidths = (b: Uint8Array) => [...Buffer.from(b).toString("latin1").matchAll(/\/Width\s+(\d+)/g)].map(m => Number(m[1]));
 
 test("④ 页数 / 逐页 mm / A4 负向 / 两条路径 / 守卫回落", async ({ page }) => {
   page.on("dialog", d => void d.accept());   // **整个用例只注册一次**（重复注册 → already handled → 下载被取消）
@@ -81,5 +83,7 @@ test("④ 页数 / 逐页 mm / A4 负向 / 两条路径 / 守卫回落", async (
   console.log(`NUM-守卫 提示="${notice}" 页数=${pageCount(g)} 逐页mm=${JSON.stringify(gMm)} 图像对象数=${images(g)}`);
   expect(notice).toContain("不适合库位标签");
   expect(gMm[0]).toBe("60.0×40.0");          // 回落到内置**库位**模板（不是 70×50，也不是物料的 80×50）
-  expect(images(g)).toBe(0);                 // **用户明确：库位标签不用二维码** → 回落模板里不能有 qr
+  // **用户明确：库位标签不用二维码** → 回落模板里不能有二维码元素。
+  // 注意不能断言"图像对象数=0"：中文会被光栅化（这是修乱码的必需行为），所以只能排除**二维码量级**的方图。
+  expect(imgWidths(g).filter(w => w > 100 && w < 300)).toHaveLength(0);
 });
