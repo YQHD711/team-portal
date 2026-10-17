@@ -2,15 +2,16 @@ namespace TeamPortal.Services;
 
 /// <summary>
 /// Configuration for Wiki AI generation.
-/// Defaults optimized for DeepSeek V4 Pro (official recommendations).
+/// 默认值对齐"真实在用的持久化配置"（data/wiki-settings.json），而不是模型文档里的推荐值——
+/// 这样"新建/未配置"的环境行为与线上实际一致（多数情况下用户不需要改任何项）。
 /// </summary>
 public class WikiGeneratorOptions
 {
     /// <summary>AI model: deepseek-v4-pro (best quality) or deepseek-v4-flash (cheaper).</summary>
-    public string CatalogModel { get; set; } = "deepseek-v4-pro";
+    public string CatalogModel { get; set; } = "deepseek-v4-flash";
 
     /// <summary>AI model for document content generation.</summary>
-    public string ContentModel { get; set; } = "deepseek-v4-pro";
+    public string ContentModel { get; set; } = "deepseek-v4-flash";
 
     /// <summary>可选模型列表（Wiki 导入页下拉选择用）。</summary>
     public List<string> AvailableModels { get; set; } = new() { "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat" };
