@@ -7,14 +7,17 @@ namespace TeamPortal.Services;
 /// </summary>
 public class WikiGeneratorOptions
 {
-    /// <summary>AI 模型：默认 deepseek-v4-flash（真实在用）；要质量可改 deepseek-v4-pro。</summary>
-    public string CatalogModel { get; set; } = "deepseek-v4-flash";
+    /// <summary>
+    /// 目录生成模型。**留空 = 使用系统设置里的模型**（`AI:ModelName`）。
+    ///
+    /// 以前这里写死 `deepseek-v4-flash`：用户把 AI 换成任意 OpenAI 兼容端点（用户要求：
+    /// 「模型选择和 api 也要可以填写兼容 openai 的格式的，和系统设置应该一样，而不是写死 deepseek」）
+    /// 之后，Wiki 仍会拿 deepseek 的模型名去打别人的端点 → 400/404。
+    /// </summary>
+    public string CatalogModel { get; set; } = "";
 
-    /// <summary>生成文档内容的 AI 模型（默认与 CatalogModel 相同：flash）。</summary>
-    public string ContentModel { get; set; } = "deepseek-v4-flash";
-
-    /// <summary>可选模型列表（Wiki 导入页下拉选择用）。</summary>
-    public List<string> AvailableModels { get; set; } = new() { "deepseek-v4-pro", "deepseek-v4-flash" };   // deepseek-chat 已不在官方列表，删掉避免选到必失败的模型
+    /// <summary>生成文档内容的模型。**留空 = 使用系统设置里的模型**（`AI:ModelName`）。</summary>
+    public string ContentModel { get; set; } = "";
 
     /// <summary>单次最大输出 tokens（未超 131,072 上限；注意费用）。</summary>
     public int MaxOutputTokens { get; set; } = 32768;

@@ -53,7 +53,7 @@ const images = (b: Uint8Array) => (Buffer.from(b).toString("latin1").match(/\/Su
 
 test("④ 页数 / 逐页 mm / A4 负向 / 两条路径 / 守卫回落", async ({ page }) => {
   page.on("dialog", d => void d.accept());   // **整个用例只注册一次**（重复注册 → already handled → 下载被取消）
-  // ---- 路径 A：不 mock 到模板（接口 500 → 降级内置 80×50）----
+  // ---- 路径 A：不 mock 到模板（接口 500 → 降级**内置库位模板 60×40，无二维码**）----
   await setup(page, null);
   const a = await exportPdf(page);
   const aPages = pageCount(a), aBoxes = boxesPt(a);
@@ -61,24 +61,25 @@ test("④ 页数 / 逐页 mm / A4 负向 / 两条路径 / 守卫回落", async (
   console.log(`NUM-A 页数=${aPages}（标签数 5）逐页mm=${JSON.stringify(aMm)}`);
   console.log(`NUM-A A4负向 首${aBoxes[0].w.toFixed(1)}×${aBoxes[0].h.toFixed(1)}pt vs A4 595.3×841.9pt → 不相等=${Math.abs(aBoxes[0].w - 595.28) > 1}`);
 
-  // ---- 路径 B：mock 成 60×40 且适合库位 ----
-  await setup(page, template(42, 60, 40, QR_OK));
+  // ---- 路径 B：mock 成 70×45 且适合库位 ----
+  await setup(page, template(42, 70, 45, QR_OK));
   const bm = await exportPdf(page);
   const bBoxes = boxesPt(bm);
   const bMm = bBoxes.map(x => `${(x.w / MM_TO_PT).toFixed(1)}×${(x.h / MM_TO_PT).toFixed(1)}`);
   console.log(`NUM-B 页数=${pageCount(bm)} 逐页mm=${JSON.stringify(bMm)}`);
   console.log(`NUM-两路径不同 A首页=${aMm[0]} B首页=${bMm[0]} → 数值不同=${aMm[0] !== bMm[0]}`);
-  expect(aMm[0]).toBe("80.0×50.0");
-  expect(bMm[0]).toBe("60.0×40.0");
+  // 用户明确「库位标签不用二维码」：内置兜底是**库位专用**模板 60×40（不是物料模板 80×50）
+  expect(aMm[0]).toBe("60.0×40.0");
+  expect(bMm[0]).toBe("70.0×45.0");
   expect(aMm[0]).not.toBe(bMm[0]);
 
-  // ---- 守卫：mock 一个**不含二维码**的默认模板 → 回落 + 提示 + 产物仍有二维码 ----
+  // ---- 守卫：mock 一个**没有引用编码文本**的默认模板 → 回落内置库位模板 + 提示 + 产物**无二维码** ----
   await setup(page, template(7, 70, 50, [{ id: "t", type: "text", x: 1, y: 1, w: 20, h: 6, field: "name" }]));
   const notice = await page.getByTestId("export-location-labels-msg").innerText().catch(() => "");
   const g = await exportPdf(page);
   const gBoxes = boxesPt(g), gMm = gBoxes.map(x => `${(x.w / MM_TO_PT).toFixed(1)}×${(x.h / MM_TO_PT).toFixed(1)}`);
   console.log(`NUM-守卫 提示="${notice}" 页数=${pageCount(g)} 逐页mm=${JSON.stringify(gMm)} 图像对象数=${images(g)}`);
   expect(notice).toContain("不适合库位标签");
-  expect(gMm[0]).toBe("80.0×50.0");          // 回落到内置库位模板（不是 70×50）
-  expect(images(g)).toBeGreaterThanOrEqual(1); // **产物仍有二维码（图像对象）**
+  expect(gMm[0]).toBe("60.0×40.0");          // 回落到内置**库位**模板（不是 70×50，也不是物料的 80×50）
+  expect(images(g)).toBe(0);                 // **用户明确：库位标签不用二维码** → 回落模板里不能有 qr
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import WikiImportPage from "@/app/(protected)/wiki/import/page";
+import { WikiImportPanel } from "@/components/wiki/WikiImportPanel";
 import { api } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGet.mockImplementation((url: string) => {
     if (url === "/api/wiki/tasks") return Promise.resolve([]);
-    if (url === "/api/wiki/settings") return Promise.resolve({ availableModels: [], contentModel: "" });
+    if (url === "/api/admin/ai/models") return Promise.resolve({ ok: true, error: null, baseUrl: "", models: [] });
     return Promise.resolve({});
   });
   mockPost.mockResolvedValue({});
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("Wiki 导入：仅克隆", () => {
   it("勾选「仅克隆」时提交 cloneOnly=true，并给克隆留出更长的超时", async () => {
-    render(<WikiImportPage />);
+    render(<WikiImportPanel />);
     fireEvent.change(screen.getByPlaceholderText("例如: my-awesome-project"), { target: { value: "proj" } });
     fireEvent.change(screen.getByPlaceholderText("https://github.com/user/repo.git"), { target: { value: "https://github.com/a/b.git" } });
     fireEvent.click(screen.getByLabelText("仅克隆（只下载源码，不生成文档）"));
@@ -50,7 +50,7 @@ describe("Wiki 导入：仅克隆", () => {
   });
 
   it("不勾选时 cloneOnly=false，且不额外延长超时", async () => {
-    render(<WikiImportPage />);
+    render(<WikiImportPanel />);
     fireEvent.change(screen.getByPlaceholderText("例如: my-awesome-project"), { target: { value: "proj" } });
     fireEvent.change(screen.getByPlaceholderText("https://github.com/user/repo.git"), { target: { value: "https://github.com/a/b.git" } });
 
@@ -69,7 +69,7 @@ describe("Wiki 导入：仅克隆", () => {
       text: () => Promise.resolve("{}"),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = render(<WikiImportPage />);
+    const { container } = render(<WikiImportPanel />);
     fireEvent.change(screen.getByPlaceholderText("例如: my-awesome-project"), { target: { value: "proj" } });
     showTab(/ZIP 上传/);
     const file = new File(["zip"], "src.zip", { type: "application/zip" });

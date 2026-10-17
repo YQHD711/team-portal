@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
+import { LOCATION_FALLBACK_TEMPLATE } from "@/lib/locationTemplate";
 
 const qr = { id: "q", type: "qr" as const, x: 1, y: 1, w: 10, h: 10 };
 const text = (field: string) => ({ id: "t", type: "text" as const, x: 1, y: 1, w: 10, h: 10, field: field as never });
@@ -48,20 +49,23 @@ describe("导出候选来源与回落", () => {
     expect(pick.notice).toBeNull();
   });
 
-  it("**不适合**（有文本但不引用编码）→ 回落内置 + 提示", async () => {
+  it("**不适合**（有文本但不引用编码）→ 回落内置库位模板 + 提示，且不含二维码", async () => {
     const { chooseExportTemplate } = await import("@/lib/labelSuitability");
     const bad = tpl({ elements: [text("name")] as never });
     const pick = chooseExportTemplate(bad);
-    expect(pick.template.id).toBe(DEFAULT_TEMPLATE.id);
+    expect(pick.template.id).toBe(LOCATION_FALLBACK_TEMPLATE.id);
     expect(pick.notice).toContain("不适合库位标签");
-    expect(pick.template.elements.some(e => e.type === "qr")).toBe(true);
+    // 用户明确「库位标签不用二维码」：回落模板不能是物料模板（那个带 qr）
+    expect(pick.template.elements.some(e => e.type === "qr")).toBe(false);
+    expect(pick.template.elements.filter(e => e.type === "text").length).toBeGreaterThan(0);
   });
 
-  it("接口不可用（无默认模板）→ 回落 + 提示", async () => {
+  it("接口不可用（无默认模板）→ 回落内置库位模板 + 提示（无二维码）", async () => {
     const { chooseExportTemplate } = await import("@/lib/labelSuitability");
     const pick = chooseExportTemplate(null);
-    expect(pick.template.id).toBe(DEFAULT_TEMPLATE.id);
+    expect(pick.template.id).toBe(LOCATION_FALLBACK_TEMPLATE.id);
     expect(pick.notice).toContain("模板接口不可用");
+    expect(pick.template.elements.some(e => e.type === "qr")).toBe(false);
   });
 
   it("候选来源：有 kind=location 的默认模板 → 优先用它；没有 → null", async () => {

@@ -3,13 +3,15 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-/** 常用模型名，仅作输入建议 —— 输入框本身接受任意名称（对接自建/兼容端点时用得上）。 */
-export const MODEL_SUGGESTIONS = [
-  "deepseek-v4-pro",
-  "deepseek-v4-flash",
-  "deepseek-chat",
-  "deepseek-reasoner",
-] as const;
+/**
+ * 候选模型名**不再内置**。
+ *
+ * 以前这里写死 `deepseek-v4-pro / v4-flash / chat / reasoner`：官方一换名（`deepseek-chat` 下线、
+ * 或用户换成任意 OpenAI 兼容端点）这串就变成"选中必失败的过期选项"，而界面上完全看不出来。
+ * 现在候选由调用方从**服务商现行列表**取（`GET /api/admin/ai/models`，见 `useAiModelSuggestions`），
+ * 拿不到就干脆不显示下拉——输入框本身始终接受任意模型名。
+ */
+export const MODEL_SUGGESTIONS: readonly string[] = [];
 
 /** 候选列表最大高度与单项高度（px）：只用于估算向上/向下弹出 */
 const LIST_MAX_H = 240;
@@ -51,7 +53,7 @@ interface ModelInputProps {
  * 换成自己画的受控下拉后，「点箭头展开、选中写回」变成我们能测、能保证的行为；仍然可以手输任意
  * 模型名 —— 不用 `<select>` 是因为模型名由上游决定，写死选项会把自建/新模型挡在外面。
  */
-export function ModelInput({ value, onChange, suggestions = MODEL_SUGGESTIONS, placeholder = "例如 deepseek-v4-pro", label, className = "" }: ModelInputProps) {
+export function ModelInput({ value, onChange, suggestions = MODEL_SUGGESTIONS, placeholder = "填入模型名（留空表示用系统设置里的模型）", label, className = "" }: ModelInputProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [pos, setPos] = useState<ListPos>({ top: 0, bottom: 0, left: 0, width: 0, up: false });

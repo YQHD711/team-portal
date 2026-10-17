@@ -51,7 +51,7 @@ const materialNav = [
 /** 管理员子菜单（staff 折叠展开） */
 const staffNav = [
   { href: "/admin/knowledge", label: "知识库", icon: BookOpen },
-  { href: "/wiki/import", label: "Wiki 导入", icon: Upload },
+  
 ];
 
 /** 管理子菜单 — 部长(staff)可见 */
@@ -206,7 +206,7 @@ export function Sidebar() {
                 onClick={() => setAdminOpen(!adminOpen)}
                 className={cn(
                   "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-colors duration-150",
-                  pathname.startsWith("/admin") || pathname.startsWith("/wiki/import")
+                  pathname.startsWith("/admin")
                     ? "bg-primary/10 text-foreground"
                     : "text-muted hover:text-foreground hover:bg-surface-hover"
                 )}

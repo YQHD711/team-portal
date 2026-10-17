@@ -4,20 +4,32 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { ModelInput, MODEL_SUGGESTIONS } from "@/components/ui/ModelInput";
 
+/**
+ * 注意：**候选名单现在由服务商提供**（`/api/admin/ai/models`），组件不再内置任何厂商模型名。
+ * 所以这里显式传一份中性候选，测试不再和 deepseek 的模型名耦合
+ * （曾经的 `deepseek-chat` / `deepseek-reasoner` 已经下线，写进测试等于把过期数据固化下来）。
+ */
+const CANDIDATES = ["model-alpha", "model-beta", "model-gamma"] as const;
+
 /** 受控用法，和设置页 / Wiki 页一致：值由外部持有 */
-function Harness({ initial = "deepseek-v4-pro", onChange = () => {} }: { initial?: string; onChange?: (v: string) => void }) {
+function Harness({ initial = "model-alpha", onChange = () => {} }: { initial?: string; onChange?: (v: string) => void }) {
   const [value, setValue] = useState(initial);
   return (
     <ModelInput
       value={value}
       onChange={v => { setValue(v); onChange(v); }}
       label="AI:ModelName"
+      suggestions={CANDIDATES}
     />
   );
 }
 
 const toggle = () => screen.getByTestId("model-input-toggle");
 const input = () => screen.getByLabelText("AI:ModelName");
+
+it("默认不内置任何厂商模型名（过期列表的根因）", () => {
+  expect(MODEL_SUGGESTIONS).toHaveLength(0);
+});
 
 describe("ModelInput：可自由输入 + 受控下拉候选", () => {
   afterEach(() => { vi.restoreAllMocks(); });
@@ -32,13 +44,24 @@ describe("ModelInput：可自由输入 + 受控下拉候选", () => {
     const list = screen.getByTestId("model-input-options");
     expect(list).toBeInTheDocument();
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
-    for (const m of MODEL_SUGGESTIONS) {
+    for (const m of CANDIDATES) {
       expect(screen.getByTestId(`model-option-${m}`)).toHaveTextContent(m);
     }
-    expect(screen.getAllByRole("option")).toHaveLength(MODEL_SUGGESTIONS.length);
+    expect(screen.getAllByRole("option")).toHaveLength(CANDIDATES.length);
     // 再点一次收起
     fireEvent.click(toggle());
     expect(screen.queryByTestId("model-input-options")).not.toBeInTheDocument();
+  });
+
+  it("没有候选时（服务商列表拿不到）不显示下拉按钮，但输入框照常可用", () => {
+    const NoSuggestions = () => {
+      const [v, setV] = useState("");
+      return <ModelInput value={v} onChange={setV} label="AI:ModelName" suggestions={[]} />;
+    };
+    render(<NoSuggestions />);
+    expect(screen.queryByTestId("model-input-toggle")).not.toBeInTheDocument();
+    fireEvent.change(input(), { target: { value: "any-model-name" } });
+    expect(input()).toHaveValue("any-model-name");
   });
 
   it("选中候选会写回输入框并收起列表", () => {
@@ -46,10 +69,10 @@ describe("ModelInput：可自由输入 + 受控下拉候选", () => {
     render(<Harness onChange={onChange} />);
     fireEvent.click(toggle());
 
-    fireEvent.click(screen.getByTestId("model-option-deepseek-reasoner"));
+    fireEvent.click(screen.getByTestId("model-option-model-gamma"));
 
-    expect(input()).toHaveValue("deepseek-reasoner");
-    expect(onChange).toHaveBeenCalledWith("deepseek-reasoner");
+    expect(input()).toHaveValue("model-gamma");
+    expect(onChange).toHaveBeenCalledWith("model-gamma");
     expect(screen.queryByTestId("model-input-options")).not.toBeInTheDocument();
   });
 
@@ -81,7 +104,7 @@ describe("ModelInput：可自由输入 + 受控下拉候选", () => {
 
     fireEvent.keyDown(input(), { key: "ArrowDown" });
     fireEvent.keyDown(input(), { key: "Enter" });
-    expect(input()).toHaveValue("deepseek-v4-flash");
+    expect(input()).toHaveValue("model-beta");
   });
 
   // 回归：点箭头本身可能让浏览器把聚焦元素滚进视野 → 触发 scroll。

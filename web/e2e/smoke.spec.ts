@@ -192,7 +192,16 @@ async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; it
       ]);
     }
     if (path === "/api/wiki/settings") {
-      return json({ contentModel: "deepseek-v4-pro", availableModels: ["deepseek-v4-pro", "deepseek-v4-flash"] });
+      // 注意：不再返回 `availableModels` —— 那份后端写死的模型列表已删，
+      // Wiki 页面的候选统一走 /api/admin/ai/models（与系统设置同源）
+      return json({
+        catalogModel: "", contentModel: "", maxOutputTokens: 32768, parallelCount: 3,
+        maxRetryAttempts: 2, retryDelayMs: 2000, directoryTreeMaxDepth: -1, readmeMaxLength: 10000,
+        documentGenerationTimeoutMinutes: 120, temperature: 1, topP: 1, thinkingMode: "thinking", documentLanguage: "zh-CN",
+      });
+    }
+    if (path === "/api/admin/ai/models") {
+      return json({ ok: true, error: null, baseUrl: "https://api.deepseek.com", models: [{ id: "deepseek-v4-pro" }, { id: "deepseek-v4-flash" }] });
     }
     if (path === "/api/firmware/sources") {
       return json({
@@ -402,12 +411,14 @@ test.describe("冒烟流程", () => {
     expect(url).toContain("version=stable");
   });
 
-  test("Wiki 导入：任务阶段进度与可自由填写的模型名", async ({ page }) => {
+  test("Wiki 导入（已并入 Wiki 设置）：任务阶段进度与可自由填写的模型名", async ({ page }) => {
     await mockApi(page, "admin");
     await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
 
-    await page.goto("/wiki/import");
-    await expect(page.getByRole("heading", { name: "Wiki 导入" })).toBeVisible();
+    // 用户要求「wiki导入和wiki设置合并」：导入现在是 Wiki 设置页的「导入仓库」页签
+    await page.goto("/admin/wiki-settings?tab=import");
+    await expect(page.getByRole("heading", { name: "Wiki 设置" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "导入仓库" })).toHaveAttribute("aria-selected", "true");
 
     // 首屏就要有任务（此前只在提交/手动刷新后才拉列表）
     await expect(page.getByText("ardupilot")).toBeVisible();
@@ -697,7 +708,7 @@ test.describe("删除按钮可见性", () => {
     await mockApi(page, "admin");
     await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("admin"));
 
-    await page.goto("/wiki/import");
+    await page.goto("/admin/wiki-settings?tab=import");
 
     const del = page.locator('button[title="删除任务"]').first();
     await expect(del).toBeVisible();
