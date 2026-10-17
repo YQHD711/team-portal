@@ -49,7 +49,8 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     if (override) return;
     api.get<LabelTemplate[]>("/api/label-templates")
       .then(list => {
-        const pick = chooseExportTemplate(pickLocationTemplate(list) ?? list.find(t => t.isDefault) ?? list[0] ?? null);
+        const loc = pickLocationTemplate(list); const pick = chooseExportTemplate(loc ?? list.find(t => t.isDefault) ?? list[0] ?? null);
+        if (!loc) setMsg(`还没有「库位标签」模板，当前使用「${pick.template.name}」（${pick.template.widthMm}×${pick.template.heightMm}mm）。可到标签模板设计器新建一个并选「库位标签」。`);
         setTemplate(pick.template);
         if (pick.notice) setMsg(pick.notice);   // **不静默**：说明为什么换了模板
       })

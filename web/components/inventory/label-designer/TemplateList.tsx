@@ -43,6 +43,9 @@ export function TemplateList({ templates, currentId, dirty, notice, onSelect, on
               <button type="button" onClick={() => onSelect(t)} className="min-w-0 flex-1 truncate text-left">
                 {t.name}
               </button>
+              <span data-testid="kind-badge" className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] text-muted">
+                {(t.kind ?? "material") === "location" ? "库位" : "物料"}
+              </span>
               {t.isDefault && (
                 <span data-testid="default-badge" title="默认模板（导出默认用它）"
                   className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">默认</span>

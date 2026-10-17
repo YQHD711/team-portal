@@ -38,7 +38,7 @@ export function locationLabelSuitability(tpl: LabelTemplate | null | undefined):
  */
 export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefined): { template: LabelTemplate; notice: string | null } {
   if (!apiDefault) {
-    return { template: DEFAULT_TEMPLATE, notice: "未取到团队默认模板（接口不可用），已用内置库位模板导出。" };
+    return { template: DEFAULT_TEMPLATE, notice: "模板接口不可用，已用内置库位模板导出。" };
   }
   const fit = locationLabelSuitability(apiDefault);
   if (!fit.ok) {
@@ -52,8 +52,7 @@ export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefine
 
 /**
  * **导出候选来源**（task-40 ③b 步骤 7）：库位标签**优先取 `Kind=location` 的默认模板**；
- * 没有才退回 <see cref="chooseExportTemplate"/> 的"默认模板 + 适用性软判定 + 内置回落"。
- * 物料标签（ItemLabelModal）不走这里，仍取 material。
+ * 没有才退回 chooseExportTemplate 的"默认模板 + 适用性软判定 + 内置回落"。物料标签不走这里（仍 material）。
  */
 export function pickLocationTemplate(list: readonly LabelTemplate[]): LabelTemplate | null {
   const isLocation = (t: LabelTemplate) => (t.kind ?? "material") === "location";
