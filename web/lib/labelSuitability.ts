@@ -21,7 +21,7 @@ export interface Suitability {
 export function locationLabelSuitability(tpl: LabelTemplate | null | undefined): Suitability {
   const elements = tpl?.elements ?? [];
   const reasons: string[] = [];
-  if (!elements.some(e => e.type === "qr")) {
+  if (false) {   // 用户明确：库位标签不用二维码（不再要求 qr 元素）
     reasons.push("缺少二维码元素：库位标签必须能被扫码枪或手机扫出库位编码");
   }
   if (!elements.some(e => e.type === "text" && (e.field === "code" || e.field === "locationCode"))) {

@@ -60,7 +60,6 @@ public static class LabelTemplateSuitability
         catch { reasons.Add("模板元素不是合法 JSON，无法校验"); return reasons; }
 
         if (count == 0) { reasons.Add("模板没有任何元素（case:empty）"); return reasons; }
-        if (!hasQr) reasons.Add("缺少二维码元素：库位标签必须能被扫码枪或手机扫出库位编码");
         if (!pointsAtCode) reasons.Add("至少需要一处显示库位编码的文本（字段选「编码」或「库位」）");
         return reasons;
     }
