@@ -18,9 +18,25 @@
 import type { ItemElement, MaterialItem, RoomLayout } from "./layoutTypes";
 import { colsOf, rowsOf } from "./layoutTypes";
 
-/** 是否有桌下区：**缺省即开启**（老数据没有该字段 → 按默认 true 处理） */
+/**
+ * 是否有桌下区。
+ *
+ * **"缺省即开启"只对真的存在第 2 行的老数据成立**（老数据 rows≥2 = 桌上 + 桌下）。
+ * 之前无条件按 true 处理，导致 `rows=1` 的 1×1 工作台也显示「关闭桌下存储」（= 声称已开启），
+ * 但 `frontRows = rows = 1` → **正视图里根本没有桌下行**：属性面板看不到桌下层，
+ * 挂载物料时层位选择也只有「第 1 层」——正是用户报的
+ * 「显示开启但 UI 没正确加载」「挂载物料时没办法挂载到桌下」。
+ *
+ * 现在：**一律要求 rows ≥ 2**（桌下 = 第 2 行起）——
+ * 显式 `true` 且 rows≥2 → 开启；显式 `false` → 关闭；缺省 → rows≥2 才算开启（老数据语义）。
+ * 这样"按钮状态"与"界面上真的有几行"永远一致，不会出现"显示已开启但没有桌下行"。
+ */
 export function hasUnderTable(el: ItemElement): boolean {
-  return el.type === "workbench" && el.underTableEnabled !== false;
+  if (el.type !== "workbench") return false;
+  if (el.underTableEnabled === false) return false;
+  // rows=1 时无论标志怎么设都不可能存在桌下层（桌下 = 第 2 行），故一律视为未开启。
+  // 用户把「行数」改回 1 时也会自动回到"未开启"，而不是留一个点不动的开关。
+  return rowsOf(el) >= 2;
 }
 
 /** 正视图（层×位网格）显示的行数 */
