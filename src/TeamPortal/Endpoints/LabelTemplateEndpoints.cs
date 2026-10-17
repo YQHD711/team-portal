@@ -27,6 +27,8 @@ public static class LabelTemplateEndpoints
         admin.MapPost("/", async (LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             if (LabelTemplateValidation.Validate(req) is { } reason) return Results.Problem(reason, statusCode: 400);
+            // kind=location 必须可用（同前端 locationLabelSuitability）；不适合则拒绝并给逐条原因
+            if (LabelTemplateSuitability.Check(req.Kind, req.Elements) is { Count: > 0 } fitReasons) return Results.Problem(string.Join("；", fitReasons), statusCode: 400);
             var saved = await svc.CreateAsync(req, Actor(user));
             log.Audit("create-label-template", Actor(user), targetType: "label-template", targetId: saved.Id.ToString(),
                 data: new { saved.Name, elements = saved.Elements.Count }, ipAddress: LogService.ClientIp(ctx));
@@ -36,6 +38,8 @@ public static class LabelTemplateEndpoints
         admin.MapPut("/{id:int}", async (int id, LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             if (LabelTemplateValidation.Validate(req) is { } reason) return Results.Problem(reason, statusCode: 400);
+            // kind=location 必须可用（同前端 locationLabelSuitability）；不适合则拒绝并给逐条原因
+            if (LabelTemplateSuitability.Check(req.Kind, req.Elements) is { Count: > 0 } fitReasons) return Results.Problem(string.Join("；", fitReasons), statusCode: 400);
             var saved = await svc.UpdateAsync(id, req, Actor(user));
             if (saved is null) return Results.Problem("模板不存在", statusCode: 404);
             log.Audit("update-label-template", Actor(user), targetType: "label-template", targetId: id.ToString(),

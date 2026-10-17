@@ -9,6 +9,8 @@ public class LabelTemplateDto
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public bool IsDefault { get; set; }
+    /// <summary>标签用途分类：material（缺省）/ location。不传 = material（老调用方兼容）。</summary>
+    public string? Kind { get; set; }
     public double WidthMm { get; set; } = 80;
     public double HeightMm { get; set; } = 50;
     public int Dpi { get; set; } = 600;
