@@ -205,7 +205,8 @@ function Row({ label, value, mono, small, inline, fullWidth }: {
   return (
     <div className={`flex items-center justify-between gap-3 ${inline ? "" : "py-1"} ${fullWidth ? "col-span-full" : ""}`}>
       <span className="text-xs text-muted shrink-0">{label}</span>
-      <span className={`${small ? "text-xs" : "text-sm"} ${mono ? "font-mono" : ""} truncate text-right`} title={value}>{value}</span>
+      {/* 手机上一行放不下时改为换行显示（原来 truncate 会把主机名/当前目录切掉且看不全） */}
+      <span className={`${small ? "text-xs" : "text-sm"} ${mono ? "font-mono" : ""} min-w-0 break-all text-right`} title={value}>{value}</span>
     </div>
   );
 }

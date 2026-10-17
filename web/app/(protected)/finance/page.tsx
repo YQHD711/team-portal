@@ -102,7 +102,7 @@ export default function FinancePage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowForm(false)} />
-          <div className="relative my-auto max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+          <div className="relative my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <h2 className="text-lg font-bold">采购申请</h2>
             <div><label className="block text-sm font-medium mb-1">物品名称</label><input value={itemName} onChange={e=>setItemName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="如：螺旋桨 1045"/></div>
             <div className="grid grid-cols-2 gap-3">

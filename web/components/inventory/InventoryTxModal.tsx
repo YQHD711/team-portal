@@ -16,7 +16,7 @@ interface Props {
 export default function InventoryTxModal({ item, mode, qty, onQty, note, onNote, onClose, onSubmit }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/40" onClick={onClose}>
-      <div className="my-auto max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto bg-surface rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-lg">{mode === "consume" ? "消耗登记" : mode === "checkout" ? "领用零件" : "归还零件"}</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-faint" /></button>

@@ -31,28 +31,31 @@ export default function InventoryTable({ items, loading, role, onTake, onLabel, 
          items.length === 0 ? <div className="p-8 text-center text-muted"><Package className="h-8 w-8 mx-auto mb-2" />暂无零件</div> :
          items.map(item => (
           <div key={item.id} className={`p-3 ${isStaff && item.quantity < threshold ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="font-medium text-sm">{item.name}</div>
-                {item.code && <div className="text-xs font-mono text-faint">{item.code}</div>}
-                <div className="text-xs text-muted">
+            {/* 主信息：名称/分类/库位 + 数量状态。文字列 min-w-0 允许收缩，
+                长物料名（一串无反斜杠的英文/编号）也不会把整行顶出卡片。 */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm break-words [overflow-wrap:anywhere]">{item.name}</div>
+                {item.code && <div className="text-xs font-mono text-faint break-all">{item.code}</div>}
+                <div className="mt-0.5 text-xs text-muted break-words">
                   {item.category} · <LocationLink locationCode={item.locationCode} item={item.code || item.id} testId={`item-location-m-${item.id}`} />
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => onTake(item)} disabled={item.status === "broken"}
-                  className={`p-1 rounded ${item.status === "broken" ? "text-faint cursor-not-allowed opacity-40" : item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
-                  title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
-                <button onClick={() => onReturn(item)} className={`p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
-                <button onClick={() => onHistory(item)} className="p-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
-                {item.code && <button onClick={() => onLabel(item)} className="p-1 rounded-lg hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-4 w-4" /></button>}
-                {isStaff && <button onClick={() => onEdit(item)} title="编辑物料" className="p-1.5 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
-                {isAdmin && <button onClick={() => onDelete(item)} title="删除物料" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span className={`text-lg font-bold leading-none ${isStaff ? (item.quantity === 0 ? "text-danger" : item.quantity < threshold ? "text-amber-500" : "") : ""}`}>{item.quantity}</span>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-faint"}`}>{statusOpts.find(s => s.value === item.status)?.label || item.status}</span>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "available" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : item.status === "in_use" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-faint"}`}>{statusOpts.find(s => s.value === item.status)?.label || item.status}</span>
-              <span className={`text-lg font-bold ${isStaff ? (item.quantity === 0 ? "text-danger" : item.quantity < threshold ? "text-amber-500" : "") : ""}`}>{item.quantity}</span>
+            {/* 操作行单独一行并允许折行：原来 6 个图标塞在标题右侧，40px 触控区会把卡片顶破 */}
+            <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border-subtle pt-2">
+              <button onClick={() => onTake(item)} disabled={item.status === "broken"} aria-label={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}
+                className={`tap-sm p-2 rounded-lg ${item.status === "broken" ? "text-faint cursor-not-allowed opacity-40" : item.grade === "C" ? "hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-500" : "hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-500"}`}
+                title={item.status === "broken" ? "已报损，不能领用" : item.grade === "C" ? "消耗" : "领用"}><Minus className="h-4 w-4" /></button>
+              <button onClick={() => onReturn(item)} aria-label="归还" className={`tap-sm p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-emerald-500 ${item.grade === "C" ? "hidden" : ""}`} title="归还"><PlusIcon className="h-4 w-4" /></button>
+              <button onClick={() => onHistory(item)} aria-label="领用记录" className="tap-sm p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-400" title="记录"><History className="h-4 w-4" /></button>
+              {item.code && <button onClick={() => onLabel(item)} aria-label="物料标签（二维码）" className="tap-sm p-2 rounded-lg hover:bg-surface-hover text-muted" title="物料标签（二维码）"><QrCode className="h-4 w-4" /></button>}
+              {isStaff && <button onClick={() => onEdit(item)} aria-label="编辑物料" title="编辑物料" className="tap-sm p-2 rounded-lg hover:bg-surface-hover"><Pencil className="h-4 w-4 text-muted" /></button>}
+              {isAdmin && <button onClick={() => onDelete(item)} aria-label="删除物料" title="删除物料" className="tap-sm p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="h-4 w-4 text-red-400" /></button>}
             </div>
           </div>
         ))}

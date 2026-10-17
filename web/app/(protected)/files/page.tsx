@@ -49,11 +49,12 @@ export default function FilesPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div><h1 className="text-2xl font-bold">资源共享</h1><p className="text-sm text-muted">上传和下载队内共享文件，支持任意格式（最大 1GB）</p></div>
 
-      <form onSubmit={handleUpload} className="rounded-xl border border-border bg-surface p-5 space-y-3">
+      <form onSubmit={handleUpload} className="rounded-xl border border-border bg-surface p-4 sm:p-5 space-y-3">
+        {/* 手机上文件选择器本身就很宽，让"选择文件"独占一行，可见范围+上传放到下一行 */}
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-[200px]">
+          <div className="w-full min-w-0 flex-1 basis-full sm:basis-0 sm:min-w-[200px]">
             <label className="block text-sm font-medium mb-1">选择文件</label>
-            <input ref={fileRef} type="file" required className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
+            <input ref={fileRef} type="file" required className="w-full max-w-full text-sm file:mr-3 file:py-2 file:px-3 sm:file:mr-4 sm:file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">可见范围</label>

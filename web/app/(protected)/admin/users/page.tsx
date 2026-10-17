@@ -173,7 +173,7 @@ export default function UsersPage() {
       {/* User form modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={()=>setShowForm(false)}>
-          <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e=>e.stopPropagation()}>
+          <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editUser?"编辑队员":"添加队员"}</h2><button onClick={()=>setShowForm(false)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5"/></button></div>
             <form onSubmit={handleSave} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">队员名</label><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required disabled={!!editUser}/></div>
@@ -189,7 +189,7 @@ export default function UsersPage() {
       {/* Invite form modal */}
       {showInviteForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={()=>setShowInviteForm(false)}>
-          <div className="w-full max-w-sm my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border p-6" onClick={e=>e.stopPropagation()}>
+          <div className="w-full max-w-sm my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border p-6" onClick={e=>e.stopPropagation()}>
             <h2 className="text-lg font-bold mb-4">生成邀请码</h2>
             <div className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">部门（可选）</label><select value={inviteForm.departmentId} onChange={e=>setInviteForm({...inviteForm,departmentId:Number(e.target.value)})} className="w-full rounded-lg border px-3 py-2 text-sm"><option value={0}>不限</option>{depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>

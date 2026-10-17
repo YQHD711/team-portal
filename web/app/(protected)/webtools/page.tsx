@@ -11,7 +11,7 @@ const WEBTOOLS_IFRAME_SRC = "/webtools/index.html";
 
 export default function WebToolsPage() {
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)]">
+    <div className="flex flex-col h-[calc(100dvh-5rem)]">
       <div className="flex items-center justify-between gap-4 mb-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold">飞行日志分析工具集</h1>

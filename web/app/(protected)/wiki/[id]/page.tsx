@@ -36,6 +36,22 @@ export default function WikiViewerPage() {
   const [lang, setLang] = useState<"zh" | "en">("zh");
   const [toc, setToc] = useState<{ id: string; text: string; level: number }[]>([]);
 
+  // 手机上目录是抽屉：默认收起（否则一进来就被 256px 的目录占掉大半个屏幕）。
+  // 首次挂载后再判断，避免 SSR/CSR 首帧 class 不一致。
+  // matchMedia 在 jsdom/单元测试里不存在 → 一律按桌面处理（保持原行为）。
+  useEffect(() => {
+    if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 1023px)").matches) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
+  /** 手机上选中文档后自动收起目录抽屉；桌面端保持展开 */
+  const closeDrawerOnMobile = () => {
+    if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 1023px)").matches) {
+      setSidebarOpen(false);
+    }
+  };
+
   // Extract TOC from content headings
   useEffect(() => {
     if (!content) { setToc([]); return; }
@@ -168,7 +184,7 @@ export default function WikiViewerPage() {
                 {isOpen && renderTree(item.children!, depth + 1)}
               </>
             ) : (
-              <button onClick={() => setActivePath(item.path)}
+              <button onClick={() => { setActivePath(item.path); closeDrawerOnMobile(); }}
                 className={cn(
                   "flex items-center gap-1 w-full text-left px-2 py-1.5 rounded text-sm transition-colors",
                   isActive ? "bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-medium" : "hover:bg-surface-hover text-zinc-600 dark:text-faint"
@@ -184,11 +200,17 @@ export default function WikiViewerPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] -m-6">
-      {/* Sidebar */}
+    <div className="relative flex h-[calc(100dvh-6rem)] lg:h-[calc(100dvh-7rem)] -m-2 sm:-m-4 lg:-m-6">
+      {/* 手机端：目录抽屉的遮罩，点一下收起 */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      {/* Sidebar：手机上是从左侧滑出的抽屉，桌面端仍是常驻栏（可折叠） */}
       <div className={cn(
-        "border-r border-border bg-surface flex flex-col transition-all duration-200",
-        sidebarOpen ? "w-64 min-w-[16rem]" : "w-0 min-w-0 overflow-hidden border-r-0"
+        "absolute inset-y-0 left-0 z-40 w-72 max-w-[85vw] border-r border-border bg-surface flex flex-col transition-all duration-200 shadow-xl lg:relative lg:inset-auto lg:z-0 lg:shadow-none",
+        sidebarOpen
+          ? "translate-x-0 lg:w-64 lg:min-w-[16rem]"
+          : "-translate-x-full lg:translate-x-0 lg:w-0 lg:min-w-0 lg:overflow-hidden lg:border-r-0"
       )}>
         {/* Project header */}
         <div className="px-4 py-3 border-b border-border">
@@ -234,14 +256,22 @@ export default function WikiViewerPage() {
         </div>
       </div>
 
-      {/* Toggle */}
+      {/* Toggle（桌面端折叠按钮；手机端用内容区顶部的「目录」按钮） */}
       <button onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="shrink-0 flex items-center justify-center w-7 hover:bg-surface-hover transition-colors border-r border-border text-faint">
+        className="hidden lg:flex shrink-0 items-center justify-center w-7 hover:bg-surface-hover transition-colors border-r border-border text-faint">
         {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </button>
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        {/* 手机端顶栏：打开目录抽屉 + 当前文档路径 */}
+        <div className="lg:hidden flex items-center gap-2 border-b border-border bg-surface/95 px-3 py-2">
+          <button onClick={() => setSidebarOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted hover:bg-surface-hover">
+            <BookOpen className="h-3.5 w-3.5" /> 目录
+          </button>
+          <span className="truncate text-xs text-muted">{activePath || task?.projectName || ""}</span>
+        </div>
         {/* 工作区丢失（部署重建容器清空 /tmp）时提示 + 提供「重新克隆」恢复源码浏览 */}
         <WikiWorkspaceBanner taskId={taskId} projectName={task?.projectName ?? ""} />
         {/*
@@ -304,7 +334,7 @@ export default function WikiViewerPage() {
         )}
 
         <div className="flex gap-0 max-w-6xl mx-auto">
-          <div className="flex-1 min-w-0 p-6 lg:p-10" onClick={handleContentClick}>
+          <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10" onClick={handleContentClick}>
             {loading ? (
               <div className="animate-pulse space-y-4">
                 <div className="h-8 bg-surface-hover rounded w-1/3" />
@@ -347,7 +377,7 @@ export default function WikiViewerPage() {
           </div>
           {/* TOC sidebar */}
           {toc.length > 1 && (
-            <div className="hidden xl:block w-56 shrink-0 border-l border-border p-4 overflow-y-auto sticky top-14 self-start" style={{ maxHeight: "calc(100vh - 7rem)" }}>
+            <div className="hidden xl:block w-56 shrink-0 border-l border-border p-4 overflow-y-auto sticky top-14 self-start" style={{ maxHeight: "calc(100dvh - 7rem)" }}>
               <h4 className="text-xs font-semibold text-faint uppercase tracking-wider mb-2">本页目录</h4>
               <nav className="space-y-0.5">
                 {toc.map(h => (

@@ -123,14 +123,21 @@ export function FloatingChat() {
     <>
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-16 sm:bottom-6 right-4 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-accent-hover transition-all hover:scale-105"
+        className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 sm:bottom-6 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-accent-hover transition-all hover:scale-105"
         title="AI 助手"
+        aria-label={open ? "收起 AI 助手" : "打开 AI 助手"}
+        aria-expanded={open}
       >
         {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
       </button>
 
       {open && (
-        <div className="fixed bottom-16 right-2 sm:right-6 z-50 w-[calc(100vw-1rem)] sm:w-96 rounded-2xl border border-border dark:border-zinc-700 bg-surface shadow-2xl flex flex-col" style={{ maxHeight: "70vh" }}>
+        <div
+          className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-2 left-2 sm:left-auto sm:right-6 z-50 sm:w-96 rounded-2xl border border-border dark:border-zinc-700 bg-surface shadow-2xl flex flex-col"
+          style={{ maxHeight: "min(70vh, 70dvh)" }}
+          role="dialog"
+          aria-label="AI 助手"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-sm text-purple-600 dark:text-purple-400">AI 助手</span>
             <div className="flex items-center gap-1">
@@ -169,7 +176,7 @@ export function FloatingChat() {
             )}
           </div>
 
-          <div className="p-3 border-t border-border">
+          <div className="p-3 border-t border-border pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <form onSubmit={e => { e.preventDefault(); send(); }} className="flex gap-2">
               <input ref={inputRef} value={question} onChange={e => setQuestion(e.target.value)} placeholder="输入问题..." disabled={sending || !loaded}
                 className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-50" />

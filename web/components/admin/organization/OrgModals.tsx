@@ -21,7 +21,7 @@ export function DeptFormModal({ dept, onClose, onSaved }: { dept: Dept | null; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">{dept ? "编辑部门" : "添加部门"}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
@@ -62,7 +62,7 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">{user ? "编辑队员" : "添加队员"}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button>
