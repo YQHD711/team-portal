@@ -30,10 +30,16 @@ public partial class WikiGeneratorService
                 if (Directory.Exists(cloneDir)) Directory.Delete(cloneDir, true);
 
                 var cloneUrl = ValidateCloneUrl(task.SourceUrl);
+                // 审计 #14：协议校验挡不住"让服务器去打内网/云元数据"（半盲 SSRF）。
+                // 这里再要求主机解析结果全部是公网地址；解析失败/指向内网一律拒绝。
+                await OutboundUrlGuard.EnsureAllowedHostAsync(new Uri(cloneUrl));
                 var psi = new ProcessStartInfo("git")
                 {
                     RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
                 };
+                // git 自身也可能被 302 到内网地址（URL 校验只看第一跳）→ 禁止跟随重定向
+                psi.ArgumentList.Add("-c");
+                psi.ArgumentList.Add("http.followRedirects=false");
                 // 用 ArgumentList 传参而非拼命令行字符串:仓库 URL 来自用户输入,
                 // 拼接会允许 `--upload-pack=...` 之类选项注入,而 ext::/file:// 协议会在
                 // git 解析仓库地址时触发命令执行或本地文件读取。
@@ -48,8 +54,13 @@ public partial class WikiGeneratorService
                 var stderr = await proc.StandardError.ReadToEndAsync();
                 await proc.WaitForExitAsync();
 
+                // 审计 #14：stderr 原文不再回给调用方 —— 它能把「connection refused / timeout / 404」
+                // 区分开，等于给攻击者一个探测内网端口的 oracle。细节只进服务端日志。
                 if (proc.ExitCode != 0)
-                    throw new InvalidOperationException($"Git clone failed: {stderr}");
+                {
+                    _logger.LogWarning("git clone 失败 exit={Exit} stderr={Stderr}", proc.ExitCode, stderr[..Math.Min(500, stderr.Length)]);
+                    throw new InvalidOperationException("Git clone 失败：仓库不可访问或地址不可达");
+                }
 
                 return cloneDir;
             }
@@ -59,7 +70,8 @@ public partial class WikiGeneratorService
                 if (!File.Exists(zipPath)) throw new FileNotFoundException("ZIP file not found", zipPath);
 
                 var extractDir = Path.Combine(baseDir, "repo");
-                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
+                // 审计 #12：受限解压（zip slip + 条目数/单文件/总量上限），不再用无限制的 ExtractToDirectory
+                SafeZipExtractor.Extract(zipPath, extractDir);
                 return extractDir;
             }
         }

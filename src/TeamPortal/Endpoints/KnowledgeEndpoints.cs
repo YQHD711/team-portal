@@ -15,6 +15,9 @@ public static class KnowledgeEndpoints
         return u is null ? (null, null) : (u.Role, u.Department?.Name);
     }
 
+    private static int UserId(ClaimsPrincipal user)
+        => int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
     public static void MapKnowledgeEndpoints(this WebApplication app)
     {
         // Tree and content — read-only for all authenticated users (CanAccess filters by role/department)
@@ -27,23 +30,29 @@ public static class KnowledgeEndpoints
             return Results.Ok(tree);
         }).RequireAuthorization();
 
-        app.MapGet("/api/knowledge/content", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db) =>
+        app.MapGet("/api/knowledge/content", async (string path, ClaimsPrincipal user, KnowledgeService svc, KnowledgeSearchService search, AppDbContext db) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
             path = Uri.UnescapeDataString(path);
             var (role, dept) = await GetUserCtx(user, db);
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            // 审计 #13：路径级 ACL 只看部门，挡不住同部门里别人的 personal 项目 → 再叠加 wiki 项目可见性
+            if (!search.IsWikiProjectVisibleTo(path, role, dept, UserId(user)))
+                return Results.Problem("Access denied", statusCode: 403);
             var content = svc.GetContent(path);
             return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Not found", statusCode: 404);
         }).RequireAuthorization();
 
         // Download original binary file (PDF, DOCX, images, etc.)
-        app.MapGet("/api/knowledge/download", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, HttpContext ctx) =>
+        app.MapGet("/api/knowledge/download", async (string path, ClaimsPrincipal user, KnowledgeService svc, KnowledgeSearchService search, AppDbContext db, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);
             path = Uri.UnescapeDataString(path);
             var (role, dept) = await GetUserCtx(user, db);
             if (!svc.CanAccess(path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            // 审计 #13：下载口同样要过 wiki 项目可见性（否则"读不到正文但能下附件"）
+            if (!search.IsWikiProjectVisibleTo(path, role, dept, UserId(user)))
+                return Results.Problem("Access denied", statusCode: 403);
 
             var data = svc.GetBinaryContent(path);
             if (data is null) return Results.Problem("Not found", statusCode: 404);

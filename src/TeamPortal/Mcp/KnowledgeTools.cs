@@ -24,8 +24,10 @@ public class KnowledgeTools
     [McpServerTool(Name = "knowledge_read")]
     public string? Read(string path)
     {
-        var (r, d, _) = GetUser();
+        var (r, d, u) = GetUser();
         if (!_knowledge.CanAccess(path, r, d)) return McpAuth.Forbidden;
+        // 审计 #13：路径 ACL 挡不住同部门里别人的 personal 项目，补上 wiki 项目可见性
+        if (!_search.IsWikiProjectVisibleTo(path, r, d, u)) return McpAuth.Forbidden;
         return _knowledge.GetContent(path);
     }
 
