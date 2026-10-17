@@ -50,7 +50,7 @@ public partial class WikiGeneratorService
     /// 生成一篇文档并**校验它真的落盘了**。
     ///
     /// 为什么必须校验：AI 有可能只回一段文本而不调用 write_doc（迭代耗尽、模型跑偏、被截断），
-    /// 此时 CallDeepSeekWithTools 正常返回、不抛异常，文档就"静默缺失"——任务照样算完成，
+    /// 此时 CallAiWithTools 正常返回、不抛异常，文档就"静默缺失"——任务照样算完成，
     /// 表现为「目录能点开但文档 404、知识库里也找不到」。所以这里核对文件，缺失就补一次
     /// 明确要求写文件的请求。
     /// </summary>
@@ -128,31 +128,34 @@ public partial class WikiGeneratorService
                 var aiKey = await GetApiKey();
                 var aiUrl = await GetBaseUrl();
 
-                var payload = new
+                // 走通用 OpenAI 兼容层（单轮、无 tools）：不再自拼 /chat/completions，也不再写死模型。
+                // 原有参数保持不变：temperature 0.2 / max_tokens 16384（行为与收编前一致）。
+                var ai = _ai ?? throw new InvalidOperationException("AiClient 未注入");
+                var aiOpt = new AiOptions(
+                    Provider: await GetProviderAsync(),
+                    BaseUrl: await GetBaseUrl(),
+                    ApiKey: await GetApiKey(),
+                    Model: _options.ContentModel,
+                    Thinking: _options.ThinkingMode == "thinking",
+                    ReasoningEffort: "high",
+                    Temperature: 0.2,
+                    MaxTokens: 16384,
+                    RequestTimeoutSeconds: _options.DocumentGenerationTimeoutMinutes * 60);
+                var aiMessages = new object[]
                 {
-                    model = "deepseek-v4-flash",
-                    messages = new object[] {
-                        new { role = "system", content = system },
-                        new { role = "user", content = reviewPrompt }
-                    },
-                    temperature = 0.2,
-                    max_tokens = 16384
+                    new { role = "system", content = system },
+                    new { role = "user", content = reviewPrompt }
                 };
+                var payload = ai.BuildChatPayload(aiOpt, aiMessages, stream: false,
+                    maxTokens: 16384, temperature: 0.2);
+                using var req = ai.CreateChatRequest(aiOpt, payload);
 
-                var json = JsonSerializer.Serialize(payload, JsonOpts);
-                var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(aiUrl, "/chat/completions"))
-                {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-                req.Headers.Add("Authorization", $"Bearer {aiKey}");
-
-                var resp = await _http.SendAsync(req);
+                var resp = await ai.SendAsync(req);
                 if (!resp.IsSuccessStatusCode) continue;
 
                 var body = await resp.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(body);
-                var reviewed = doc.RootElement.GetProperty("choices")[0]
-                    .GetProperty("message").GetProperty("content").GetString();
+                var reviewed = AiClient.ExtractMessageContent(doc.RootElement);
 
                 if (!string.IsNullOrWhiteSpace(reviewed) && reviewed.Trim() != content.Trim())
                 {
@@ -268,7 +271,7 @@ public partial class WikiGeneratorService
             new("write_doc", "Write document. MUST call this.", new { path = new { type = "string", description = "Document path (without .md)" }, content = new { type = "string", description = "Full Markdown content" } }),
         };
 
-        await CallDeepSeekWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}", _currentModel);
+        await CallAiWithTools(systemPrompt, userMessage, tools, $"Doc:{docTitle}", _currentModel);
     }
 
     private static List<CatalogItem> FlattenCatalog(List<CatalogItem> items)
