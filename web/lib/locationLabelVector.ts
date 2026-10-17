@@ -17,6 +17,7 @@ import type { LabelData, LabelElement, LabelTemplate } from "./labelTemplate";
 import type { LocationSlot } from "./locationLabelPdf";
 import { DEFAULT_TEMPLATE, toLocationLabelData } from "./locationLabelPdf";
 import { locationLabelSuitability } from "./labelSuitability";
+import { TEXT_RASTER_DPI, textBlockPng, textRenderMode } from "./labelTextRaster";
 
 export interface VectorBuildOptions {
   /** 每多少张让出一次主线程（默认 2；响应性优先） */
@@ -125,6 +126,11 @@ export async function buildLocationLabelsVectorPdf(
         const fontPt = el.fontSizePt ?? 7;
         doc.setFontSize(fontPt);
         const text = fieldValue(el, data);
+        // ⚠️ 含非 ASCII（中文元素名/房间名）**不能**交给 jsPDF 标准字体（无 CJK 字形 → 乱码）→ 光栅化贴图
+        if (textRenderMode(text) === "raster") {
+          doc.addImage(textBlockPng(text, el, Math.min(template.dpi, TEXT_RASTER_DPI)), "PNG", el.x, el.y, el.w, el.h);
+          continue;
+        }
         const y = el.y + Math.min(el.h, (fontPt * 25.4) / 72);         // 基线：贴着元素盒底
         if (el.align === "center") doc.text(text, el.x + el.w / 2, y, { align: "center", maxWidth: el.w });
         else if (el.align === "right") doc.text(text, el.x + el.w, y, { align: "right", maxWidth: el.w });
