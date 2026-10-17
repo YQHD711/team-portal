@@ -36,6 +36,8 @@ export interface LabelTemplate {
   id: number;
   name: string;
   isDefault?: boolean;
+  /** 用途分类（task-40 ③b）：material（缺省）/ location */
+  kind?: string;
   widthMm: number;
   heightMm: number;
   dpi: number;

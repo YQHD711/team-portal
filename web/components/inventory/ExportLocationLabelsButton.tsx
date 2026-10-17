@@ -16,7 +16,7 @@ import type { ItemElement, RoomLayout } from "./layoutTypes";
 import { usesCells } from "./layoutTypes";
 import { elementCells } from "./elementGeometry";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
-import { chooseExportTemplate } from "@/lib/labelSuitability";
+import { chooseExportTemplate, pickLocationTemplate } from "@/lib/labelSuitability";
 import { progressText } from "@/lib/locationLabelPdf";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import {
@@ -49,7 +49,7 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     if (override) return;
     api.get<LabelTemplate[]>("/api/label-templates")
       .then(list => {
-        const pick = chooseExportTemplate(list.find(t => t.isDefault) ?? list[0] ?? null);
+        const pick = chooseExportTemplate(pickLocationTemplate(list) ?? list.find(t => t.isDefault) ?? list[0] ?? null);
         setTemplate(pick.template);
         if (pick.notice) setMsg(pick.notice);   // **不静默**：说明为什么换了模板
       })
