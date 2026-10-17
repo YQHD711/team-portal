@@ -58,3 +58,21 @@ export function pickLocationTemplate(list: readonly LabelTemplate[]): LabelTempl
   const isLocation = (t: LabelTemplate) => (t.kind ?? "material") === "location";
   return list.find(t => isLocation(t) && t.isDefault) ?? list.find(isLocation) ?? null;
 }
+
+/**
+ * `GET /api/label-templates` 的**真实**响应形状（`LabelTemplateEndpoints.cs:23` → `Results.Ok(new { templates })`）。
+ * 调用方 `api.get<...>` 必须用这个类型，**不要**再写 `api.get<LabelTemplate[]>`——那正是本 bug 的源头：
+ * TS 以为是数组，运行时拿到对象，`list.find` 直接 TypeError。
+ */
+export type LabelTemplatesResponse = LabelTemplate[] | { templates: LabelTemplate[] };
+
+/**
+ * 后端 `GET /api/label-templates` 返回的是 **`{ templates: [...] }`**（对象包装），不是裸数组。
+ * 之前前端当数组用 → `list.find is not a function` → 被 `.catch` 误判为"接口不可用"、**永远回落内置模板（含二维码）**。
+ * 这里是唯一的解包点：既接受包装形状也接受裸数组（向后兼容）。
+ */
+export function unwrapTemplates(res: unknown): LabelTemplate[] {
+  if (Array.isArray(res)) return res as LabelTemplate[];
+  const wrapped = res as { templates?: LabelTemplate[] } | null;
+  return Array.isArray(wrapped?.templates) ? wrapped.templates : [];
+}
