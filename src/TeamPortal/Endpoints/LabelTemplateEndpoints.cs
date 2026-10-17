@@ -24,39 +24,41 @@ public static class LabelTemplateEndpoints
 
         var admin = app.MapGroup("/api/label-templates").RequireAuthorization("AdminOnly");
 
-        admin.MapPost("/", async (LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log) =>
+        admin.MapPost("/", async (LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             if (LabelTemplateValidation.Validate(req) is { } reason) return Results.Problem(reason, statusCode: 400);
             var saved = await svc.CreateAsync(req, Actor(user));
             log.Audit("create-label-template", Actor(user), targetType: "label-template", targetId: saved.Id.ToString(),
-                data: new { saved.Name, elements = saved.Elements.Count });
+                data: new { saved.Name, elements = saved.Elements.Count }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(saved);
         });
 
-        admin.MapPut("/{id:int}", async (int id, LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log) =>
+        admin.MapPut("/{id:int}", async (int id, LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             if (LabelTemplateValidation.Validate(req) is { } reason) return Results.Problem(reason, statusCode: 400);
             var saved = await svc.UpdateAsync(id, req, Actor(user));
             if (saved is null) return Results.Problem("模板不存在", statusCode: 404);
             log.Audit("update-label-template", Actor(user), targetType: "label-template", targetId: id.ToString(),
-                data: new { saved.Name, elements = saved.Elements.Count });
+                data: new { saved.Name, elements = saved.Elements.Count }, ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(saved);
         });
 
-        admin.MapDelete("/{id:int}", async (int id, LabelTemplateService svc, ClaimsPrincipal user, LogService log) =>
+        admin.MapDelete("/{id:int}", async (int id, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             if (!await svc.DeleteAsync(id)) return Results.Problem("模板不存在", statusCode: 404);
             var templates = await svc.ListAsync();
-            log.Audit("delete-label-template", Actor(user), targetType: "label-template", targetId: id.ToString());
+            log.Audit("delete-label-template", Actor(user), targetType: "label-template", targetId: id.ToString(),
+                ipAddress: LogService.ClientIp(ctx));
             // 顺手把"当前默认是谁"带回去，前端删掉默认模板后能立刻知道被提升成了哪个
             return Results.Ok(new { ok = true, defaultId = templates.FirstOrDefault(t => t.IsDefault)?.Id });
         });
 
-        admin.MapPost("/{id:int}/default", async (int id, LabelTemplateService svc, ClaimsPrincipal user, LogService log) =>
+        admin.MapPost("/{id:int}/default", async (int id, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {
             var saved = await svc.SetDefaultAsync(id);
             if (saved is null) return Results.Problem("模板不存在", statusCode: 404);
-            log.Audit("set-default-label-template", Actor(user), targetType: "label-template", targetId: id.ToString());
+            log.Audit("set-default-label-template", Actor(user), targetType: "label-template", targetId: id.ToString(),
+                ipAddress: LogService.ClientIp(ctx));
             return Results.Ok(saved);
         });
     }

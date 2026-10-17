@@ -1,0 +1,40 @@
+# 可选叠加：宿主 3000 → nginx → frontend（内部 :3000）
+#
+# ⚠️ **默认不生效**：systemd 自动部署用的是
+#     docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+#   只有**显式**把本文件也带上才会启用 nginx 拓扑（见 deploy/nginx-proxy.sh enable），
+#   这样自动部署永远不会在用户不知情时改变线上拓扑。
+#
+# 为什么需要它：`docker-compose.yml` 直接发布 3000 时，frontend 容器的 TCP 对端是宿主转发地址
+# （线上实测 10.255.1.3），Next 只在"客户端没带 X-Forwarded-For"时填**它的对端**，
+# 于是审计里所有真实用户都是同一个内部地址。让 nginx 站在浏览器那一侧并用 $remote_addr
+# **覆盖** XFF，后端就能记到真实客户端 IP（且伪造 XFF 无效）。
+#
+# 启用：bash deploy/nginx-proxy.sh enable     回滚：bash deploy/nginx-proxy.sh disable
+# 说明与验证步骤：deploy/README-NGINX-MIN.md
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      # 宿主 3000 由 nginx 接管；frontend 的发布端口在下面被覆盖掉
+      - "3000:80"
+    volumes:
+      - ./deploy/nginx.minimal.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      teamportal:
+        # 固定 IP：便于排查（后端只信任 frontend=172.28.0.2，不需要信任 nginx）
+        ipv4_address: 172.28.0.4
+
+  frontend:
+    # 让出宿主 3000：只在 docker 网络内监听 3000，由 nginx 转发进来。
+    # `!override` 是覆盖而不是追加（普通序列会合并，导致 3000 被两个容器抢）。
+    ports: !override []
