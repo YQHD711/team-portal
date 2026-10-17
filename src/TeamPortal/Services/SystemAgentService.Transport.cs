@@ -3,14 +3,14 @@ using System.Text;
 namespace TeamPortal.Services;
 
 /// <summary>
-/// AI 运维助手的 DeepSeek 调用层：一次 chat/completions 请求 + 网络错误的用户可读化。
+/// AI 运维助手的 **OpenAI 兼容**调用层：一次 chat/completions 请求 + 网络错误的用户可读化。（不绑定服务商；模型/端点/密钥由 `AiClient.ResolveAsync()` 解析）
 /// 与主循环分开，避免主循环文件过长。
 /// </summary>
 public partial class SystemAgentService
 {
     private sealed record ApiReply(bool Ok, string Body, int Ms, string? Error);
 
-    /// <summary>单次 DeepSeek chat/completions 调用；网络层失败直接返回给用户可读的 Error。</summary>
+    /// <summary>单次 chat/completions 调用；网络层失败直接返回给用户可读的 Error。</summary>
     private async Task<ApiReply> PostChatAsync(string json, string apiKey, string baseUrl, int reqTimeoutSec, CancellationToken outer, string userName)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(baseUrl, "/chat/completions"))
