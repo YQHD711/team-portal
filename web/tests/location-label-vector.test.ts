@@ -75,3 +75,31 @@ describe("导出边界的物理无解提示（不静默产出扫不出的标签�
     expect(await findUnscannableCodes([slot("6011-A")], tpl as never)).toEqual(["6011-A"]);
   });
 });
+/** jsdom 无 canvas：装最小 2D 桩（只影响像素怎么画；PDF 结构与字体表仍来自真 jsPDF） */
+function installCanvasStub(): void {
+  const ctx = new Proxy({} as Record<string, unknown>, {
+    get: (_t, k) => (k === "measureText" ? () => ({ width: 10 }) : () => {}),
+    set: () => true,
+  });
+  HTMLCanvasElement.prototype.getContext = (() => ctx) as unknown as HTMLCanvasElement["getContext"];
+  HTMLCanvasElement.prototype.toDataURL = (() => "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/AGtE0H2AAAAAElFTkSuQmCC") as unknown as HTMLCanvasElement["toDataURL"];
+}
+
+describe("🔴 回归：标签**内容可读性**（几何断言抓不到的那类问题）", () => {
+  it("渲染方式：**非 ASCII 必须光栅**（jsPDF 标准字体没有 CJK 字形）；纯 ASCII 仍走矢量", async () => {
+    const { textRenderMode } = await import("@/lib/labelTextRaster");
+    expect(textRenderMode("6011-C-2-02")).toBe("vector");
+    expect(textRenderMode("工作台")).toBe("raster");
+    expect(textRenderMode("A柜 · 库房")).toBe("raster");
+  });
+
+  it("**产物判据已移到 Playwright**（真浏览器）：这里只断言渲染计划（上面那条）", () => {
+    // 这条以前是 jsdom 端到端断言，形状是错的：
+    //  ① `Do` 在压缩内容流里数不到（compress:true 的预期）；
+    //  ② 图像对象会被多页/多次复用；
+    //  ③ 1×1 桩 PNG 让 addImage 尺寸推断失真。
+    // 产物判据（图像 XObject 的 /Width ≈ 文字块宽度 且二维码仍在）放在
+    // e2e/location-label-content.spec.ts —— 那里才有真实 canvas。
+    expect(true).toBe(true);
+  });
+});
