@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Sparkles, Sun, Moon } from "lucide-react";
+import { Menu, Sparkles, Sun, Moon, Monitor } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserMenu } from "./UserMenu";
@@ -9,16 +9,11 @@ import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
+import { DEFAULT_SCHEME, applyScheme, nextScheme, readStoredScheme, schemeLabel, type SchemePreference } from "@/lib/scheme";
 
 const pageTitles: Record<string, string> = {
   "/": "仪表盘", "/admin/knowledge": "知识库", "/inventory": "零件库存", "/flightlog": "飞行日志 / 固件", "/incidents": "事故安全",
 };
-
-function getStoredScheme(): "dark" | "light" | null {
-  if (typeof window === "undefined") return null;
-  const v = localStorage.getItem("ui-scheme");
-  return v === "dark" || v === "light" ? v : null;
-}
 
 export function Topbar() {
   const { setOpen } = useSidebar();
@@ -27,21 +22,19 @@ export function Topbar() {
   const title = pageTitles[pathname] || (pathname.startsWith("/admin/knowledge") ? "知识库" : null);
   // SSR 一致性:首帧不读 localStorage(否则服务端 null vs 客户端 "light" 引发表单错位)
   // 初始态为 null,挂载后 useEffect 读 localStorage 同步 class
-  const [scheme, setScheme] = useState<"dark" | "light" | null>(null);
+  const [scheme, setScheme] = useState<SchemePreference>(DEFAULT_SCHEME);
 
   useEffect(() => {
-    const root = document.documentElement;
-    const s = getStoredScheme() ?? "dark"; // 默认深色，与 html 首帧 dark class 一致
-    setScheme(s);
-    root.classList.toggle("dark", s === "dark");
+    // 首帧 class 由服务端按 cookie 渲染；这里只把客户端偏好同步进 state（不重复改 class，避免闪）
+    setScheme(readStoredScheme());
   }, []);
 
   function toggleScheme() {
-    const root = document.documentElement;
-    const next: "dark" | "light" = root.classList.contains("dark") ? "light" : "dark";
-    root.classList.toggle("dark", next === "dark");
-    localStorage.setItem("ui-scheme", next);
-    setScheme(next);
+    // 三态循环：深色 → 浅色 → 跟随系统 → 深色（只动 class，不碰品牌主色的内联 style）
+    const pref = nextScheme(scheme);
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyScheme(pref, systemDark);   // cookie + localStorage + 立即切 class
+    setScheme(pref);
   }
 
   return (
@@ -66,10 +59,10 @@ export function Topbar() {
         <button
           onClick={toggleScheme}
           className="rounded-xl p-2 hover:bg-surface-hover transition-colors"
-          aria-label="切换深色/浅色"
-          title={scheme === "light" ? "切到深色" : "切到浅色"}
+          aria-label={`切换明暗（当前：${schemeLabel(scheme)}）`}
+          title={`当前：${schemeLabel(scheme)} · 点击切换`}
         >
-          {scheme === "light" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {scheme === "light" ? <Sun className="h-5 w-5" /> : scheme === "auto" ? <Monitor className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
         <GlobalSearch />
         <NotificationBell />
