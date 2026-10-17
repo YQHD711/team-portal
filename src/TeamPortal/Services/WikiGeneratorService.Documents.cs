@@ -128,31 +128,33 @@ public partial class WikiGeneratorService
                 var aiKey = await GetApiKey();
                 var aiUrl = await GetBaseUrl();
 
-                var payload = new
+                // 走通用 OpenAI 兼容层（单轮、无 tools）：不再自拼 /chat/completions，也不再写死模型。
+                // 原有参数保持不变：temperature 0.2 / max_tokens 16384（行为与收编前一致）。
+                var aiOpt = new AiOptions(
+                    Provider: await GetProviderAsync(),
+                    BaseUrl: await GetBaseUrl(),
+                    ApiKey: await GetApiKey(),
+                    Model: _options.ContentModel,
+                    Thinking: _options.ThinkingMode == "thinking",
+                    ReasoningEffort: "high",
+                    Temperature: 0.2,
+                    MaxTokens: 16384,
+                    RequestTimeoutSeconds: _options.DocumentGenerationTimeoutMinutes * 60);
+                var aiMessages = new object[]
                 {
-                    model = _options.ContentModel,   // 不再写死模型：跟随 Wiki 设置（默认 deepseek-v4-flash，可换任意 OpenAI 兼容服务模型）
-                    messages = new object[] {
-                        new { role = "system", content = system },
-                        new { role = "user", content = reviewPrompt }
-                    },
-                    temperature = 0.2,
-                    max_tokens = 16384
+                    new { role = "system", content = system },
+                    new { role = "user", content = reviewPrompt }
                 };
+                var payload = _ai.BuildChatPayload(aiOpt, aiMessages, stream: false,
+                    maxTokens: 16384, temperature: 0.2);
+                using var req = _ai.CreateChatRequest(aiOpt, payload);
 
-                var json = JsonSerializer.Serialize(payload, JsonOpts);
-                var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(aiUrl, "/chat/completions"))
-                {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-                req.Headers.Add("Authorization", $"Bearer {aiKey}");
-
-                var resp = await _http.SendAsync(req);
+                var resp = await _ai.SendAsync(req);
                 if (!resp.IsSuccessStatusCode) continue;
 
                 var body = await resp.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(body);
-                var reviewed = doc.RootElement.GetProperty("choices")[0]
-                    .GetProperty("message").GetProperty("content").GetString();
+                var reviewed = AiClient.ExtractMessageContent(doc.RootElement);
 
                 if (!string.IsNullOrWhiteSpace(reviewed) && reviewed.Trim() != content.Trim())
                 {
