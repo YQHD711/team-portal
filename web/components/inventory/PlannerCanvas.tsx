@@ -7,7 +7,6 @@ import type { Box } from "konva/lib/shapes/Transformer";
 import { Hand } from "lucide-react";
 import type { ItemElement, MaterialItem, PosElement, RoomLayout } from "./layoutTypes";
 import { GridShape, ItemShape, PosShape } from "./PlannerShapes";
-import { UnderTableBadges } from "./UnderTableBadges";
 import { useStageTransformPublisher } from "./useStageTransformPublisher";
 import { DropHighlight } from "./DropHighlight";
 import { ZoomControls } from "./ZoomControls";
@@ -180,7 +179,6 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
           <Transformer ref={trRef} rotateEnabled boundBoxFunc={boundBox} />
         </Layer>
       </Stage>
-      <UnderTableBadges items={layout.items} view={view} size={size} />
       <ZoomControls scale={view.scale} onZoom={zoomBy} onFit={fit}
         className="bottom-2 right-2 max-lg:bottom-auto max-lg:right-auto max-lg:left-2 max-lg:top-2">
         <button onClick={() => setPanMode(v => !v)} title="平移模式（锁定元素拖动，适合触屏）"
