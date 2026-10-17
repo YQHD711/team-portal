@@ -6,7 +6,7 @@ namespace TeamPortal.Services;
 
 /// <summary>
 /// AI 系统管理员 —— 面向管理员的**只读**运维助手：健康巡检、日志排障、数据查询、操作答疑。
-/// 通过 DeepSeek function calling 调用一组只读工具（见 SystemAgentService.Prompt.cs）。
+/// 通过 **OpenAI 兼容** function calling 调用一组只读工具（见 SystemAgentService.Prompt.cs）。
 /// </summary>
 /// <remarks>
 /// 能力边界：本服务不写文件、不改设置、不生成代码、不编译、不重启（历史上那套「代码提案 + 维护模式」
@@ -24,9 +24,11 @@ public partial class SystemAgentService
     private readonly BackupService _backup;
     private readonly KnowledgeService _knowledge;
     private readonly KnowledgeSearchService _search;
+    private readonly AiClient _ai;
 
     public SystemAgentService(HttpClient http, IConfiguration config, AppDbContext db, LogService log,
-        SettingsService settings, BackupService backup, KnowledgeService knowledge, KnowledgeSearchService search)
+        SettingsService settings, BackupService backup, KnowledgeService knowledge, KnowledgeSearchService search,
+        AiClient ai)
     {
         _http = http;
         _db = db;
@@ -36,14 +38,17 @@ public partial class SystemAgentService
         _backup = backup;
         _knowledge = knowledge;
         _search = search;
+        _ai = ai;
     }
 
     /// <summary>Main entry: runs a read-only agent session with tools + conversation memory.</summary>
     public async Task<string> RunAgent(string task, string userName, List<(string role, string content)>? history = null)
     {
-        var apiKey = await _settings.Get("AI:ApiKey", "");
-        if (string.IsNullOrEmpty(apiKey)) apiKey = _config.GetValue<string>("AiService:ApiKey") ?? "";
-        if (string.IsNullOrEmpty(apiKey)) return "❌ AI 密钥未配置";
+        // 统一配置解析（AiClient.ResolveAsync = 系统设置 AI:*）：
+        // 之前这里 baseUrl 读 `AI:DeepSeekBaseUrl`，而设置页写的是 `AI:BaseUrl` —— 用户换端点对 Agent 无效；
+        // model 兜底还写死 `deepseek-v4-pro`。这就是"写死 deepseek"的另一处实证。
+        var opt = await _ai.ResolveAsync();
+        if (string.IsNullOrEmpty(opt.ApiKey)) return "❌ AI 密钥未配置";
 
         var messages = new List<object> { new { role = "system", content = BuildSystemPrompt() } };
         if (history != null && history.Count > 0)
@@ -53,17 +58,12 @@ public partial class SystemAgentService
         }
         messages.Add(new { role = "user", content = task });
 
-        var model = await _settings.Get("AI:ModelName", "deepseek-v4-pro");
-        var temperature = await _settings.GetDouble("AI:Temperature", 0.7);
-        var baseUrl = await _settings.Get("AI:DeepSeekBaseUrl", "https://api.deepseek.com");
+        var model = opt.Model;
         var agentTimeoutMin = await _settings.GetInt("AI:AgentTimeoutMinutes", 20);
-        var maxTokens = await _settings.GetInt("AI:MaxTokens", 8192);
-        var reqTimeoutSec = await _settings.GetInt("AI:RequestTimeoutSeconds", 300);
-        var enableThinking = await _settings.Get("AI:EnableThinking", "false") == "true";
-        var reasoningEffort = await _settings.Get("AI:ReasoningEffort", "medium");
+        var reqTimeoutSec = opt.RequestTimeoutSeconds;
         var maxIterations = await _settings.GetInt("AI:MaxIterations", 25);
 
-        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={maxTokens}, thinking={enableThinking}", null, userName);
+        _log.Info("agent", $"Agent start: task={task[..Math.Min(80, task.Length)]}, history={history?.Count ?? 0}, model={model}, timeout={agentTimeoutMin}min, maxTokens={opt.MaxTokens}, thinking={opt.Thinking}", null, userName);
 
         var tools = BuildTools();
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(agentTimeoutMin));
@@ -72,23 +72,25 @@ public partial class SystemAgentService
 
         while (!timeoutCts.Token.IsCancellationRequested && iteration < maxIterations)
         {
-            var payload = new Dictionary<string, object>
+            // 统一 payload 构造：thinking/reasoning_effort 只对 DeepSeek 下发，
+            // temperature 与 top_p 按是否思考择一（官方文档：二者互斥，同时发等于都没用对）。
+            // 之前手拼 payload：无论 Provider 都发 thinking → 配第三方 OpenAI 兼容端点可能直接 400。
+            var toolSpecs = tools.Select(t => new
             {
-                ["model"] = model,
-                ["messages"] = messages,
-                ["temperature"] = temperature,
-                ["top_p"] = 1.0,
-                ["max_tokens"] = maxTokens,
-                ["tools"] = tools.Select(t => new { type = "function", function = new { name = t.Name, description = t.Description, parameters = t.Parameters ?? new { type = "object", properties = new { } } } }).ToList(),
-                ["tool_choice"] = "auto"
-            };
-            if (enableThinking)
-            {
-                payload["reasoning_effort"] = reasoningEffort;
-                payload["thinking"] = new { type = "enabled" };
-            }
+                type = "function",
+                function = new
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    parameters = t.Parameters ?? new { type = "object", properties = new { } },
+                },
+            }).ToList();
 
-            var reply = await PostChatAsync(JsonSerializer.Serialize(payload), apiKey, baseUrl, reqTimeoutSec, timeoutCts.Token, userName);
+            var payload = _ai.BuildChatPayload(
+                opt, messages, stream: false, tools: toolSpecs, toolChoice: "auto",
+                maxTokens: opt.MaxTokens, temperature: opt.Temperature);
+
+            var reply = await PostChatAsync(JsonSerializer.Serialize(payload), opt.ApiKey, opt.BaseUrl, reqTimeoutSec, timeoutCts.Token, userName);
             if (reply.Error is not null) return reply.Error;
 
             using var doc = JsonDocument.Parse(reply.Body);

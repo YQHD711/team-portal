@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
@@ -12,19 +10,17 @@ namespace TeamPortal.Services;
 /// - Older messages: auto-compressed into summaries via AI
 /// - Max total context: ~60 messages (30 recent + summaries)
 /// </summary>
-public class ConversationService
+public partial class ConversationService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _config;
+    private readonly ILogger<ConversationService> _log;
     private const int MaxRecentMessages = 30;
     private const int CompressThreshold = 45;
 
-    public ConversationService(IServiceScopeFactory scopeFactory, IHttpClientFactory httpClientFactory, IConfiguration config)
+    public ConversationService(IServiceScopeFactory scopeFactory, ILogger<ConversationService> log)
     {
         _scopeFactory = scopeFactory;
-        _httpClientFactory = httpClientFactory;
-        _config = config;
+        _log = log;
     }
 
     /// <summary>Add a message. Auto-compresses when conversation grows too large.</summary>
@@ -54,79 +50,13 @@ public class ConversationService
 
         if (nonSystemCount > CompressThreshold)
         {
-            var apiKey = _config.GetValue<string>("AiService:ApiKey") ?? "";
-            var baseUrl = _config.GetValue<string>("AiService:BaseUrl") ?? AiOptions.DeepSeekDefaultBaseUrl;
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                await CompressMemory(db, sessionId, apiKey, baseUrl);
-            }
+            // 配置来源统一走 AiClient.ResolveAsync()（= 系统设置 AI:*）。
+            // 之前这里读的是**旧键 `AiService:*`** 且写死 model：用户在系统设置里换端点/模型
+            // 对历史压缩完全无效；换第三方 OpenAI 兼容服务后请求 404 又被 catch 静默吞掉，
+            // 表现为"记忆不压缩"且无从排查。2026-10 修复。
+            var ai = scope.ServiceProvider.GetRequiredService<AiClient>();
+            await CompressMemory(db, sessionId, ai);
         }
-    }
-
-    /// <summary>
-    /// Compress old messages into a system-level summary.
-    /// Takes oldest 15 user/assistant messages, summarizes them via AI,
-    /// stores the summary as a system message, deletes originals.
-    /// </summary>
-    private async Task CompressMemory(AppDbContext db, string sessionId,
-        string apiKey, string baseUrl)
-    {
-        var oldMessages = await db.ChatMessages
-            .Where(m => m.SessionId == sessionId && m.Role != "system")
-            .OrderBy(m => m.Id)
-            .Take(15)
-            .ToListAsync();
-
-        if (oldMessages.Count < 5) return;
-
-        // Build conversation text for summarization
-        var sb = new StringBuilder();
-        foreach (var m in oldMessages)
-            sb.AppendLine($"[{m.Role}]: {m.Content}");
-
-        // Ask AI to summarize
-        var summaryPrompt = $"请用中文简洁总结以下对话的关键信息（不超过200字），保留重要决策、数据、用户偏好、任务进度等信息：\n\n{sb}";
-
-        try
-        {
-            var payload = new
-            {
-                model = "deepseek-v4-flash",
-                messages = new[] { new { role = "user", content = summaryPrompt } },
-                temperature = 0.3, max_tokens = 500
-            };
-            var json = JsonSerializer.Serialize(payload);
-            var req = new HttpRequestMessage(HttpMethod.Post, AiOptions.EndpointFor(baseUrl, "/chat/completions"))
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            req.Headers.Add("Authorization", $"Bearer {apiKey}");
-
-            var client = _httpClientFactory.CreateClient();
-            var resp = await client.SendAsync(req);
-            if (resp.IsSuccessStatusCode)
-            {
-                var body = await resp.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(body);
-                var summary = doc.RootElement.GetProperty("choices")[0]
-                    .GetProperty("message").GetProperty("content").GetString() ?? "";
-
-                if (!string.IsNullOrWhiteSpace(summary))
-                {
-                    // Store summary as system message
-                    db.ChatMessages.Add(new ChatMessage
-                    {
-                        SessionId = sessionId, UserName = "system", Role = "system",
-                        Content = $"📝 历史摘要: {summary}", SessionTitle = null
-                    });
-
-                    // Delete summarized messages
-                    db.ChatMessages.RemoveRange(oldMessages);
-                    await db.SaveChangesAsync();
-                }
-            }
-        }
-        catch { /* compression failure is non-critical — silently continue */ }
     }
 
     /// <summary>Check if a user owns a session (has at least one message in it). Empty session = no owner.</summary>
