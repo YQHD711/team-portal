@@ -152,12 +152,19 @@ builder.Services.AddHealthChecks()
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // 生产默认（保持原来的严格值）：默认 60 次/10 秒，登录 5 次/60 秒，按来源 IP 分桶。
+    // 可用配置覆盖；**非生产环境默认放宽** —— 集成测试都跑在 Development，
+    // 且 TestServer 的对端恒为 127.0.0.1，严格阈值会让不同测试类共用同一个登录桶而互相打成 429
+    // （本仓库实测：全量并行跑时既有测试类随机红成 Unauthorized/空结果）。
+    var isProduction = builder.Environment.IsProduction();
+    var defaultPermit = int.TryParse(builder.Configuration["RateLimiting:DefaultPermit"], out var dp) ? dp : (isProduction ? 60 : 100_000);
+    var loginPermit = int.TryParse(builder.Configuration["RateLimiting:LoginPermit"], out var lp) ? lp : (isProduction ? 5 : 100_000);
     options.AddPolicy("default", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60,
+                PermitLimit = defaultPermit,
                 Window = TimeSpan.FromSeconds(10),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 10
@@ -167,7 +174,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 5,
+                PermitLimit = loginPermit,
                 Window = TimeSpan.FromSeconds(60),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -185,6 +192,8 @@ builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
 builder.Services.AddHttpClient<AiClient>();
 builder.Services.AddScoped<FlightDiagnosisService>();
+// 房间布局"谁在编辑"在线状态：内存态 + TTL 心跳（不上 WebSocket）
+builder.Services.AddSingleton<EditingPresenceService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddSingleton<KnowledgeSearchService>();
 builder.Services.AddHttpClient<WikiGeneratorService>();
@@ -333,10 +342,12 @@ app.UseTeamPortalExceptionHandler();
 
 // Forwarded Headers：必须在其它中间件之前 —— 限流按 RemoteIpAddress 分桶、审计按它记 IP，
 // 晚注册会让它们都拿到代理容器 IP（所有用户共用同一个限流桶）。
-// 只信任显式配置的代理网段（见 ForwardedHeadersSetup 的说明）；未配置时不注册该中间件。
+// 只信任显式配置的**真实代理地址**（KnownProxies，compose 用固定子网+静态 IP 提供默认值）；
+// 未配置时不注册该中间件（直连部署的正常状态）。
 var forwarded = ForwardedHeadersSetup.Create(
     builder.Configuration["ForwardedHeaders:KnownNetworks"],
-    builder.Configuration["ForwardedHeaders:KnownProxies"]);
+    builder.Configuration["ForwardedHeaders:KnownProxies"],
+    int.TryParse(builder.Configuration["ForwardedHeaders:ForwardLimit"], out var forwardLimit) ? forwardLimit : 1);
 if (forwarded is not null)
 {
     app.UseForwardedHeaders(forwarded);
@@ -346,8 +357,9 @@ else if (!app.Environment.IsDevelopment())
     // 直连（无代理）时这是正常状态；但在反代后忘了配置会表现为「所有审计 IP 都是同一个」，
     // 属于排查成本很高的静默故障，所以启动就提示。
     app.Logger.LogWarning(
-        "未配置 ForwardedHeaders:KnownNetworks / KnownProxies：审计日志与登录限流将使用直连对端 IP。" +
-        "部署在 nginx / docker 反向代理之后时请设置 ForwardedHeaders__KnownNetworks（如 172.16.0.0/12;10.0.0.0/8;127.0.0.1）。");
+        "未配置 ForwardedHeaders:KnownProxies：审计日志与登录限流将使用直连对端 IP（代理后部署时全是代理地址）。" +
+        "请设置 ForwardedHeaders__KnownProxies=<真实代理容器 IP>（compose 已用固定子网+静态 IP 给默认值）；" +
+        "**不要**填 172.16.0.0/12 / 10.0.0.0/8 这类所有私网 —— 那会让来源 IP 可被任意私网来源伪造（审计 #22）。");
 }
 
 app.UseRequestLogging();
@@ -380,6 +392,7 @@ app.MapAuthEndpoints();
 app.MapKnowledgeEndpoints();
 app.MapStudyEndpoints();
 app.MapInventoryEndpoints();
+app.MapEditingPresenceEndpoints();
 app.MapAiEndpoints();
 app.MapFirmwareEndpoints();
 app.MapFirmwareAdminEndpoints();

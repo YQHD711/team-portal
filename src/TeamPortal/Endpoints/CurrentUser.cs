@@ -18,6 +18,13 @@ namespace TeamPortal.Endpoints;
 /// </summary>
 internal static class CurrentUser
 {
+    /// <summary>
+    /// "staff（可编辑全局资源）"的**唯一定义**：admin 或部长。
+    /// 之前 8 个端点文件各自写了一遍 `role == "admin" || role == "部长"`（容易改一处漏七处），
+    /// 新代码一律用这里；旧文件保持不变以免无谓的改动面。
+    /// </summary>
+    public static bool IsStaffRole(string? role) => role is "admin" or "部长";
+
     public static async Task<(string? Role, string? Department, int Id)> FromDbAsync(ClaimsPrincipal user, AppDbContext db)
     {
         var idClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
