@@ -49,3 +49,12 @@ export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefine
   }
   return { template: apiDefault, notice: null };
 }
+
+/**
+ * **导出候选来源**（task-40 ③b 步骤 7）：库位标签**优先取 `Kind=location` 的默认模板**；
+ * 没有才退回 chooseExportTemplate 的"默认模板 + 适用性软判定 + 内置回落"。物料标签不走这里（仍 material）。
+ */
+export function pickLocationTemplate(list: readonly LabelTemplate[]): LabelTemplate | null {
+  const isLocation = (t: LabelTemplate) => (t.kind ?? "material") === "location";
+  return list.find(t => isLocation(t) && t.isDefault) ?? list.find(isLocation) ?? null;
+}

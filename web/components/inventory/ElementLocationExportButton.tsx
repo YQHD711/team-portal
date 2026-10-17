@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ItemElement } from "./layoutTypes";
 import { api } from "@/lib/api";
 import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
-import { chooseExportTemplate } from "@/lib/labelSuitability";
+import { chooseExportTemplate, pickLocationTemplate } from "@/lib/labelSuitability";
 import { collectLocationSlots, describeBatch, downloadPdf, elementLabelFileName } from "@/lib/locationLabelPdf";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import { roomLocationCodes } from "./ExportLocationLabelsButton";
@@ -35,7 +35,7 @@ export function ElementLocationExportButton({ element, roomName, template: overr
   useEffect(() => {
     if (override) return;
     api.get<LabelTemplate[]>("/api/label-templates")
-      .then(list => { const pick = chooseExportTemplate(list.find(t => t.isDefault) ?? list[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); })
+      .then(list => { const pick = chooseExportTemplate(pickLocationTemplate(list) ?? list.find(t => t.isDefault) ?? list[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); })
       .catch(() => { const pick = chooseExportTemplate(null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); });
   }, [override]);
 
