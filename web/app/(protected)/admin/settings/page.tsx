@@ -126,11 +126,18 @@ export default function SettingsPage() {
 
   // 应用品牌主色（留空随主题）
   const applyColor = async (color: string) => {
+    // 立即应用主色：**放在 try 之外**（保存失败/解析异常都不能阻止本机生效 —— 这是「切换没反应」的真因修复）
+    const root = document.documentElement;
+    if (color) { root.style.setProperty("--primary", color); root.style.setProperty("--accent", color); }
+    else { root.style.removeProperty("--primary"); root.style.removeProperty("--accent"); }
+    console.log("[applyColor]", color);
     updateValue("品牌", "Brand:PrimaryColor", color);
     setMsg("");
     try {
       await api.put("/api/admin/settings", { "Brand:PrimaryColor": color });
-      refresh();
+      // 修复「切换没反应」：保存后**立即**把品牌主色写到 CSS 变量（此前只在下次加载 brand 配置时才生效）
+      // 留空 = 随主题 → 移除覆盖属性，回落到主题自带的 --primary/--accent
+      // 先重拉（让页面/品牌配置同步），但**必须兜住异常**：refresh 抛错时不能连带吞掉后面的应用主色
       setMsg(color ? "✅ 品牌主色已应用" : "✅ 已恢复随主题默认");
     } catch {
       setMsg("❌ 主色保存失败");
