@@ -47,14 +47,18 @@ public class MaterialTools
     public async Task<object> MyRequests() => await _material.GetMyRequests(GetUserId());
     [McpServerTool(Name = "material_checkin")]
     public async Task<object?> Checkin(int requestId, string condition, bool hasPhoto, string? testNotes = null, string? photoUrl = null)
-        => await _material.Checkin(requestId, GetUserId(), condition, hasPhoto, testNotes, photoUrl);
+        // 与 HTTP 对齐：POST /api/material/checkout/{id}/checkin 要求 IsStaff（`MaterialEndpoints.cs:183`）。
+        // 之前 MCP 没判 → 任意成员可代他人归还并触发库存回加（审计 #9）。
+        => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _material.Checkin(requestId, GetUserId(), condition, hasPhoto, testNotes, photoUrl);
 
     [McpServerTool(Name = "material_start_stocktake")]
     public async Task<object> StartStocktake(string type, string grade)
         => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _material.StartStocktake(type, grade, GetUserId());
 
     [McpServerTool(Name = "material_list_stocktakes")]
-    public async Task<object> ListStocktakes() => await _material.GetStocktakes();
+    public async Task<object> ListStocktakes()
+        // 与 HTTP 对齐：GET /api/material/stocktake 同样仅 staff（`MaterialEndpoints.cs:220`）
+        => !McpAuth.IsStaff(_http) ? McpAuth.Forbidden : await _material.GetStocktakes();
 
     [McpServerTool(Name = "material_report_damage")]
     public async Task<object> ReportDamage(int itemId, string type, string description, bool isApprovedTest = false)
