@@ -38,7 +38,7 @@ export function locationLabelSuitability(tpl: LabelTemplate | null | undefined):
  */
 export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefined): { template: LabelTemplate; notice: string | null } {
   if (!apiDefault) {
-    return { template: DEFAULT_TEMPLATE, notice: "未取到团队默认模板（接口不可用），已用内置库位模板导出。" };
+    return { template: DEFAULT_TEMPLATE, notice: "模板接口不可用，已用内置库位模板导出。" };
   }
   const fit = locationLabelSuitability(apiDefault);
   if (!fit.ok) {

@@ -35,7 +35,7 @@ export function ElementLocationExportButton({ element, roomName, template: overr
   useEffect(() => {
     if (override) return;
     api.get<LabelTemplate[]>("/api/label-templates")
-      .then(list => { const pick = chooseExportTemplate(pickLocationTemplate(list) ?? list.find(t => t.isDefault) ?? list[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); })
+      .then(list => { const loc = pickLocationTemplate(list); const pick = chooseExportTemplate(loc ?? list.find(t => t.isDefault) ?? list[0] ?? null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); else if (!loc) setMsg(`还没有「库位标签」模板，当前使用「${pick.template.name}」（${pick.template.widthMm}×${pick.template.heightMm}mm）。可到标签模板设计器新建一个并选「库位标签」。`); })
       .catch(() => { const pick = chooseExportTemplate(null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); });
   }, [override]);
 

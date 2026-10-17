@@ -52,7 +52,7 @@ describe("适用性守卫（导出与 ③ 设计器校验共用同一判定）",
     const { chooseExportTemplate } = await import("@/lib/labelSuitability");
     const pick = chooseExportTemplate(null);
     expect(pick.template.id).toBe(DEFAULT_TEMPLATE.id);
-    expect(pick.notice).toContain("未取到团队默认模板");
+    expect(pick.notice).toContain("模板接口不可用");
   });
 
   it("适合的默认模板 → 原样使用、无提示（尺寸随模板走）", async () => {

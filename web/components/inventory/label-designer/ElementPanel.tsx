@@ -32,6 +32,13 @@ export function ElementPanel({ template, selected, onPatchTemplate, onPatchEleme
           <input data-testid="template-name" className={input} value={template.name}
             onChange={e => onPatchTemplate({ name: e.target.value })} />
         </label>
+        <label className={label}>用途
+          <select data-testid="template-kind" className={input} value={template.kind ?? "material"}
+            onChange={e => onPatchTemplate({ kind: e.target.value })}>
+            <option value="material">物料标签</option>
+            <option value="location">库位标签（导出库位时优先用它）</option>
+          </select>
+        </label>
         <div className="grid grid-cols-2 gap-2">
           <label className={label}>宽 mm
             <input data-testid="page-width" type="number" min={10} max={300} step={1} className={input} value={template.widthMm}
@@ -42,6 +49,13 @@ export function ElementPanel({ template, selected, onPatchTemplate, onPatchEleme
               onChange={e => onPatchTemplate({ heightMm: Math.min(300, Math.max(10, Number(e.target.value) || 10)) })} />
           </label>
         </div>
+        <label className={label}>用途
+          <select data-testid="template-kind" className={input} value={template.kind ?? "material"}
+            onChange={e => onPatchTemplate({ kind: e.target.value })}>
+            <option value="material">物料标签</option>
+            <option value="location">库位标签（导出库位时优先用它）</option>
+          </select>
+        </label>
         <div className="grid grid-cols-2 gap-2">
           <label className={label}>DPI
             <select data-testid="page-dpi" className={input} value={template.dpi}
@@ -102,7 +116,14 @@ export function ElementPanel({ template, selected, onPatchTemplate, onPatchEleme
                     onChange={e => onPatchElement(selected.id, { text: e.target.value })} />
                 </label>
               )}
-              <div className="grid grid-cols-2 gap-2">
+              <label className={label}>用途
+          <select data-testid="template-kind" className={input} value={template.kind ?? "material"}
+            onChange={e => onPatchTemplate({ kind: e.target.value })}>
+            <option value="material">物料标签</option>
+            <option value="location">库位标签（导出库位时优先用它）</option>
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
                 <label className={label}>字号 pt
                   <input data-testid="element-font-size" type="number" min={4} max={72} step={0.5} className={input}
                     value={selected.fontSizePt ?? 10}

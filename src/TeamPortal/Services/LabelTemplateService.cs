@@ -99,7 +99,10 @@ public class LabelTemplateService
         var entity = all.FirstOrDefault(t => t.Id == id);
         if (entity is null) return null;
 
-        foreach (var t in all) t.IsDefault = t.Id == id;   // 同一事务内完成"唯一默认"
+        // ③b：**默认按 kind 分离**（material / location 各有各的默认）。
+        // 向后兼容：历史上只有 material → 对 material 模板的行为与原来完全等价（仍是"全局唯一默认"）。
+        var kind = entity.Kind ?? "material";
+        foreach (var t in all.Where(t => (t.Kind ?? "material") == kind)) t.IsDefault = t.Id == id;
         await _db.SaveChangesAsync();
         return ToDto(entity);
     }
