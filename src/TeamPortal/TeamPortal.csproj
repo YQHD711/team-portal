@@ -29,4 +29,11 @@
     <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 审计 #8：`appsettings.Development.json` 里有真实密钥（JWT/AI Key/Baidu Key/管理员口令），
+         绝对不能被打进镜像层。`.dockerignore` 已排除构建上下文；这里再兜底禁止 publish 输出，
+         两道都留着 —— 只靠 .dockerignore 的话，将来若有人改成 `dotnet publish` 后 COPY 就会重新漏。 -->
+    <Content Update="appsettings.Development.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>
