@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { cookies } from "next/headers";
 import { BrandProvider } from "@/lib/brand";
+import { AUTO_SCHEME_SNIPPET, parseScheme, serverDarkClass } from "@/lib/scheme";
 
 // 注意：metadata 是构建期静态导出，无法读取运行时数据库中的品牌配置，SEO 保持默认品牌文案；
 // 页面内的品牌文案由 BrandProvider 在客户端从 /api/public/brand 动态获取。
@@ -36,14 +38,17 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const primaryColor = await fetchBrandPrimaryColor();
+  // 成员级明暗：cookie 决定首帧 class（服务端渲染 → 不闪；auto 由内联脚本按系统补）
+  const schemePref = parseScheme((await cookies()).get("scheme")?.value);
   return (
     <html
       lang="zh-CN"
-      className="h-full antialiased touch-manipulation dark"
+      className={`h-full antialiased touch-manipulation${serverDarkClass(schemePref)}`}
       suppressHydrationWarning
       // 品牌主色由**服务端渲染**（React 管理 → 不会被客户端 patch 抹掉；刷新后仍生效、全员生效）
       style={primaryColor ? ({ "--primary": primaryColor, "--accent": primaryColor } as React.CSSProperties) : undefined}
     >
+      <head><script dangerouslySetInnerHTML={{ __html: AUTO_SCHEME_SNIPPET }} /></head>
       <body className="min-h-full bg-background text-foreground font-sans">
         <BrandProvider>{children}</BrandProvider>
       </body>
