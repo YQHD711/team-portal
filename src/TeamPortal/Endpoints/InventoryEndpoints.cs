@@ -305,9 +305,13 @@ public static class InventoryEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可借出零件", statusCode: 403);
 
-            if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
+            // 审计 #6：数量必须有上下界（只校验 >0 时，一次请求就能写越界 → 之后整表读取 OverflowException）
+            if (!InventoryLimits.IsValidRequestQuantity(req.Quantity, out var qtyError))
+                return Results.Problem(qtyError, statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
+            if (!InventoryLimits.IsValidResultingStock(item.Quantity - req.Quantity, out var stockError))
+                return Results.Problem(stockError, statusCode: 400);
 
             var userName = user.Identity?.Name ?? "unknown";
             // Atomic decrement: only succeeds if enough stock remains
@@ -340,17 +344,22 @@ public static class InventoryEndpoints
             var (role, _) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可归还零件", statusCode: 403);
 
-            if (req.Quantity <= 0) return Results.Problem("Quantity must be positive", statusCode: 400);
+            // 审计 #6：单次上限 + 结果上限（并把上限放进 UPDATE 的 WHERE，避免并发叠加绕过校验）
+            if (!InventoryLimits.IsValidRequestQuantity(req.Quantity, out var qtyError))
+                return Results.Problem(qtyError, statusCode: 400);
             var item = await svc.GetById(id);
             if (item is null) return Results.Problem("Part not found", statusCode: 404);
+            if (!InventoryLimits.IsValidResultingStock(item.Quantity + req.Quantity, out var stockError))
+                return Results.Problem(stockError, statusCode: 400);
 
             var userName = user.Identity?.Name ?? "unknown";
             var updated = await db.InventoryItems
-                .Where(i => i.Id == id)
+                .Where(i => i.Id == id && i.Quantity + req.Quantity <= InventoryLimits.MaxStock)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(i => i.Quantity, i => i.Quantity + req.Quantity)
                     .SetProperty(i => i.UpdatedAt, DateTime.UtcNow));
-            if (updated == 0) return Results.Problem("零件不存在", statusCode: 404);
+            if (updated == 0)
+                return Results.Problem("零件不存在，或库存总量会超过上限", statusCode: 400);
 
             var newQty = item.Quantity + req.Quantity;
             db.InventoryTransactions.Add(new InventoryTransaction

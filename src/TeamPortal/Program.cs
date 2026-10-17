@@ -362,7 +362,6 @@ else if (!app.Environment.IsDevelopment())
         "**不要**填 172.16.0.0/12 / 10.0.0.0/8 这类所有私网 —— 那会让来源 IP 可被任意私网来源伪造（审计 #22）。");
 }
 
-app.UseRequestLogging();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -378,6 +377,9 @@ app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 请求日志：必须在认证/授权之后（否则 ctx.User 未填充 → 「用户」列永远空）
+app.UseRequestLogging();
 
 // ── WebTools 静态站：直接托管 G:\ardupilot_log_analysis\WebTools 目录（自定义中间件）。
 //    相比反向代理（:8123）：路径天然正确，无 Next rewrite 尾斜杠循环；
