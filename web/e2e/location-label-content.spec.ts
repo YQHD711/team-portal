@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 const RC = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const tok = (r: string) => `e2e.${Buffer.from(JSON.stringify({ [RC]: r, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.sig`;
 const TPL = {
-  id: 1, name: "含中文标签", isDefault: true, widthMm: 80, heightMm: 50, dpi: 600, background: "#FFFFFF",
+  id: 1, name: "含中文标签", isDefault: true, kind: "location", widthMm: 80, heightMm: 50, dpi: 600, background: "#FFFFFF",
   elements: [
     { id: "q", type: "qr", x: 3, y: 10, w: 30, h: 30 },
     // 必须有一处引用 code 的文本，否则这个模板对库位标签**不适用** → 会回落到内置库位模板（无二维码），

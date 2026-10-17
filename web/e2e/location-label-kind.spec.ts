@@ -52,9 +52,9 @@ test("候选来源：有 kind=location 的默认模板 → 用它（60×40）", 
   expect(mm).toBe("60.0×40.0");
 });
 
-test("候选来源：只有 material → 回落原逻辑（80×50）", async ({ page }) => {
+test("候选来源：只有 material → **不用物料模板**，回落内置库位模板（60×40、无二维码）", async ({ page }) => {
   await setup(page, [tpl(1, "material", 80, 50)]);
   const mm = await exportMm(page);
-  console.log(`KIND 只有-material: 导出页面=${mm}mm（期望 80.0×50.0）`);
-  expect(mm).toBe("80.0×50.0");
+  console.log(`KIND 只有-material: 导出页面=${mm}mm（期望 60.0×40.0 —— 用户要求「库位标签不用二维码」，物料模板带 qr 且是 80×50）`);
+  expect(mm).toBe("60.0×40.0");
 });

@@ -79,6 +79,42 @@ describe("导出候选来源与回落", () => {
 });
 
 /**
+ * **库位导出的最终模板决议**（两个导出按钮共用的唯一入口）。
+ * 用户明确：「库位标签不用二维码」。所以「只有物料模板」时**不能**拿物料模板凑数
+ * （物料模板是 80×50 + qr），必须回落到内置库位模板 60×40（无二维码）并给出可操作提示。
+ */
+describe("resolveLocationExportTemplate：库位导出到底用哪个模板", () => {
+  const tpl = (over: Partial<LabelTemplate>) => ({ ...DEFAULT_TEMPLATE, ...over }) as LabelTemplate;
+
+  it("有库位模板 → 用它（并可被适用性校验拦下）", async () => {
+    const { resolveLocationExportTemplate } = await import("@/lib/labelSuitability");
+    const loc = tpl({ id: 9, name: "库位 60×40", kind: "location", isDefault: true, widthMm: 60, heightMm: 40, elements: [text("code")] as never });
+    const r = resolveLocationExportTemplate([tpl({ id: 8, name: "物料", kind: "material" }), loc]);
+    expect(r.template.id).toBe(9);
+    expect(r.fromLocationTemplate).toBe(true);
+    expect(r.notice).toBeNull();
+  });
+
+  it("只有物料模板 → 回落内置库位模板（60×40、无二维码），并提示去设计器建库位模板", async () => {
+    const { resolveLocationExportTemplate } = await import("@/lib/labelSuitability");
+    const r = resolveLocationExportTemplate([tpl({ id: 8, name: "默认物料", kind: "material" })]);
+    expect(r.fromLocationTemplate).toBe(false);
+    expect(r.template.id).toBe(LOCATION_FALLBACK_TEMPLATE.id);
+    expect(r.template.widthMm).toBe(60);
+    expect(r.template.heightMm).toBe(40);
+    expect(r.template.elements.some(e => e.type === "qr")).toBe(false);
+    expect(r.notice).toContain("还没有「库位标签」模板");
+  });
+
+  it("接口不可用（空列表）→ 内置库位模板 + 「接口不可用」提示", async () => {
+    const { resolveLocationExportTemplate } = await import("@/lib/labelSuitability");
+    const r = resolveLocationExportTemplate([]);
+    expect(r.template.id).toBe(LOCATION_FALLBACK_TEMPLATE.id);
+    expect(r.notice).toContain("模板接口不可用");
+  });
+});
+
+/**
  * **回归测试（真实线上 bug）**：`GET /api/label-templates` 返回 `{ templates: [...] }`，
  * 前端却按 `LabelTemplate[]` 使用 → `list.find is not a function` → 被 `.catch` 吞成
  * "模板接口不可用" → 永远回落内置模板（含二维码）。`Kind` 功能因此在线上空转多轮。

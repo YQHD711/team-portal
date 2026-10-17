@@ -15,7 +15,7 @@ const QR_OK = [
   { id: "t", type: "text", x: 34, y: 4, w: 40, h: 8, field: "code" },
 ];
 const template = (id: number, w: number, h: number, elements: unknown[]) =>
-  ({ id, name: `${w}x${h}`, isDefault: true, widthMm: w, heightMm: h, dpi: 203, background: "#FFFFFF", elements });
+  ({ id, name: `${w}x${h}`, isDefault: true, kind: "location", widthMm: w, heightMm: h, dpi: 203, background: "#FFFFFF", elements });
 
 async function setup(page: Page, tpl: unknown | null) {
   await page.route("**/api/**", async route => {

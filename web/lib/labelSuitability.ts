@@ -51,6 +51,47 @@ export function chooseExportTemplate(apiDefault: LabelTemplate | null | undefine
 }
 
 /**
+ * **库位导出的最终模板决议**（两个导出按钮共用，一处实现）。
+ *
+ * 用户明确要求：「库位标签不用二维码」。
+ * 之前的顺序是「没有 location 模板 → 用团队默认模板（通常是**物料**模板 80×50、带二维码）」，
+ * 于是线上导出的库位标签上会多一个没人扫的二维码，尺寸也变成物料的 80×50 —— 与用户要求相反。
+ *
+ * 现在的决议顺序：
+ * 1. 有 `kind=location` 模板 → 用它（管理员改尺寸，导出跟着变；仍做适用性软校验）
+ * 2. 没有 location 模板 → **内置库位模板 60×40（无二维码）** + 可见提示告知怎么自定义
+ * 3. 接口不可用 / 列表为空 → 内置库位模板 + 「接口不可用」提示
+ *
+ * 物料标签（`ItemLabelModal`）**不走这里**，仍用物料默认模板（二维码是物料标签的功能）。
+ */
+export function resolveLocationExportTemplate(list: readonly LabelTemplate[]): {
+  template: LabelTemplate;
+  notice: string | null;
+  /** true = 用上了管理员配置的库位模板；false = 回落内置库位模板 */
+  fromLocationTemplate: boolean;
+} {
+  if (list.length === 0) {
+    return {
+      template: LOCATION_FALLBACK_TEMPLATE,
+      notice: "模板接口不可用，已用内置库位模板（60×40，无二维码）导出。",
+      fromLocationTemplate: false,
+    };
+  }
+  const loc = pickLocationTemplate(list);
+  if (loc) {
+    const pick = chooseExportTemplate(loc);
+    return { ...pick, fromLocationTemplate: true };
+  }
+  return {
+    template: LOCATION_FALLBACK_TEMPLATE,
+    notice:
+      "还没有「库位标签」模板，已用内置库位模板（60×40，无二维码）导出。" +
+      "可到「标签模板」设计器新建一个模板、用途选「库位标签」，导出就会改用它。",
+    fromLocationTemplate: false,
+  };
+}
+
+/**
  * **导出候选来源**（task-40 ③b 步骤 7）：库位标签**优先取 `Kind=location` 的默认模板**；
  * 没有才退回 chooseExportTemplate 的"默认模板 + 适用性软判定 + 内置回落"。物料标签不走这里（仍 material）。
  */

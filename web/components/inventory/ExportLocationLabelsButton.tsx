@@ -15,8 +15,9 @@ import { api } from "@/lib/api";
 import type { ItemElement, RoomLayout } from "./layoutTypes";
 import { usesCells } from "./layoutTypes";
 import { elementCells } from "./elementGeometry";
-import { DEFAULT_TEMPLATE, type LabelTemplate } from "@/lib/labelTemplate";
-import { chooseExportTemplate, pickLocationTemplate, unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
+import type { LabelTemplate } from "@/lib/labelTemplate";
+import { LOCATION_FALLBACK_TEMPLATE } from "@/lib/locationTemplate";
+import { resolveLocationExportTemplate, unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
 import { progressText } from "@/lib/locationLabelPdf";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import {
@@ -43,18 +44,21 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const lastProgressAt = useRef(0);   // 进度节流用（见 onProgress 注释）
-  // 团队默认模板（管理员可在设计器里改尺寸）→ 导出页面尺寸随之变化；接口不可用时**降级**用内置默认（不阻塞导出）
-  const [template, setTemplate] = useState<LabelTemplate>(override ?? DEFAULT_TEMPLATE);
+  // 初始值就是内置**库位**模板（无二维码）：接口还没回来/失败时也不会误用带二维码的物料模板
+  const [template, setTemplate] = useState<LabelTemplate>(override ?? LOCATION_FALLBACK_TEMPLATE);
   useEffect(() => {
     if (override) return;
     api.get<LabelTemplatesResponse>("/api/label-templates")
       .then(list => {
-        const tpls = unwrapTemplates(list); const loc = pickLocationTemplate(tpls); const pick = chooseExportTemplate(loc ?? tpls.find(t => t.isDefault) ?? tpls[0] ?? null);
-        if (!loc) setMsg(`还没有「库位标签」模板，当前使用「${pick.template.name}」（${pick.template.widthMm}×${pick.template.heightMm}mm）。可到标签模板设计器新建一个并选「库位标签」。`);
+        const pick = resolveLocationExportTemplate(unwrapTemplates(list));
         setTemplate(pick.template);
-        if (pick.notice) setMsg(pick.notice);   // **不静默**：说明为什么换了模板
+        if (pick.notice) setMsg(pick.notice);   // **不静默**：说明用了哪个模板、为什么
       })
-      .catch(() => { const pick = chooseExportTemplate(null); setTemplate(pick.template); if (pick.notice) setMsg(pick.notice); });
+      .catch(() => {
+        const pick = resolveLocationExportTemplate([]);
+        setTemplate(pick.template);
+        if (pick.notice) setMsg(pick.notice);
+      });
   }, [override]);
 
   const onClick = async () => {
