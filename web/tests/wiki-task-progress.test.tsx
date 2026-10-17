@@ -124,7 +124,10 @@ describe("Wiki 导入页", () => {
     const input = screen.getByLabelText("生成模型");
     expect(input.tagName).toBe("INPUT");
 
-    // 候选来自 /api/admin/ai/models（不再内置任何厂商模型名）
+    // 候选来自 /api/admin/ai/models（不再内置任何厂商模型名）。
+    // ⚠️ 必须等 hook 的 fetch **解析并重渲染完**再点：只等 mockGet 被调用过不够 ——
+    // CI 上出现过 "点了但按钮还没出现" 的偶发失败（Toggle 是 suggestions 非空才渲染）。
+    await waitFor(() => expect(screen.getByTestId("model-input-toggle")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("model-input-toggle"));
     expect(screen.getByTestId("model-option-vendor-model-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("model-input-toggle"));

@@ -6,3 +6,6 @@ obj
 *.log
 .env
 .env.*
+
+# 审计 #8：本地开发配置含真实密钥（JWT/AI Key/Baidu Key/管理员口令），绝不能进镜像
+appsettings.Development.json
