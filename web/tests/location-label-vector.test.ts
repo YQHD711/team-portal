@@ -103,3 +103,29 @@ describe("🔴 回归：标签**内容可读性**（几何断言抓不到的那�
     expect(true).toBe(true);
   });
 });
+describe("③a 单元素库位标签导出：取码集合与文件名", () => {
+  it("分格元素展开全部真实格位；未分格用元素码；未指定库位不产出", async () => {
+    const { roomLocationCodes } = await import("@/components/inventory/ExportLocationLabelsButton");
+    const groups = roomLocationCodes([
+      { id: "a", type: "shelf", name: "A货架", locCode: "6011-A", x: 0, y: 0, w: 200, h: 60, rotation: 0, rows: 2, cols: 2 },
+      { id: "c", type: "device", name: "图传", locCode: "6011-C", x: 0, y: 0, w: 40, h: 40, rotation: 0 },
+      { id: "n", type: "shelf", name: "未定位", locCode: "", x: 0, y: 0, w: 100, h: 60, rotation: 0, rows: 1, cols: 1 },
+    ] as never);
+    expect(groups[0].codes).toEqual(["6011-A-1-01", "6011-A-1-02", "6011-A-2-01", "6011-A-2-02"]);
+    expect(groups[1].codes).toEqual(["6011-C"]);
+    expect(groups[2].codes).toEqual([]);
+    // 单元素导出只取该元素：slots 数 == 该元素真实格位数
+    const { collectLocationSlots } = await import("@/lib/locationLabelPdf");
+    expect(collectLocationSlots([groups[0]], "库房").slots).toHaveLength(4);
+  });
+
+  it("元素级文件名：含房间名+元素名+日期，且与房间级文件名不同", async () => {
+    const { elementLabelFileName, labelFileName } = await import("@/lib/locationLabelPdf");
+    const when = new Date("2026-10-16T10:00:00");
+    const el = elementLabelFileName("6011 库房", "图传A柜", when);
+    expect(el).toContain("图传A柜");
+    expect(el).toContain("2026-10-16");
+    expect(el.endsWith(".pdf")).toBe(true);
+    expect(el).not.toBe(labelFileName("6011 库房", when));   // 能区分"某元素"vs"整屋"
+  });
+});

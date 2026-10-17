@@ -29,6 +29,8 @@ import { findFocusCell, pickInitialElement } from "./viewerFocus";
 interface PlannerViewerProps {
   layout: RoomLayout;
   roomCode: string;
+  /** 房间名（元素级库位标签导出的文件名/入口需要） */
+  roomName?: string;
   items: MaterialItem[];
   /** 初始选中的元素（带参数跳进来时定位；用户后续交互不受影响） */
   initialElementId?: string;
@@ -48,7 +50,7 @@ function cellLabelOf(el: ItemElement, cell: ElementCell | null): string | null {
   return cell ? cellLabelAt(el, cell.row, cell.col) : el.locCode || null;
 }
 
-export function PlannerViewer({ layout, roomCode, items, initialElementId, focusElementId, focusItem }: PlannerViewerProps) {
+export function PlannerViewer({ layout, roomCode, roomName, items, initialElementId, focusElementId, focusItem }: PlannerViewerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const workRef = useRef<HTMLDivElement>(null);
   const focusCardRef = useRef<HTMLDivElement>(null);
@@ -164,7 +166,7 @@ export function PlannerViewer({ layout, roomCode, items, initialElementId, focus
 
       {detail && (
         <ElementDetail element={detail.el} items={items} initialCell={detail.cell}
-          focusItemId={focusItem?.id ?? null} onClose={() => setDetail(null)} />
+          focusItemId={focusItem?.id ?? null} onClose={() => setDetail(null)}  roomName={roomName} />
       )}
     </div>
   );

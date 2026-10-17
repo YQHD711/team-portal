@@ -145,3 +145,11 @@ export function downloadPdf(bytes: ArrayBuffer, filename: string): void {
 export function progressText(done: number, total: number): string {
   return `正在生成 ${done}/${total}…`;
 }
+
+/**
+ * **单元素**导出的文件名：`房间名-元素名-库位标签-YYYY-MM-DD.pdf`（与房间级 `房间-库位标签-日期` 可区分）
+ */
+export function elementLabelFileName(roomName: string, elementName: string, when: Date = new Date()): string {
+  const d = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, "0")}-${String(when.getDate()).padStart(2, "0")}`;
+  return `${safeName(roomName)}-${safeName(elementName)}-库位标签-${d}.pdf`;
+}

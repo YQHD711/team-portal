@@ -193,7 +193,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
           onClose={() => setEditId(null)} />
       )}
       {detail && (
-        <ElementDetail element={detail.el} items={items} initialCell={detail.cell} onClose={() => setDetail(null)} />
+        <ElementDetail element={detail.el} items={items} initialCell={detail.cell} onClose={() => setDetail(null)}  roomName={row.roomName} />
       )}
     </div>
   );
