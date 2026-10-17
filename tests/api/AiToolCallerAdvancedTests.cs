@@ -62,13 +62,13 @@ public class AiToolCallerAdvancedTests
     [Fact]
     public async Task ReasoningContent_IsReplayed_WhenEnabled_ForDeepSeek()
     {
-        var handler = new Handler(ToolCallWithReasoning("先想想目录结构"), Final("done"));
+        var handler = new Handler(ToolCallWithReasoning("thinking-about-dirs"), Final("done"));
         var result = await Caller(handler).RunAsync(Opt(deepseek: true), Msg(), null,
             (_, _) => Task.FromResult("{}"), echoReasoningContent: true);
 
         Assert.True(result.Ok);
         Assert.Equal(2, handler.Bodies.Count);
-        Assert.Contains("先想想目录结构", handler.Bodies[1]);   // ← 第二轮请求必须带上
+        Assert.Contains("thinking-about-dirs", handler.Bodies[1]);   // ← 第二轮请求必须带上
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class AiToolCallerAdvancedTests
         await Caller(handler).RunAsync(Opt(deepseek: false), Msg(), null,
             (_, _) => Task.FromResult(longResult), toolResultMaxChars: 10);
 
-        Assert.Contains("…[truncated]", handler.Bodies[1]);
+        Assert.Contains("[truncated]", handler.Bodies[1]);   // 非 ASCII 的省略号会被 JSON 转义
         Assert.DoesNotContain(new string('x', 20), handler.Bodies[1]);
     }
 
