@@ -165,6 +165,9 @@ export function normalizeTemplate(raw: unknown): LabelTemplate | null {
   return {
     id: num(o.id, 0),
     name: str(o.name, "未命名模板"),
+    // ⚠️ kind 必须读回来：之前这里漏了 → 后端存了 kind=location，前端归一化后又变回 material，
+    // 设计器列表徽标/下拉、以及导出选模板都会误以为"没有库位模板"。
+    kind: str(o.kind, "material"),
     isDefault: o.isDefault === true,
     widthMm, heightMm,
     dpi: Math.max(72, num(o.dpi, DEFAULT_TEMPLATE.dpi)),
