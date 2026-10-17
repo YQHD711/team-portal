@@ -104,3 +104,29 @@ export async function stageTransformFromDom(page: Page, box: Box): Promise<Trans
   if (!Number.isFinite(ox) || !Number.isFinite(oy) || !Number.isFinite(s) || s <= 0) return null;
   return { s, padLeft: ox, padTop: oy, source: "stage" };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * **真机事实 · 第五条：查看模式（`PlannerViewer`）里"定位元素"目前不可自动化**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 症状（下次遇到"元素中心算出 NaN / dblclick 报 Invalid parameters"先看这里）：
+ * `transformFor()` 返回 `padLeft: null, padTop: null` → `elementCenterPage()` 得 NaN。
+ *
+ * 根因链（按排查顺序）：
+ *  1. `data-stage-transform` 只在 **`PlannerCanvas`（编辑模式）** 发布（`useStageTransformPublisher`，PlannerCanvas.tsx:55）；
+ *     **`PlannerViewer`（查看模式）没有调用它** → 属性不存在 → pad 为 null。
+ *  2. **但直接把那个 hook 加到 `PlannerViewer` 会让 `tests/planner-hidden-panel-lines.test.tsx`
+ *     的 3 个用例全红**（jsdom 下新增 hook 调用失败）。所以要补的话必须**同时**处理该测试的 mock，
+ *     或让 hook 在"没有真实 stage"时安全退化（先例：其它 hook 的 `if (!stage) return;` 写法）。
+ *  3. **即便发布了属性，`transformFor` 的 pad 仍可能为 null** —— 说明本文件的 pad 计算依赖
+ *     **编辑模式**的布局假设（stage 居中两轴 / 尺寸关系）；上面"四条真机事实"里"舞台居中两轴"
+ *     那条**可能只适用于编辑器**，查看模式需要**单独的 pad 来源或换算分支**（别硬套）。
+ *
+ * 正确签名（别再猜，我猜错过两次）：
+ *  - `elementCenterPage(box, t, el)` —— **box 在前**
+ *  - `verifyMapping(page, box, t, el, probeFn)` —— 第 5 参是 **`() => Promise<boolean>` 探针函数**，不是 options
+ *
+ * 结论：**查看模式"定位元素"目前不可自动化**；因此
+ * `e2e/location-label-element.spec.ts`（元素级库位标签导出，走查看模式画布双击）**尚无 e2e**，
+ * 该入口目前只有单测覆盖（取码/文件名）。要一次修好：先让 `PlannerViewer` 安全发布变换（含测试 mock），
+ * 再给本文件补一条"查看模式 pad"的可靠来源，最后才写那条 spec。
+ * ═══════════════════════════════════════════════════════════════════════════ */

@@ -10,6 +10,11 @@ public class LabelTemplate
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// **标签用途分类**（task-40 ③b）：`material`（缺省，老模板天然落这里）或 `location`（库位标签）。
+    /// 导出时库位标签优先取 `location`；物料标签仍取 `material`。
+    /// </summary>
+    public string Kind { get; set; } = "material";
     /// <summary>全队唯一的默认模板（库里至少有一个模板时，必须恰好有一个为 true）。</summary>
     public bool IsDefault { get; set; }
     public double WidthMm { get; set; }
