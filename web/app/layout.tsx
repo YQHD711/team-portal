@@ -17,16 +17,32 @@ export const viewport: Viewport = {
   // 对视力和手部精细度不佳的队员不友好（WCAG 1.4.4 要求允许放大到 200%）。
 };
 
-export default function RootLayout({
+/** 服务端取品牌主色（失败一律降级，绝不让站点 500）：内部服务到服务调用，不是 SSR 请求自己 */
+async function fetchBrandPrimaryColor(): Promise<string | null> {
+  try {
+    const base = process.env.API_PROXY_URL || "http://localhost:8080";
+    const res = await fetch(`${base}/api/public/brand`, { next: { revalidate: 60 } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { primaryColor?: string | null };
+    return data?.primaryColor?.trim() || null;
+  } catch {
+    return null;   // 后端不可用/超时 → 随主题
+  }
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const primaryColor = await fetchBrandPrimaryColor();
   return (
     <html
       lang="zh-CN"
       className="h-full antialiased touch-manipulation dark"
       suppressHydrationWarning
+      // 品牌主色由**服务端渲染**（React 管理 → 不会被客户端 patch 抹掉；刷新后仍生效、全员生效）
+      style={primaryColor ? ({ "--primary": primaryColor, "--accent": primaryColor } as React.CSSProperties) : undefined}
     >
       <body className="min-h-full bg-background text-foreground font-sans">
         <BrandProvider>{children}</BrandProvider>
