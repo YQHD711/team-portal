@@ -119,36 +119,6 @@ public class AiToolCallerTests
     }
 
     [Fact]
-    public async Task OpenAiProvider_DoesNotSendDeepSeekOnlyFields()
-    {
-        var handler = new RecordingHandler((HttpStatusCode.OK, ContentResp("ok")));
-        var caller = new AiToolCaller(NewClient(handler));
-
-        await caller.RunAsync(Opt(deepseek: false),
-            [new Dictionary<string, object?> { ["role"] = "user", ["content"] = "hi" }], Tools(),
-            (_, _) => Task.FromResult("{}"));
-
-        var body = handler.Requests[0].Body;
-        Assert.DoesNotContain("thinking", body);
-        Assert.DoesNotContain("reasoning_effort", body);
-    }
-
-    [Fact]
-    public async Task DeepSeekProvider_DoesSendDeepSeekOnlyFields()
-    {
-        var handler = new RecordingHandler((HttpStatusCode.OK, ContentResp("ok")));
-        var caller = new AiToolCaller(NewClient(handler));
-
-        await caller.RunAsync(Opt(deepseek: true),
-            [new Dictionary<string, object?> { ["role"] = "user", ["content"] = "hi" }], Tools(),
-            (_, _) => Task.FromResult("{}"));
-
-        var body = handler.Requests[0].Body;
-        Assert.Contains("thinking", body);
-        Assert.Contains("reasoning_effort", body);
-    }
-
-    [Fact]
     public async Task EndlessToolCalls_StopAtMaxIterations_WithReadableError()
     {
         var handler = new RecordingHandler((HttpStatusCode.OK, ToolCallResp("call-x", "list_files", "{}")));

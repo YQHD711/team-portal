@@ -15,31 +15,39 @@ public sealed record AiToolResult(bool Ok, string? Content, string? Error, int I
 /// 这里用组合方式复用它的请求构造/发送，**保证 `Provider=DeepSeek` 时才下发
 /// `thinking`/`reasoning_effort` 这个判断不被绕过**（逻辑仍在 <see cref="AiClient.BuildChatPayload"/>）。
 ///
-/// 流程：请求 → 有 `tool_calls` 就执行回调、追加 assistant 回放 + `role:"tool"` 结果 → 再请求；
-/// 没有 `tool_calls` 即拿到最终回答。迭代上限 <see cref="MaxIterations"/>，超限返回可读错误。
+/// 三个**可选**能力（默认关闭/保持通用行为，Wiki 侧显式开启旧值）：
+///  - <c>echoReasoningContent</c>：把响应里的 `reasoning_content` 回放到下一轮 assistant 消息。
+///    **只在 `Provider=DeepSeek` 且显式开启时生效** —— DeepSeek 思考模式要求每轮回传，
+///    但 OpenAI 等严格服务对未知 assistant 字段可能 400，不能把 DeepSeek 的坑变成别家的坑。
+///  - <c>maxIterations</c> / <c>timeoutError</c>：循环上限与超限错误文案（Wiki 需要 50 轮 + 原错误语义）。
+///  - <c>toolResultMaxChars</c>：工具结果截断上限（截断后加 `…[truncated]` 标记，不静默截）。
 /// </summary>
 public class AiToolCaller
 {
-    /// <summary>工具循环最大轮数（防止模型无限调工具）</summary>
+    /// <summary>工具循环默认最大轮数（防模型无限调工具）</summary>
     public const int MaxIterations = 8;
 
     private readonly AiClient _ai;
 
     public AiToolCaller(AiClient ai) => _ai = ai;
 
-    /// <param name="opt">已解析的 AI 配置（Provider/BaseUrl/ApiKey/Model/Thinking…）</param>
-    /// <param name="messages">对话消息（会被原地追加 assistant/tool 消息）</param>
-    /// <param name="tools">OpenAI 形状的 tools 数组；为 null 时退化成普通单轮对话</param>
-    /// <param name="executeTool">执行工具：入参 (工具名, 参数 JSON)，返回工具结果字符串（应是 JSON）</param>
     public async Task<AiToolResult> RunAsync(
         AiOptions opt,
         List<Dictionary<string, object?>> messages,
         IEnumerable<object>? tools,
         Func<string, string, Task<string>> executeTool,
         int? maxTokens = null,
+        bool echoReasoningContent = false,
+        int? maxIterations = null,
+        string? timeoutError = null,
+        int? toolResultMaxChars = null,
         CancellationToken ct = default)
     {
-        for (var i = 1; i <= MaxIterations; i++)
+        var limit = maxIterations ?? MaxIterations;
+        // reasoning_content 只在 DeepSeek 且显式开启时回放（见类注释）
+        var replayReasoning = echoReasoningContent && opt.Provider == AiProvider.DeepSeek;
+
+        for (var i = 1; i <= limit; i++)
         {
             var payload = _ai.BuildChatPayload(opt, messages, stream: false, tools: tools, maxTokens: maxTokens);
             using var req = _ai.CreateChatRequest(opt, payload);
@@ -58,8 +66,7 @@ public class AiToolCaller
             if (calls.Count == 0)
                 return new(true, content ?? "", null, i);
 
-            // 回放 assistant 的这一轮 tool_calls（OpenAI 要求下一轮请求里带上，否则 400）
-            messages.Add(new Dictionary<string, object?>
+            var assistant = new Dictionary<string, object?>
             {
                 ["role"] = "assistant",
                 ["content"] = content,
@@ -69,7 +76,14 @@ public class AiToolCaller
                     ["type"] = "function",
                     ["function"] = new Dictionary<string, object?> { ["name"] = c.Name, ["arguments"] = c.Arguments },
                 }).ToList(),
-            });
+            };
+            if (replayReasoning)
+            {
+                var reasoning = ExtractReasoningContent(root);
+                if (!string.IsNullOrEmpty(reasoning)) assistant["reasoning_content"] = reasoning;
+            }
+            // OpenAI 要求下一轮请求带回 assistant 的 tool_calls，否则 400
+            messages.Add(assistant);
 
             foreach (var call in calls)
             {
@@ -80,6 +94,8 @@ public class AiToolCaller
                     // 工具自身失败也要把原因回给模型，而不是让整个请求崩掉
                     result = JsonSerializer.Serialize(new { error = ex.Message });
                 }
+                if (toolResultMaxChars is int cap && result.Length > cap)
+                    result = result[..cap] + "…[truncated]";
                 messages.Add(new Dictionary<string, object?>
                 {
                     ["role"] = "tool",
@@ -89,7 +105,8 @@ public class AiToolCaller
             }
         }
 
-        return new(false, null, $"AI 工具调用超过 {MaxIterations} 轮仍未给出最终回答（可能存在循环调用）", MaxIterations);
+        return new(false, null,
+            timeoutError ?? $"AI 工具调用超过 {limit} 轮仍未给出最终回答（可能存在循环调用）", limit);
     }
 
     /// <summary>解析 `choices[0].message.tool_calls[]`；没有则返回空列表</summary>
@@ -116,6 +133,14 @@ public class AiToolCaller
         }
         return result;
     }
+
+    /// <summary>取 `choices[0].message.reasoning_content`（DeepSeek 思考模式回传用）</summary>
+    public static string? ExtractReasoningContent(JsonElement root)
+        => root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array
+           && choices.GetArrayLength() > 0 && choices[0].TryGetProperty("message", out var msg)
+           && msg.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String
+            ? rc.GetString()
+            : null;
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 }
