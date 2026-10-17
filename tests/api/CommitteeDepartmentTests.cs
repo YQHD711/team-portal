@@ -37,7 +37,7 @@ public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Prog
     [Fact]
     public async Task Admin_GetsCommitteeDepartment_WithoutRoleChange()
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-committee-{Guid.NewGuid():N}.db");
+        var dbPath = NewDbFile();
         try
         {
             _ = Client(dbPath); // 触发一次启动，跑完迁移与种子
@@ -50,13 +50,13 @@ public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Prog
             Assert.Equal("admin", admin.Role);              // 角色没变
             Assert.Equal(committee!.Id, admin.DepartmentId); // 但有了部门属性
         }
-        finally { try { File.Delete(dbPath); } catch { } }
+        finally { CleanupDb(dbPath); }
     }
 
     [Fact]
     public async Task CommitteeDepartment_IsNotCreatedTwice_AndDoesNotOverwriteManualAssignment()
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-committee-{Guid.NewGuid():N}.db");
+        var dbPath = NewDbFile();
         try
         {
             _ = Client(dbPath);
@@ -84,7 +84,7 @@ public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Prog
                 Assert.NotEqual(committeeId, admin.DepartmentId);
             }
         }
-        finally { try { File.Delete(dbPath); } catch { } }
+        finally { CleanupDb(dbPath); }
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Prog
     {
         // 关键回归：管理员在"比对部门"之前就按 role 短路，所以被塞进部门不会改变权限。
         // 这里用「跨部门查看档案」来验证 —— 部长做这件事会被拒，管理员不会。
-        var dbPath = Path.Combine(Path.GetTempPath(), $"tp-committee-{Guid.NewGuid():N}.db");
+        var dbPath = NewDbFile();
         try
         {
             var client = Client(dbPath);
@@ -123,7 +123,28 @@ public class CommitteeDepartmentTests : IClassFixture<WebApplicationFactory<Prog
             // 管理员跨部门看档案：必须仍然放行（若哪天忘了按 role 短路，这里会变成 403）
             Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/admin/profiles/{targetSlug}")).StatusCode);
         }
-        finally { try { File.Delete(dbPath); } catch { } }
+        finally { CleanupDb(dbPath); }
+    }
+
+    /// <summary>
+    /// **必须给每个用例一个独立目录**，不能直接用 `%TEMP%\xxx.db`：
+    /// `BackupService` 的备份目录是「DB 所在目录/backups/db」，DB 直接在 %TEMP% 时所有用例共享
+    /// `%TEMP%\backups\db`；启动时若 DB 文件还不存在，`CheckAndRecoverOnStartup` 会把**别的用例**
+    /// 留下的备份恢复进来 → 种子数据/部门归属全是别人的 → 本类的 3 条用例间歇性 Assert 失败
+    /// （CI 上表现为红一次绿一次，还会挡住 main 的镜像构建与部署）。独立目录后备份目录也随之隔离。
+    /// </summary>
+    private static string NewDbFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"tp-committee-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "teamportal.db");
+    }
+
+    private static void CleanupDb(string dbPath)
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();   // 释放文件句柄，否则删不掉
+        var dir = Path.GetDirectoryName(dbPath);
+        try { if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
     }
 
     private sealed record LoginResp(string Token);
