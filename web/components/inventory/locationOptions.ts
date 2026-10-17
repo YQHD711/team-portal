@@ -6,6 +6,7 @@ import type { ItemElement, ItemType } from "./layoutTypes";
 import { ELEMENT_DEFS, cellSummary, colsOf, rowsOf, usesCells } from "./layoutTypes";
 import { parseLayout } from "./layoutCodec";
 import { pad2 } from "./elementGeometry";
+import { frontRows } from "./tableZones";
 
 export interface LocationOption {
   /** 元素编码（库位前缀），如 1030-A */
@@ -35,7 +36,9 @@ function toOption(el: ItemElement): LocationOption | null {
     locCode,
     name: el.name,
     type: el.type,
-    rows: splits ? rowsOf(el) : 1,
+    // 层数用 `frontRows`（= 界面上**真的能看到几行**）：工作台关闭桌下时不该再让人挂到隐藏的桌下层。
+    // 注意 `usesCells` 仍按元素本身的 rows×cols 判（否则 1×1 工作台会退化成三段短编码）。
+    rows: splits ? frontRows(el) : 1,
     cols: splits ? colsOf(el) : 1,
     usesCells: splits,
     label: `${el.name}（${locCode}）· ${ELEMENT_DEFS[el.type].label} / ${cellSummary(el)}`,

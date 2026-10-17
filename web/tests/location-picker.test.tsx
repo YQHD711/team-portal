@@ -38,6 +38,20 @@ describe("库位选项派生（locationOptions）", () => {
     expect(locationOptionsOf("{ 坏 json")).toEqual([]);
   });
 
+  it("工作台：可选层数与界面显示的层数一致（关闭桌下时不给隐藏的第 2 层）", () => {
+    // 用户实测：「显示开启但 UI 没正确加载」+「挂载物料时没法挂到桌下」——
+    // 挂载下拉的层数必须与正视图真的画出来的层一致。
+    const benchOff = { id: "w1", type: "workbench", name: "焊接工作台", x: 0, y: 0, w: 180, h: 90, rotation: 0, locCode: "6011-J", rows: 2, cols: 1, underTableEnabled: false };
+    const off = locationOptionsOf(layoutJson([benchOff]));
+    expect(off[0]).toMatchObject({ usesCells: true, rows: 1, cols: 1 });   // 只有桌上那一层
+    expect(composeLocCode(off[0], "2", "1")).toBe("");                     // 隐藏的桌下层不给挂
+
+    const benchOn = { ...benchOff, rows: 2, underTableEnabled: true };
+    const on = locationOptionsOf(layoutJson([benchOn]));
+    expect(on[0]).toMatchObject({ usesCells: true, rows: 2, cols: 1 });    // 桌上 + 桌下
+    expect(composeLocCode(on[0], "2", "1")).toBe("6011-J-2-01");           // 桌下层可以挂
+  });
+
   it("编码组装：格位元素带层位，整体挂载只到元素，越界返回空", () => {
     const [shelfOpt, , deviceOpt] = locationOptionsOf(room.layoutJson);
 

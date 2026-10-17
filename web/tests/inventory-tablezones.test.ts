@@ -17,11 +17,25 @@ const mat = (id: number, locationCode: string): MaterialItem =>
   ({ id, name: `M${id}`, category: null, quantity: 1, locationCode, status: "available", grade: null, unitPrice: null, updatedAt: null } as unknown as MaterialItem);
 
 describe("开关默认与泛化（俯/正行数）", () => {
-  it("**默认开启**（字段缺省 = true）", () => {
-    expect(hasUnderTable(bench())).toBe(true);
+  it("**缺省即开启只对真的存在第 2 行的老数据成立**（rows=1 不再假装开启）", () => {
+    expect(hasUnderTable(bench())).toBe(true);                      // rows=2 缺省 → 开启（老数据语义）
     expect(hasUnderTable(bench({ underTableEnabled: true }))).toBe(true);
     expect(hasUnderTable(bench({ underTableEnabled: false }))).toBe(false);
-    expect(hasUnderTable(bench({ type: "shelf" }))).toBe(false);   // 非工作台无此概念
+    expect(hasUnderTable(bench({ type: "shelf" }))).toBe(false);    // 非工作台无此概念
+    // 用户实测 bug：rows=1 的 1×1 工作台显示「关闭桌下存储」却没有桌下行、也挂不到桌下
+    expect(hasUnderTable(bench({ rows: 1, cols: 1 }))).toBe(false);
+    expect([topRows(bench({ rows: 1, cols: 1 })), frontRows(bench({ rows: 1, cols: 1 }))]).toEqual([1, 1]);
+    // 不变量：rows=1 时**无论标志怎么写**都不可能有桌下层（所以开关必须显示为「未开启」）
+    expect(hasUnderTable(bench({ rows: 1, underTableEnabled: true }))).toBe(false);
+  });
+
+  it("1×1 工作台「开启桌下」后：开关与 UI 一致（rows=2 → 正视图 2 行=桌上1+桌下1）", () => {
+    const on = withUnderTable(bench({ rows: 1, cols: 1 }), true);
+    expect(hasUnderTable(on)).toBe(true);
+    expect(on.rows).toBe(2);
+    expect(frontRows(on)).toBe(2);                                  // 桌下行真的存在
+    expect(topRows(on)).toBe(1);                                    // 俯视图仍只画桌上
+    expect(underTableCells(on)).toEqual([{ row: 2, col: 1 }]);      // 桌下有 1 个可挂载格位
   });
 
   it("三条泛化都钉住：rows=1→俯1/正1；rows=2→俯1/正2；rows=3→俯2/正3", () => {
