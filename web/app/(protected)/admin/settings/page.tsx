@@ -249,10 +249,11 @@ export default function SettingsPage() {
                     // 提示词是长文本，单行输入框没法编辑
                     const isLongText = /prompt/i.test(s.key);
                     return (
-                      <div key={s.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 hover:bg-surface-hover/50">
-                        <div className="flex-1 min-w-[220px]">
-                          <div className="text-sm font-medium">{s.description}</div>
-                          <div className="text-xs text-muted font-mono mt-0.5">{s.key}</div>
+                      <div key={s.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3 hover:bg-surface-hover/50">
+                        {/* min-w-0 + break-words：窄屏下说明文字/长键名（URL、含冒号的 key）不再把行顶宽后裁掉 */}
+                        <div className="w-full sm:w-auto min-w-0 flex-1 basis-0 sm:min-w-[220px]">
+                          <div className="text-sm font-medium break-words">{s.description}</div>
+                          <div className="text-xs text-muted font-mono mt-0.5 break-all">{s.key}</div>
                         </div>
                         {isLongText ? (
                           <textarea

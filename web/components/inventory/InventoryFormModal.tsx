@@ -29,7 +29,7 @@ interface Props {
 export default function InventoryFormModal({ editItem, form, setForm, rooms, fallbackRooms, onLocationCode, calcGrade, onClose, onSubmit, onCode, onGenerateCode, genCodeLoading, codeError, generatedShortUrl }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editItem ? "编辑零件" : "添加零件"}</h2><button onClick={onClose} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">

@@ -167,7 +167,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
       />
       <ElementPanel onAdd={addElement} variant="strip" />
       <MountStatusBar pending={pending} loadError={loadError} onCancel={() => setPending(null)} />
-      <div ref={workRef} className="relative flex flex-col gap-3 lg:h-[calc(100vh-260px)] lg:min-h-[460px] lg:flex-row">
+      <div ref={workRef} className="relative flex flex-col gap-3 lg:h-[calc(100dvh-260px)] lg:min-h-[460px] lg:flex-row">
         <ElementPanel onAdd={addElement} />
         <PlannerCanvas layout={layout} items={items} selected={selected}
           className="h-[52vh] min-h-[320px] lg:h-full"

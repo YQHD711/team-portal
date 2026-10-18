@@ -112,6 +112,11 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   transition: background 0.2s ease, color 0.2s ease;
+  /* 移动端基础行为：横竖屏切换时不自动放大字号；去掉 Safari 点击时的灰块
+     （各组件都有自己的 hover/active 反馈，原生高亮反而像"卡了一下"）。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── 滚动条（跟随主题） ── */
@@ -166,8 +171,25 @@ main { animation: fadeIn 0.3s ease-out; }
 @media (max-width: 640px) {
   .hide-on-mobile { display: none !important; }
   .full-on-mobile { width: 100% !important; }
-  main { padding: 12px 12px 112px !important; } /* 底部留白避让悬浮 AI 按钮 */
+  /* 底部留白避让悬浮 AI 按钮，并额外让开 iPhone Home 指示条 */
+  main { padding: 12px 12px calc(112px + env(safe-area-inset-bottom, 0px)) !important; }
+
+  /* 单列栅格的子项默认 min-width:auto —— 卡片里出现长串（物料名、URL、库位码、
+     长英文标识）时会把整列撑得比视口还宽，页面就横向滚动了。
+     窄屏统一允许收缩，配合下面的断行规则，内容会自己折行而不是顶破布局。 */
+  .grid > * { min-width: 0; }
+
+  /* 长串允许在任意位置断行（桌面端保持原样，避免正常文本被过早折断） */
+  body { overflow-wrap: anywhere; }
+
+  /* 代码/等宽块保持原样：横向滚动比硬断行可读 */
+  pre, pre *, code, kbd, samp { overflow-wrap: normal; }
 }
+
+/* ── iOS 安全区工具类：底部悬浮元素（AI 按钮、抽屉、弹窗）避开 Home 指示条 ── */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
 
 /* ── 响应式表格 ── */
 .table-wrap {
@@ -177,6 +199,9 @@ main { animation: fadeIn 0.3s ease-out; }
 
 /* ── 触控友好 ── */
 @media (max-width: 768px) {
-  button, a.btn, .clickable { min-height: 40px; min-width: 40px; }
-  input, select, textarea { font-size: 16px !important; }
+  /* 主要按钮保证 40px 触控高度（WCAG 2.5.5 / iOS HIG 的推荐下限）。
+     仅对按钮主体生效；卡片里的紧凑图标按钮用 .tap-sm 显式退出，
+     否则一行 6 个操作按钮会被撑到 240px 把卡片顶破。 */
+  button:not(.tap-sm), a.btn, .clickable { min-height: 40px; min-width: 40px; }
+  input, select, textarea { font-size: 16px !important; } /* 防 iOS 聚焦时页面自动放大 */
 }

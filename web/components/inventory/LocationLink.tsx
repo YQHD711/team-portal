@@ -34,7 +34,8 @@ export default function LocationLink({
   return (
     <Link href={layoutHrefForLocation({ room, element, item })} data-testid={testId}
       title={`在物料布局中查看 ${code}`}
-      className={`inline-flex max-w-full items-center gap-0.5 truncate underline-offset-2 hover:text-sky-600 hover:underline ${className}`}>
+      /* py/-my 抵消：视觉位置不变，但把触控热区从 16px 行高撑到 ~30px（手机上更好点） */
+      className={`inline-flex max-w-full items-center gap-0.5 truncate py-1 -my-1 underline-offset-2 hover:text-sky-600 hover:underline ${className}`}>
       {withIcon && <MapPin className="h-3.5 w-3.5 shrink-0" />}
       <span className="truncate font-mono">{code}</span>
     </Link>

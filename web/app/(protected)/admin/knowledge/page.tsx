@@ -66,7 +66,11 @@ export default function KnowledgeAdminPage() {
   const [pendingAnchor, setPendingAnchor] = useState<{ path: string; hash: string } | null>(null);
 
   const { user } = useCurrentUser();
-  const canEdit = isStaff();
+  // 权限只能在客户端读（token 在 localStorage）：SSR 阶段一律 false，挂载后再同步。
+  // 直接在 render 里调 isStaff() 会让服务端渲染"只读模式"、客户端渲染"管理知识库文档"，
+  // 触发 hydration 文本不一致（浏览器报 React #418，之前表现为整页退回客户端渲染 #419）。
+  const [canEdit, setCanEdit] = useState(false);
+  useEffect(() => { setCanEdit(isStaff()); }, []);
 
   const openFileAt = useCallback((file: string) => {
     setExpanded(prev => new Set([...prev, ...ancestorFolders(file)]));
@@ -295,6 +299,10 @@ export default function KnowledgeAdminPage() {
       const esc = searchKw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       html = html.replace(new RegExp(esc, "g"), (m) => `<mark class="bg-yellow-200 dark:bg-yellow-700">${m}</mark>`);
     }
+    // SSR 阶段没有 DOMPurify（它依赖 window），直接调用会让整个 Suspense boundary
+    // 服务端渲染失败（浏览器里报 React #419）。服务端返回空串、客户端 hydration 完再算，
+    // 首帧两边一致，不会产生 hydration mismatch。
+    if (typeof window === "undefined") return "";
     return DOMPurify.sanitize(html);
   }, [content, searchKw]);
 
@@ -344,7 +352,7 @@ export default function KnowledgeAdminPage() {
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100vh-12rem)]">
+      <div className="grid gap-4 lg:grid-cols-4 lg:h-[calc(100dvh-12rem)]">
         <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-72 lg:max-h-none">
           <KnowledgeTree
             // 必须传整棵树的**根数组**：/api/knowledge/tree 返回 [公共知识库, 飞训部, ...]，
@@ -421,7 +429,7 @@ export default function KnowledgeAdminPage() {
 
       {showNew === "upload" && canEdit && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
-          <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">上传文件</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <div className="space-y-4">
               <div><label className="block text-sm font-medium mb-1">目标文件夹</label>
@@ -442,7 +450,7 @@ export default function KnowledgeAdminPage() {
       )}
       {showNew && showNew !== "upload" && canEdit && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowNew(null)}>
-          <div className="w-full max-w-sm my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{showNew === "file" ? "新建文档" : "新建目录"}</h2><button onClick={() => setShowNew(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <form onSubmit={e => { e.preventDefault(); handleCreate(); }} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">名称{showNew === "file" && "（无需 .md 后缀）"}</label><input value={newName} onChange={e => setNewName(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required autoFocus /></div>
@@ -453,7 +461,7 @@ export default function KnowledgeAdminPage() {
       )}
       {renameTarget && canEdit && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setRenameTarget(null)}>
-          <div className="w-full max-w-sm my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">重命名</h2><button onClick={() => setRenameTarget(null)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <form onSubmit={e => { e.preventDefault(); handleRename(); }} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">新名称{renameTarget.type === "file" && "（无需扩展名）"}</label><input value={renameNew} onChange={e => setRenameNew(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required autoFocus /></div>

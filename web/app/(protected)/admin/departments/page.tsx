@@ -49,7 +49,7 @@ export default function DepartmentsPage() {
               <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600"><Building2 className="h-5 w-5" /></div>
               <div><div className="font-medium">{d.name}</div><div className="text-sm text-muted mt-0.5">{d.description || "暂无描述"}</div></div>
             </div>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
               <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600"><Pencil className="h-4 w-4" /></button>
               <button onClick={() => handleDelete(d)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger"><Trash2 className="h-4 w-4" /></button>
             </div>
@@ -61,7 +61,7 @@ export default function DepartmentsPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-md my-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-surface shadow-xl border border-border p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">{editDept ? "编辑部门" : "添加部门"}</h2><button onClick={() => setShowForm(false)} className="p-1 rounded hover:bg-surface-hover"><X className="h-5 w-5" /></button></div>
             <form onSubmit={handleSave} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">名称</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" required /></div>

@@ -9,7 +9,7 @@ import { allFolderKeys, nodeKey, type TreeNode } from "@/lib/knowledgeTree";
  * - 重命名：仍以 hover 为主，但聚焦到它时要显形（group-focus-within / focus-visible）
  * - 删除：**常态可见**（但保持 muted 的危险色，配确认对话框，避免手滑）
  */
-const ROW_ACTION_CLS = "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 p-1 rounded text-faint hover:text-primary hover:bg-surface-hover shrink-0";
+const ROW_ACTION_CLS = "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 p-1 rounded text-faint hover:text-primary hover:bg-surface-hover shrink-0";
 const DELETE_CLS = "p-1 rounded text-danger/70 hover:text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 shrink-0";
 
 /**

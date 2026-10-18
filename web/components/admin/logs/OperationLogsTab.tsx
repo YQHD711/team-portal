@@ -160,7 +160,7 @@ export default function OperationLogsTab() {
                     <div className="mt-1 max-w-md">
                       {expanded === o.id ? (
                         <div className="p-2 rounded bg-background text-[11px] text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{o.data}</div>
-                      ) : (o.data ? <span className="text-faint truncate block">{summarize(o.data)}</span> : null)}
+                      ) : (o.data ? <span className="text-faint line-clamp-2 break-all">{summarize(o.data)}</span> : null)}
                     </div>
                   </td>
                   <td className="px-4 py-2.5 text-faint">

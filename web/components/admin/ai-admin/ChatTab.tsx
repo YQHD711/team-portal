@@ -26,7 +26,7 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {/* Presets */}
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0">
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">常用巡检</h3>
         {presets.map(p => (
           <button key={p.label} onClick={() => onRun(p.task)}
@@ -39,7 +39,7 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
       </div>
 
       {/* Chat area */}
-      <div className="lg:col-span-2 rounded-2xl border border-border bg-surface flex flex-col" style={{ minHeight: "60vh" }}>
+      <div className="lg:col-span-2 min-w-0 rounded-2xl border border-border bg-surface flex flex-col" style={{ minHeight: "60vh" }}>
         <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-purple-50/50 dark:bg-purple-950/20">
           <div className="flex items-center gap-2 text-xs">
             <Database className="h-3 w-3 text-purple-500" />
@@ -61,12 +61,12 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
           ))}
           {/* Only show last 12 messages, rest auto-compressed */}
           {history.filter(m => m.role !== "system").slice(-12).map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : ""}`}>
-              <div className={`rounded-2xl px-4 py-2.5 text-sm max-w-[80%] shadow-sm ${
+            <div key={i} className={`flex min-w-0 ${msg.role === "user" ? "justify-end" : ""}`}>
+              <div className={`min-w-0 rounded-2xl px-4 py-2.5 text-sm max-w-[85%] sm:max-w-[80%] shadow-sm ${
                 msg.role === "user" ? "rounded-br-md bg-gradient-to-br from-primary to-accent text-white" : "rounded-bl-md bg-slate-50 dark:bg-slate-800 border border-border"
               }`}>
                 {msg.role === "user" && <div className="font-medium text-xs mb-1 opacity-70">管理员指令</div>}
-                <div className="whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">{msg.content}</div>
+                <div className="break-words [overflow-wrap:anywhere] whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">{msg.content}</div>
               </div>
             </div>
           ))}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
   Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags
@@ -122,6 +122,27 @@ export function Sidebar() {
   const close = () => setOpen(false);
   const pathname = usePathname();
 
+  // 移动端抽屉：打开时锁住页面滚动（否则手指划抽屉会把背后的正文一起滚），
+  // 支持 Esc 关闭；桌面端（lg 及以上）抽屉常驻，不做任何处理。
+  // matchMedia 在 jsdom/单元测试里不存在，必须做能力判断，否则整个组件渲染直接抛错。
+  useEffect(() => {
+    if (!open) return;
+    const isDesktop = typeof window.matchMedia === "function"
+      && window.matchMedia("(min-width: 1024px)").matches;
+    if (isDesktop) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, setOpen]);
+
+  // 路由变化后自动收起（覆盖浏览器前进/后退这类没经过 onClick 的导航）
+  useEffect(() => { setOpen(false); }, [pathname, setOpen]);
+
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity" onClick={close} />}
@@ -133,7 +154,7 @@ export function Sidebar() {
         // 导航就跟着滚上去消失了（长文档/学习库课时页尤其明显）。
         "lg:sticky lg:top-0 lg:z-0 lg:h-screen lg:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full"
-      )}>
+      )} aria-label="主导航">
         {/* Brand — 品牌渐变小方块 + 队名/副标题 */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border-subtle">
           <div
@@ -239,7 +260,7 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-border-subtle">
+        <div className="px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-border-subtle">
           <div className="flex items-center gap-2 text-[10px] text-faint">
             <Sparkles className="h-3 w-3" />
             <span>{teamName} © 2026 · 内部系统</span>

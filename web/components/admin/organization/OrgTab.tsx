@@ -72,7 +72,7 @@ export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, ex
                   </div>
                 </div>
                 {isAdmin && (
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
                     <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
                   </div>
@@ -171,7 +171,7 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
                   {canEdit && (
                     <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
                   )}

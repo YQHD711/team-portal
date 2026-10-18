@@ -183,7 +183,7 @@ export default function RequestLogsTab() {
             {stats.recentErrors.map((e, i) => (
               <div key={i} className="text-xs text-danger dark:text-red-400 flex items-center gap-2">
                 <span className="shrink-0 px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/50 font-mono">{e.category}</span>
-                <span className="truncate">{e.message}</span>
+                <span className="min-w-0 line-clamp-2 break-all">{e.message}</span>
                 <span className="shrink-0 text-red-400 ml-auto">
                   <Clock className="h-3 w-3 inline mr-0.5" />
                   {new Date(e.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
@@ -246,7 +246,7 @@ export default function RequestLogsTab() {
                   </td>
                   <td className="px-4 py-2.5 text-muted text-xs font-mono">{l.category}</td>
                   <td className="px-4 py-2.5">
-                    <div className="truncate max-w-xs lg:max-w-md">{l.message}</div>
+                    <div className="line-clamp-2 break-all max-w-xs lg:max-w-md">{l.message}</div>
                     {expanded === l.id && l.detail && (
                       <div className="mt-1 p-2 rounded bg-background text-xs text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{l.detail}</div>
                     )}

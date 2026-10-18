@@ -175,7 +175,7 @@ export default function StudyPage() {
         <div className="grid gap-6 xl:grid-cols-[200px_1fr]">
           {/* 左：目录（大屏才显示；小屏靠面包屑与上一课/下一课） */}
           <nav className="hidden xl:block text-sm">
-            <div className="sticky top-6 space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-1">
+            <div className="sticky top-6 space-y-3 max-h-[calc(100dvh-6rem)] overflow-y-auto pr-1">
               <button onClick={() => setActivePath(null)} className="text-xs text-faint hover:text-sky-500">← 返回学习路径</button>
               {scope.stages.map(stage => (
                 <div key={stage.path}>
