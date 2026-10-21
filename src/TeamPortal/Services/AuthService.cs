@@ -210,20 +210,19 @@ public class AuthService
 
         // Rate limiting
         var key = $"login:{username}";
+        var now = DateTime.UtcNow;
         if (_loginAttempts.TryGetValue(key, out var entry))
         {
-            if (entry.lockedUntil > DateTime.UtcNow)
+            if (IsLockoutActive(entry.lockedUntil, now))
             {
-                var waitMin = (int)(entry.lockedUntil - DateTime.UtcNow).TotalMinutes + 1;
+                var waitMin = (int)(entry.lockedUntil - now).TotalMinutes + 1;
                 _log.Warn("auth", $"Login blocked (rate limit): {username}", null, username);
                 throw new InvalidOperationException($"登录尝试过于频繁，请 {waitMin} 分钟后再试");
             }
+            // 锁定期已过:必须先把失败计数清零。此前只在成功登录时清零,到期后 attempts 仍 >= maxAttempts,
+            // 于是下一次请求会立刻"再锁一次"并顺延 lockedUntil,账号实际上永久无法登录(A-01)。
             if (entry.attempts >= maxAttempts)
-            {
-                _loginAttempts[key] = (entry.attempts, DateTime.UtcNow.AddMinutes(lockoutMin));
-                _log.Warn("auth", $"Login locked for {lockoutMin}min: {username}", null, username);
-                throw new InvalidOperationException($"登录尝试过于频繁，请 {lockoutMin} 分钟后再试");
-            }
+                _loginAttempts.TryRemove(key, out _);
         }
 
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Username == username);
@@ -231,7 +230,14 @@ public class AuthService
         {
             _loginAttempts.AddOrUpdate(key,
                 _ => (1, DateTime.MinValue),
-                (_, e) => (e.attempts + 1, e.lockedUntil));
+                (_, e) =>
+                {
+                    var attempts = e.attempts + 1;
+                    // 达到上限的那一次失败就写入锁定截止时间;下一次请求由 IsLockoutActive 拦下,
+                    // 而不是靠"再锁一次"把锁定时间顺延(旧实现的永久锁死根因)。
+                    var lockedUntil = attempts >= maxAttempts ? now.AddMinutes(lockoutMin) : e.lockedUntil;
+                    return (attempts, lockedUntil);
+                });
             _log.Warn("auth", $"Login failed: {username}", null, username);
             return null;
         }
@@ -241,6 +247,12 @@ public class AuthService
         _log.Info("auth", $"User logged in: {username}", $"{{\"role\":\"{user.Role}\"}}", username);
         return await GenerateToken(user);
     }
+
+    /// <summary>
+    /// 锁定期是否仍然生效（纯函数，便于单测；不依赖真实时间流逝）。
+    /// 到期后调用方必须清掉失败计数，否则 attempts 仍 >= maxAttempts 会立即再次锁定（A-01）。
+    /// </summary>
+    internal static bool IsLockoutActive(DateTime lockedUntilUtc, DateTime nowUtc) => lockedUntilUtc > nowUtc;
 
     private async Task<string> GenerateToken(User user)
     {

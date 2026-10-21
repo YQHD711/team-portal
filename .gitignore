@@ -86,3 +86,6 @@ webtools-content/
 # deploy 运行时数据
 deploy/.deployed_sha
 deploy/auto-deploy.log
+# 安全审查报告/分报告含未修复漏洞的利用细节：修复部署到生产前不要提交到公开仓库（本地留存）
+docs/安全审查报告-*.md
+docs/audit-*/

@@ -49,9 +49,9 @@ public partial class WikiGeneratorService
     {
         var fullPath = ResolvePath(path);
         if (!File.Exists(fullPath)) return $"{{\"error\": \"File not found: {path}\"}}";
-        var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-        if (ext is ".dll" or ".exe" or ".so" or ".bin" or ".zip" or ".png" or ".jpg" or ".ico" or ".pdf")
-            return $"{{\"error\": \"Binary file, cannot read: {path}\"}}";
+        // FIX-02 纵深：二进制之外，数据库/密钥类文件同样不喂给模型（工作区里可能有仓库自带的 .env）
+        if (IsBlockedReadFile(fullPath))
+            return $"{{\"error\": \"Binary or sensitive file, cannot read: {path}\"}}";
         var text = File.ReadAllText(fullPath);
         if (text.Length > 15000) text = text[..15000] + $"\n\n...(truncated, total {text.Length} chars)";
         _processedFiles.Add(path);
@@ -62,11 +62,16 @@ public partial class WikiGeneratorService
     {
         try
         {
-            var dir = string.IsNullOrEmpty(path) ? _workspacePath : ResolvePath(path);
+            // FIX-02：空 path 也走守卫（返回工作区根的真实路径），避免绕过链接解析
+            var dir = ResolvePath(path);
             if (!Directory.Exists(dir)) return $"{{\"error\": \"Directory not found\"}}";
             var results = new List<string>();
             var regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            foreach (var file in Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories).Take(200))
+            // FIX-02：手工递归并跳过链接（SearchOption.AllDirectories 会跟目录链接进根外目录）。
+            // 目录剪枝沿用 ExcludedDirs，避免把 node_modules/.git 也读一遍。
+            foreach (var file in WorkspacePathGuard
+                .EnumerateFilesNoLinks(dir, name => !name.StartsWith('.') && !ExcludedDirs.Contains(name))
+                .Take(200))
             {
                 var name = Path.GetFileName(file);
                 if (name.StartsWith('.') || file.Contains("node_modules") || file.Contains(".git")) continue;
@@ -101,6 +106,26 @@ public partial class WikiGeneratorService
         return segments.Length > 0 && segments.All(s => s is not ("." or ".."));
     }
 
+    /// <summary>
+    /// 禁止读给模型的扩展名（FIX-02 纵深）：二进制 + 数据库/环境变量文件。
+    /// 连接符/口令即便落在工作区内（例如仓库自带 .env）也不该被当成"源码"喂给模型。
+    /// </summary>
+    internal static readonly HashSet<string> BlockedReadExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".dll", ".exe", ".so", ".bin", ".zip", ".png", ".jpg", ".jpeg", ".ico", ".pdf",
+        ".db", ".sqlite", ".sqlite3", ".mdb", ".db-wal", ".db-shm", ".json",
+    };
+
+    /// <summary>read_file 是否应拒绝该文件（扩展名黑名单 + .env/.env.* 这类点文件）。</summary>
+    internal static bool IsBlockedReadFile(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (string.IsNullOrEmpty(name)) return false;
+        if (BlockedReadExtensions.Contains(Path.GetExtension(name))) return true;
+        var lower = name.ToLowerInvariant();   // ".env" 这类点文件没有扩展名，GetExtension 返回空
+        return lower == ".env" || lower.StartsWith(".env.", StringComparison.Ordinal);
+    }
+
     private string ToolWriteDoc(string path, string content)
     {
         if (!IsSafeCatalogPath(path))
@@ -109,15 +134,23 @@ public partial class WikiGeneratorService
             return "{\"success\": false, \"error\": \"invalid path\"}";
         }
         var relativePath = $"{_targetFolder}/{_projectName}/{path}.md".Replace("//", "/");
+        // 审计 I-04：projectName/targetFolder 来自任务行（历史任务可能含 ..），拼完必须再过一遍终态校验，
+        // 否则一次 write_doc 就能把文档写到别的部门目录。IsSafeCatalogPath 会拒掉含 .. 的段。
+        if (!IsSafeCatalogPath(relativePath))
+        {
+            _logger.LogWarning("Rejected unsafe document target (folder/project escaped): {Path}", relativePath);
+            return "{\"success\": false, \"error\": \"invalid path\"}";
+        }
         _knowledge.WriteFile(relativePath, content);
         _logger.LogInformation("Doc written: {Path}", relativePath);
         return $"{{\"success\": true, \"path\": \"{relativePath}\"}}";
     }
 
+    /// <summary>
+    /// FIX-02（审计 I-01/I-02/#33）：统一走 <see cref="WorkspacePathGuard"/> ——
+    /// 逐段解析符号链接后按「根 + 分隔符」断言，克隆仓库里的 `leak -> /data` 不再能让模型读到库文件/令牌。
+    /// 返回的是**真实路径**，调用方直接用它读文件。
+    /// </summary>
     private string ResolvePath(string relativePath)
-    {
-        var full = Path.GetFullPath(Path.Combine(_workspacePath, relativePath));
-        var norm = Path.GetFullPath(_workspacePath);
-        return full.StartsWith(norm) ? full : throw new InvalidOperationException("Path traversal denied");
-    }
+        => WorkspacePathGuard.ResolveInside(_workspacePath, relativePath);
 }

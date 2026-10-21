@@ -153,6 +153,26 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
         return req;
     }
 
+    /// <summary>
+    /// 审批人是否与申请人同部门。HTTP 的 approve-dept / reject 端点在端点层做过同样的比对，
+    /// MCP 工具没有端点分组守卫，必须复用这一语义，否则他部门部长可跨部门审批/驳回。
+    /// 部门一律从库内 Users 取(不采信 token 里的 Department claim,它随调岗过期)；
+    /// 申请不存在返回 false。申请人/审批人都未分配部门时与 HTTP 的 != 语义一致(视为相同)。
+    /// </summary>
+    public async Task<bool> IsApproverSameDepartmentAsRequester(int requestId, int approverUserId)
+    {
+        var request = await _db.CheckoutRequests.AsNoTracking()
+            .Where(r => r.Id == requestId)
+            .Select(r => new { RequesterDeptId = (int?)r.Requester!.DepartmentId })
+            .FirstOrDefaultAsync();
+        if (request is null) return false;
+        var approverDeptId = await _db.Users.AsNoTracking()
+            .Where(u => u.Id == approverUserId)
+            .Select(u => u.DepartmentId)
+            .FirstOrDefaultAsync();
+        return request.RequesterDeptId == approverDeptId;
+    }
+
     public async Task<List<CheckoutRequest>> GetMyRequests(int userId) =>
         await _db.CheckoutRequests.Include(r => r.Item).Include(r => r.Checkin)
             .Where(r => r.RequesterUserId == userId)

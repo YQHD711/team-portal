@@ -19,6 +19,34 @@ if [ "$TAG" != "latest" ]; then
   export TEAMPORTAL_IMAGE_TAG="$TAG"
 fi
 
+# ── 传输层安全（审计 C-01）──
+# 自动部署此前只叠加 base+ghcr，从不加载 docker-compose.prod.yml，导致线上是 http://IP:3000 明文。
+# 这里按"证书是否已就绪"自动选择拓扑：
+#   * certbot/conf/live/<DOMAIN>/fullchain.pem 存在 → 叠加 prod（nginx+certbot，frontend/backend 不再发布端口）
+#   * 否则 → 保持旧拓扑继续可用，但打印 CRITICAL 告警；设置 REQUIRE_TLS=1 时直接失败（推荐生产）
+# 先执行 bash deploy/enable-tls.sh 完成证书与拓扑切换。
+DOMAIN="${DOMAIN:-}"
+if [ -z "$DOMAIN" ] && [ -f .env ]; then
+  DOMAIN=$(grep -E '^DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+fi
+TLS_READY=0
+if [ -n "$DOMAIN" ] && [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
+  TLS_READY=1
+fi
+if [ "$TLS_READY" -eq 1 ]; then
+  COMPOSE=(-f docker-compose.yml -f docker-compose.ghcr.yml -f docker-compose.prod.yml)
+  echo "🔒 TLS 已启用（域名: $DOMAIN）"
+else
+  COMPOSE=(-f docker-compose.yml -f docker-compose.ghcr.yml)
+  echo "⚠️⚠️  警告：未检测到 TLS 证书（DOMAIN=${DOMAIN:-未配置} / certbot/conf/live/...）。"
+  echo "    站点将以**明文 HTTP** 提供，登录口令与 JWT 可被链路嗅探（审计 C-01）。"
+  echo "    立即处置：bash deploy/enable-tls.sh   （或在 .env 配置 DOMAIN/CERTBOT_EMAIL 后执行）"
+  if [ "${REQUIRE_TLS:-0}" = "1" ]; then
+    echo "✗ REQUIRE_TLS=1 且无 TLS 证书，拒绝以明文形态部署"
+    exit 1
+  fi
+fi
+
 echo "==> 1/6 拉取最新代码"
 # root(cron 自动部署)场景下以 admin 身份拉代码，避免 .git 属主被 root 污染
 if [ "$(id -u)" -eq 0 ]; then
@@ -28,7 +56,7 @@ else
 fi
 
 echo "==> 2/6 拉取镜像 (tag: ${TAG})"
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull || {
+docker compose "${COMPOSE[@]}" pull || {
   echo "✗ 镜像拉取失败——大概率是 ghcr 包还是私有的，见脚本头部注释处理"
   exit 1
 }
@@ -36,7 +64,7 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull || {
 echo "==> 3/6 滚动重启服务"
 # --no-build 双保险: 拉取式部署绝不允许在服务器上触发构建
 # 注意: 不能加 --remove-orphans，wiki-nginx 由独立的 docker-compose.wiki.yml 管理，会被误删
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+docker compose "${COMPOSE[@]}" up -d --no-build
 
 echo "==> 4/6 恢复 wiki 站点(独立 compose 文件)"
 docker compose -f docker-compose.wiki.yml up -d 2>/dev/null || true
@@ -46,22 +74,32 @@ docker compose -f docker-compose.wiki.yml up -d 2>/dev/null || true
 echo "==> 5/6 健康门禁(最多 90s)"
 healthy=0
 for _ in $(seq 1 45); do
-  if curl -fsS --max-time 3 http://127.0.0.1:8080/health >/dev/null 2>&1; then healthy=1; break; fi
+  if [ "$TLS_READY" -eq 1 ]; then
+    # prod 拓扑下 backend/frontend 都不发布宿主端口，按容器运行状态判断
+    if docker compose "${COMPOSE[@]}" ps --services --filter status=running 2>/dev/null | grep -qx backend; then healthy=1; break; fi
+  else
+    if curl -fsS --max-time 3 http://127.0.0.1:8080/health >/dev/null 2>&1; then healthy=1; break; fi
+  fi
   sleep 2
 done
 if [ "$healthy" -ne 1 ]; then
-  echo "✗ 后端 /health 90s 内未就绪 —— 本次部署判定失败(不更新已部署版本)"
-  docker compose -f docker-compose.yml -f docker-compose.ghcr.yml logs --tail=60 backend || true
+  echo "✗ 后端 90s 内未就绪 —— 本次部署判定失败(不更新已部署版本)"
+  docker compose "${COMPOSE[@]}" logs --tail=60 backend || true
   exit 1
 fi
 echo "✅ 后端健康"
 
 frontend_ok=0
 for _ in $(seq 1 20); do
-  if curl -fsS --max-time 3 http://127.0.0.1:3000 >/dev/null 2>&1; then frontend_ok=1; break; fi
+  if [ "$TLS_READY" -eq 1 ]; then
+    if curl -fsSk --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" >/dev/null 2>&1 \
+       || curl -fsSk --max-time 5 -H "Host: $DOMAIN" https://127.0.0.1/ >/dev/null 2>&1; then frontend_ok=1; break; fi
+  else
+    if curl -fsS --max-time 3 http://127.0.0.1:3000 >/dev/null 2>&1; then frontend_ok=1; break; fi
+  fi
   sleep 2
 done
-[ "$frontend_ok" -eq 1 ] && echo "✅ 前端健康" || echo "⚠ 前端 :3000 未就绪(后端已健康,可稍后复查 docker compose logs frontend)"
+[ "$frontend_ok" -eq 1 ] && echo "✅ 前端健康" || echo "⚠ 前端未就绪(后端已健康,可稍后复查 docker compose logs frontend)"
 
 echo "==> 6/6 清理旧镜像"
 # 悬空镜像
@@ -84,4 +122,4 @@ for repo in teamportal-backend teamportal-frontend; do
 done
 echo "✅ 清理完成（删除 ${removed} 个历史版本镜像）"
 
-echo "✅ 部署完成: $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"
+echo "✅ 部署完成: $(docker compose "${COMPOSE[@]}" ps --format 'table {{.Name}}\t{{.Status}}')"

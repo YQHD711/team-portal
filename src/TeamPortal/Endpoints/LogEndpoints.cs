@@ -65,47 +65,64 @@ public static class LogEndpoints
             return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"logs-{DateTime.UtcNow:yyyyMMdd}.csv");
         });
 
-        // Manual cleanup — force=true clears all, default keeps recent 90 days
-        // 先归档再清理：只有成功落盘（本地 CSV，网盘已配置时再传一份）的行才允许删除，
-        // 归档失败则对应表跳过清理 —— 避免「删掉了却没归档」造成审计数据永久丢失。
+        // Manual cleanup（append-only 加固，H-04）：
+        //  - 默认：只删「超期且已归档覆盖」的行；本次归档失败 → 一行都不删。
+        //  - force=true：清空全部，但同样必须**先成功归档**；归档失败直接 500 拒绝清理。
+        //  - 完成后把 {count, table, maxId, sha256} 回执写入 SystemSettings(Audit:LastCleanup)，不随日志清理删除。
         log.MapPost("/cleanup", async (bool? force, LogService svc, LogArchiver archiver,
             ClaimsPrincipal user, HttpContext ctx) =>
         {
             var actor = user.Identity?.Name ?? "unknown";
-            LogArchiveOutcome? outcome = null;
-            string? archiveError = null;
+            var forced = force == true;
+            var ip = LogService.ClientIp(ctx);
 
-            try { outcome = await archiver.ArchiveExpiredAsync(); }
-            catch (Exception ex) { archiveError = ex.Message; }
+            LogArchiveOutcome outcome;
+            try
+            {
+                outcome = forced ? await archiver.ArchiveAllAsync() : await archiver.ArchiveExpiredAsync();
+            }
+            catch (Exception ex)
+            {
+                // 归档失败 → 拒绝清理：宁可留着日志，也不允许"删了却没归档"
+                svc.Audit("cleanup-logs", actor, targetType: "log",
+                    data: new { success = false, forced, error = ex.Message }, ipAddress: ip);
+                return Results.Problem($"归档失败，已拒绝清理（日志未删除）：{ex.Message}", statusCode: 500);
+            }
 
-            var deleted = force == true
-                ? await svc.ClearAllLogs()   // 前端已二次确认：明确要求清空，归档失败也照常执行
-                : (await svc.CleanupOldLogs(outcome?.System.MaxId, outcome?.Operation.MaxId)).Total;
+            // 清理本身会写持久回执（Audit:LastCleanup：count/table/maxId/sha256），归档失败时不会走到这里
+            var result = forced
+                ? await svc.ClearArchivedLogs(outcome.System.MaxId, outcome.Operation.MaxId,
+                    outcome.System.Path, outcome.Operation.Path, actor)
+                : await svc.CleanupOldLogs(outcome.System.MaxId, outcome.Operation.MaxId,
+                    outcome.System.Path, outcome.Operation.Path, actor);
 
-            // 清理动作本身必须留痕,且写在删除之后 —— force 清理会删掉此刻之前的全部审计
+            // 清理动作本身必须留痕，且写在删除之后（下次 force 清理会删掉这条审计，但回执仍在 SystemSettings）
             svc.Audit("cleanup-logs", actor, targetType: "log", data: new
             {
-                force = force == true,
-                deleted,
-                systemArchive = outcome?.System.Path,
-                systemArchived = outcome?.System.Count ?? 0,
-                systemRemote = outcome?.SystemRemote,
-                operationArchive = outcome?.Operation.Path,
-                operationArchived = outcome?.Operation.Count ?? 0,
-                operationRemote = outcome?.OperationRemote,
-                archiveError
-            }, ipAddress: LogService.ClientIp(ctx));
+                forced,
+                deleted = result.Total,
+                systemDeleted = result.SystemDeleted,
+                operationDeleted = result.OperationDeleted,
+                systemArchive = outcome.System.Path,
+                operationArchive = outcome.Operation.Path,
+                systemRemote = outcome.SystemRemote,
+                operationRemote = outcome.OperationRemote,
+                systemMaxId = outcome.System.MaxId,
+                operationMaxId = outcome.Operation.MaxId,
+            }, ipAddress: ip);
 
-            var message = archiveError is not null
-                ? $"已清理 {deleted} 条日志（归档失败，未归档的表已跳过：{archiveError}）"
-                : $"已清理 {deleted} 条日志（归档请求日志 {outcome?.System.Count ?? 0} 条 / 操作日志 {outcome?.Operation.Count ?? 0} 条）";
+            var message = forced
+                ? $"已归档并清除 {result.Total} 条日志（归档：{outcome.System.Path} / {outcome.Operation.Path}）"
+                : $"已清理 {result.Total} 条超期日志（仅含已归档行）";
             return Results.Ok(new
             {
-                deleted,
-                archiveError,
-                archivePath = outcome?.SystemRemote ?? outcome?.System.Path,
-                operationArchive = outcome?.OperationRemote ?? outcome?.Operation.Path,
-                message
+                deleted = result.Total,
+                systemDeleted = result.SystemDeleted,
+                operationDeleted = result.OperationDeleted,
+                forced,
+                systemMaxId = outcome.System.MaxId,
+                operationMaxId = outcome.Operation.MaxId,
+                message,
             });
         });
     }

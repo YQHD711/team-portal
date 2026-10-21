@@ -18,7 +18,14 @@ public static partial class WikiEndpoints
             if (string.IsNullOrWhiteSpace(req.Url) || string.IsNullOrWhiteSpace(req.ProjectName))
                 return Results.Problem("URL and project name required", statusCode: 400);
 
+            // FIX-02（审计 I-04）：ProjectName/TargetFolder 会拼进知识库路径、回收站路径与文档写入路径，
+            // 必须是最简单的**单段名**。`..`、分隔符、控制字符、盘符/ADS 都能改变最终落点。
+            if (!IsValidWikiSegment(req.ProjectName))
+                return Results.Problem("项目名非法：不能为空，且不能包含 / \\ : 控制字符、\"..\" 或以 . / 空格结尾", statusCode: 400);
+
             var targetFolder = req.TargetFolder ?? dept ?? "公共";
+            if (!IsValidWikiSegment(targetFolder))
+                return Results.Problem("目标目录非法：只允许单段目录名", statusCode: 400);
             if (!knowledge.CanAccess(targetFolder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 
@@ -61,7 +68,13 @@ public static partial class WikiEndpoints
             if (file.Length > 100 * 1024 * 1024) return Results.Problem("Max 100MB", statusCode: 400);
             if (string.IsNullOrWhiteSpace(projectName)) return Results.Problem("Project name required", statusCode: 400);
 
+            // FIX-02（审计 I-04）：同 submit-git，项目名/目标目录必须是单段名
+            if (!IsValidWikiSegment(projectName))
+                return Results.Problem("项目名非法：不能为空，且不能包含 / \\ : 控制字符、\"..\" 或以 . / 空格结尾", statusCode: 400);
+
             var folder = targetFolder ?? dept ?? "公共";
+            if (!IsValidWikiSegment(folder))
+                return Results.Problem("目标目录非法：只允许单段目录名", statusCode: 400);
             if (!knowledge.CanAccess(folder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
 
@@ -69,7 +82,8 @@ public static partial class WikiEndpoints
             if (vis is not "public" and not "department" and not "personal")
                 return Results.Problem("Invalid visibility", statusCode: 400);
 
-            var zipDir = Path.Combine(Path.GetTempPath(), "teamportal-zip");
+            // 目录常量收敛到 SafeZipExtractor（保留期清理/任务删除清理都按同一目录判定）
+            var zipDir = SafeZipExtractor.TempZipDir;
             Directory.CreateDirectory(zipDir);
             var zipPath = Path.Combine(zipDir, $"{Guid.NewGuid()}.zip");
             await using (var stream = File.Create(zipPath))
@@ -166,6 +180,12 @@ public static partial class WikiEndpoints
             var ok = await generator.DeleteTask(id, knowledge);
             if (ok) log.Info("wiki", $"Wiki task {id} moved to trash by {actor}");
             else log.Warn("wiki", $"Wiki task {id} delete failed after stash by {actor}");
+
+            // 审计 M-11：ZIP 源码包只在**任务删除时**立刻清理。
+            // 不能在上传成功后立刻删 —— retry-missing / reclone 会拿 SourceUrl 里的路径重新解压；
+            // 长期没人删的由 MaintenanceWorker 按保留期（7 天）兜底。
+            if (ok && task.Type == "zip" && SafeZipExtractor.TryDeleteArchiveFromSource(task.SourceUrl))
+                log.Info("wiki", $"Wiki task {id} source ZIP removed from temp storage");
             log.Audit("delete", actor, targetType: "wiki-task", targetId: id,
                 data: new { success = ok, trash = true }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { success = true }) : Results.Problem("任务不存在", statusCode: 404);
@@ -343,15 +363,15 @@ public static partial class WikiEndpoints
         {
             var task = await generator.GetTask(id);
             if (task is null || string.IsNullOrEmpty(task.WorkspacePath)) return Results.Problem("Not found", statusCode: 404);
+            // 工作区被保留策略清掉时给 404（与旧行为一致），不要因为"根不存在"报成 403
+            if (!Directory.Exists(task.WorkspacePath)) return Results.Problem("Not found", statusCode: 404);
             var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
-            var fullPath = Path.GetFullPath(Path.Combine(task.WorkspacePath, path));
-            // 前缀比较必须带分隔符:否则 ...\teamportal-wiki\5 会匹配 ...\5x\... 这类同前缀兄弟目录
-            var workspaceRoot = Path.GetFullPath(task.WorkspacePath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (!fullPath.StartsWith(workspaceRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                return Results.Problem("Access denied", statusCode: 403);
+            // FIX-02（审计 I-01）：只做字符串前缀比较挡不住符号链接 —— 克隆仓库里的 `leak -> /data`
+            // 在字符串上位于工作区内，实际读到的却是库文件/令牌。必须解析**所有**链接后再断言归属。
+            var fullPath = WorkspacePathGuard.TryResolveInside(task.WorkspacePath, path);
+            if (fullPath is null) return Results.Problem("Access denied", statusCode: 403);
             if (!File.Exists(fullPath)) return Results.Problem("File not found", statusCode: 404);
             var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             var isBinary = new[] { ".dll", ".exe", ".png", ".jpg", ".ico", ".zip" }.Contains(ext);
@@ -365,7 +385,7 @@ public static partial class WikiEndpoints
             {
                 var htmlLines = string.Join("", lines.Select((l, i) => $"<tr><td class='ln'>{i+1}</td><td class='code'>{System.Net.WebUtility.HtmlEncode(l)}</td></tr>"));
                 var langTag = !string.IsNullOrEmpty(language) ? $"<span class='lang'>{language}</span>" : "";
-                var html = $@"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>{path} — {task.ProjectName}</title>
+                var html = $@"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>{System.Net.WebUtility.HtmlEncode(path)} — {System.Net.WebUtility.HtmlEncode(task.ProjectName ?? "")}</title>
 <style>body{{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;background:#1e1e1e;color:#d4d4d4}}
 .header{{padding:10px 16px;background:#252526;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center}}
 .header a{{color:#4fc3f7;text-decoration:none;font-size:12px}}
@@ -402,6 +422,24 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
         MapWorkspaceRecoveryEndpoints(wiki);
         // 文档写接口 + 人工修改标记 —— 见 WikiEndpoints.DocWrite.cs
         MapDocWriteEndpoints(wiki);
+    }
+
+    /// <summary>
+    /// FIX-02（审计 I-04）：Wiki 项目名 / 目标目录的**单段白名单**。
+    ///
+    /// 这两个值会被拼进知识库文档路径、回收站源路径与文档写入路径 —— 一个 `..` 或分隔符
+    /// 就足以把写入/删除引到别的部门目录，甚至知识库根之外。规则刻意保守：只接受普通单段目录名。
+    /// </summary>
+    internal static bool IsValidWikiSegment(string? segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment)) return false;
+        if (segment.Length > 80) return false;
+        if (segment is "." or "..") return false;
+        if (segment.Trim() != segment) return false;                 // 首尾空白：目录名与界面显示会不一致
+        if (segment.IndexOfAny(new[] { '/', '\\', ':', '\0' }) >= 0) return false;  // 分隔符 / 盘符 / ADS
+        if (segment.Any(char.IsControl)) return false;               // 换行等控制字符（也是日志/CSV 注入面）
+        if (segment.EndsWith('.')) return false;                     // Windows 不允许目录名以点结尾
+        return true;
     }
 
     private static int GetUserId(ClaimsPrincipal user) { var c = user.FindFirstValue(ClaimTypes.NameIdentifier); return c is not null ? int.Parse(c) : 0; }

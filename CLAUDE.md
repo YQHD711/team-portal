@@ -22,7 +22,7 @@ dotnet run --project src/TeamPortal/    # 后端 :8080
 cd web && npm run dev                   # 前端 :3000
 ```
 
-**管理员**：admin / admin123（可通过系统设置页面修改）
+**管理员**：首次部署由 `.env` 的 `ADMIN__PASSWORD` 注入初始口令，首次登录必须改密；口令不得写入文档、脚本或聊天记录。
 - ✅ `docs/ARCHITECTURE.md` — 架构权威来源
 - ✅ `docs/ROADMAP.md` — 开发路线图（Phase 0 → Phase 6）
 - ✅ `docs/AGENT_GUIDE.md` — Agent 工作方式与约束
