@@ -189,12 +189,16 @@ public static class AdminEndpoints
             {
                 // 先把文件/目录整体搬进回收站（可恢复），再走原来的删除逻辑收尾
                 var abs = svc.AbsolutePath(path);
+                var stashed = false;
                 if (abs is not null && (File.Exists(abs) || Directory.Exists(abs)))
                 {
                     db.TrashItems.Add(trash.StashPaths(new[] { abs }, $"知识库：{path}", "KnowledgePath", uid, actor));
                     await db.SaveChangesAsync();
+                    // StashPaths 是 Move：搬走后原路径已不存在，再调 DeleteFile 会抛 "File not found"，
+                    // 被外层 catch 成 400 —— 用户看到失败，其实文件已删且已进回收站。仅在仍存在时才收尾删除。
+                    stashed = !File.Exists(abs) && !Directory.Exists(abs);
                 }
-                svc.DeleteFile(path);
+                if (!stashed) svc.DeleteFile(path);
                 log.Warn("knowledge", $"File deleted (moved to trash): {path} by {actor}");
                 log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = true, trash = true }, ipAddress: LogService.ClientIp(ctx));
                 notify.Notify("知识库文件已删除", $"{actor} 删除了 {path}（可在回收站恢复）", targetRole: "staff");

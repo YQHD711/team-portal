@@ -40,6 +40,11 @@ public partial class WikiGeneratorService
                 // git 自身也可能被 302 到内网地址（URL 校验只看第一跳）→ 禁止跟随重定向
                 psi.ArgumentList.Add("-c");
                 psi.ArgumentList.Add("http.followRedirects=false");
+                // FIX-02（审计 I-01/I-02）：**不按符号链接检出**。默认 core.symlinks=true 时仓库里的
+                // `leak -> /data` 会被原样建成链接，之后 /blob 与 AI 的 read_file/search_code 就能读到
+                // 知识库外的库文件/令牌。置 false 后 git 把链接写成"内容为目标路径"的普通文件。
+                psi.ArgumentList.Add("-c");
+                psi.ArgumentList.Add("core.symlinks=false");
                 // 用 ArgumentList 传参而非拼命令行字符串:仓库 URL 来自用户输入,
                 // 拼接会允许 `--upload-pack=...` 之类选项注入,而 ext::/file:// 协议会在
                 // git 解析仓库地址时触发命令执行或本地文件读取。
@@ -62,15 +67,21 @@ public partial class WikiGeneratorService
                     throw new InvalidOperationException("Git clone 失败：仓库不可访问或地址不可达");
                 }
 
+                // FIX-02：上面 -c core.symlinks=false 是第一道；这里再扫描一遍，检出即整体失败（fail closed）。
+                EnsureNoLinks(cloneDir);
                 return cloneDir;
             }
             else // zip
             {
-                var zipPath = Encoding.UTF8.GetString(Convert.FromBase64String(task.SourceUrl.Replace("archive::", "")));
-                if (!File.Exists(zipPath)) throw new FileNotFoundException("ZIP file not found", zipPath);
+                // 统一从 SafeZipExtractor 解码 archive:: 地址（M-11 的清理逻辑也用它，避免两套解析）
+                var zipPath = SafeZipExtractor.TryDecodeArchiveSource(task.SourceUrl)
+                    ?? throw new InvalidOperationException("ZIP 源码包地址无法解析");
+                if (!File.Exists(zipPath))
+                    throw new FileNotFoundException("ZIP 源码包不存在（可能已超过保留期被清理），请重新上传", zipPath);
 
                 var extractDir = Path.Combine(baseDir, "repo");
                 // 审计 #12：受限解压（zip slip + 条目数/单文件/总量上限），不再用无限制的 ExtractToDirectory
+                // 解压只会写普通文件（.NET 不会按条目重建符号链接），因此这里不需要再走 EnsureNoLinks。
                 SafeZipExtractor.Extract(zipPath, extractDir);
                 return extractDir;
             }
@@ -88,6 +99,20 @@ public partial class WikiGeneratorService
     private static void CleanupWorkspace(string dir)
     {
         try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { /* best effort */ }
+    }
+
+    /// <summary>
+    /// FIX-02（审计 I-01/I-02）：克隆完成后**整体拒绝**带符号链接 / junction 的仓库。
+    ///
+    /// 为什么是"整体失败"而不是"删掉链接继续"：删链接需要精确知道哪些条目是链接、
+    /// 以及它们的父子关系，漏一个就留下可被 /blob 与 AI 工具利用的入口；
+    /// 而失败是安全的、用户可理解的（提示移除链接后重新提交）。
+    /// </summary>
+    internal static void EnsureNoLinks(string workspaceDir)
+    {
+        var firstLink = WorkspacePathGuard.FindFirstLink(workspaceDir);
+        if (firstLink is not null)
+            throw new InvalidOperationException($"仓库包含符号链接（{firstLink}），已拒绝；请移除链接后重新提交");
     }
 
     // ════════════════════════════════════════

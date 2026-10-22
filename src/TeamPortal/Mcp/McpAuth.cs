@@ -23,6 +23,13 @@ internal static class McpAuth
     public static int UserId(IHttpContextAccessor http) =>
         int.TryParse(http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
 
+    /// <summary>审计日志里的操作者名称(与 HTTP 端点 user.Identity?.Name 一致)。</summary>
+    public static string UserName(IHttpContextAccessor http) => http.HttpContext?.User?.Identity?.Name ?? "unknown";
+
+    /// <summary>请求来源 IP;无 HttpContext(纯单测构造)时返回 null。</summary>
+    public static string? ClientIp(IHttpContextAccessor http)
+        => http.HttpContext is { } ctx ? TeamPortal.Services.LogService.ClientIp(ctx) : null;
+
     /// <summary>等价于 HTTP 的 "AdminOnly" 策略。</summary>
     public static bool IsAdmin(IHttpContextAccessor http) => Role(http) == "admin";
 

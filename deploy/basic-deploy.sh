@@ -53,8 +53,8 @@ curl -sf http://localhost:3000       >/dev/null && ok "Frontend :3000 健康" ||
 echo
 echo "=============================================="
 echo "  部署完成！"
-echo "  访问: http://8.137.161.160:3000"
-echo "  管理员账号: admin / admin123 (首次登录后请修改)"
+echo "  访问: http://<服务器地址>:3000"
+echo "  管理员账号: admin（初始口令见 .env 的 ADMIN__PASSWORD，登录后立即修改）"
 echo "=============================================="
 warn "常用命令:"
 warn "  docker compose logs -f         # 查看实时日志"

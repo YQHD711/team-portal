@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -196,6 +198,169 @@ public class AuthServiceTests
         var result = await auth.ChangePassword(user.Id, "wrongpass", "newpass");
 
         Assert.False(result);
+    }
+
+    // ── A-01 锁定期满必须恢复（回归：旧实现到期后 attempts 仍 >= maxAttempts，会再次锁定 → 永久锁死）──
+
+    /// <summary>
+    /// 进程内失败计数表（private static）。测试用它把 lockedUntil 拨到过去，避免真等 15 分钟。
+    /// 通过反射读取，仅测试使用。
+    /// </summary>
+    private static ConcurrentDictionary<string, (int attempts, DateTime lockedUntil)> LoginAttempts()
+        => (ConcurrentDictionary<string, (int attempts, DateTime lockedUntil)>)typeof(AuthService)
+            .GetField("_loginAttempts", BindingFlags.NonPublic | BindingFlags.Static)!
+            .GetValue(null)!;
+
+    private static void ExpireLockout(string username)
+    {
+        var key = $"login:{username}";
+        var attempts = LoginAttempts();
+        Assert.True(attempts.TryGetValue(key, out var entry), $"expected lockout entry for {key}");
+        attempts[key] = (entry.attempts, DateTime.UtcNow.AddMinutes(-1)); // 模拟锁定期已过
+    }
+
+    private async Task<AuthService> CreateAuthWithUserAsync(AppDbContext db, string username, string password)
+    {
+        db.Users.Add(new User
+        {
+            Username = username,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = "member"
+        });
+        await db.SaveChangesAsync();
+        return new AuthService(db, CreateConfig(), CreateLogService(db), CreateSettings(db));
+    }
+
+    [Fact]
+    public async Task Login_FiveConsecutiveFailures_EntersLockout()
+    {
+        const string user = "lockout-five";
+        var db = CreateContext();
+        var auth = await CreateAuthWithUserAsync(db, user, "rightpass123");
+        try
+        {
+            for (var i = 0; i < 5; i++)
+                Assert.Null(await auth.Login(user, "wrong"));
+
+            // 达到上限的那一次失败就应写入锁定截止时间（而不是等下一次请求才锁）
+            Assert.True(LoginAttempts().TryGetValue($"login:{user}", out var entry));
+            Assert.Equal(5, entry.attempts);
+            Assert.True(AuthService.IsLockoutActive(entry.lockedUntil, DateTime.UtcNow));
+
+            // 锁定期内即使口令正确也必须被拒（锁定优先于口令校验）
+            await Assert.ThrowsAsync<InvalidOperationException>(() => auth.Login(user, "rightpass123"));
+        }
+        finally
+        {
+            LoginAttempts().TryRemove($"login:{user}", out _);
+        }
+    }
+
+    [Fact]
+    public async Task Login_AfterLockoutExpires_WrongPassword_ReturnsNull_AndRestartsCounting()
+    {
+        const string user = "lockout-expire-wrong";
+        var db = CreateContext();
+        var auth = await CreateAuthWithUserAsync(db, user, "rightpass123");
+        try
+        {
+            for (var i = 0; i < 5; i++)
+                Assert.Null(await auth.Login(user, "wrong"));
+            ExpireLockout(user);
+
+            // 修复前这里会抛"尝试过于频繁"（到期后 attempts 仍 >= max，被再次锁定）
+            var result = await auth.Login(user, "wrong");
+
+            Assert.Null(result); // 应是一次普通失败，而不是锁定异常
+            Assert.True(LoginAttempts().TryGetValue($"login:{user}", out var entry));
+            Assert.Equal(1, entry.attempts); // 计数从 0 重新开始
+            Assert.False(AuthService.IsLockoutActive(entry.lockedUntil, DateTime.UtcNow));
+        }
+        finally
+        {
+            LoginAttempts().TryRemove($"login:{user}", out _);
+        }
+    }
+
+    [Fact]
+    public async Task Login_AfterLockoutExpires_CorrectPassword_Succeeds_AndClearsEntry()
+    {
+        const string user = "lockout-expire-ok";
+        var db = CreateContext();
+        var auth = await CreateAuthWithUserAsync(db, user, "rightpass123");
+        try
+        {
+            for (var i = 0; i < 5; i++)
+                Assert.Null(await auth.Login(user, "wrong"));
+            ExpireLockout(user);
+
+            var token = await auth.Login(user, "rightpass123");
+
+            Assert.NotNull(token);
+            Assert.False(LoginAttempts().ContainsKey($"login:{user}"));
+        }
+        finally
+        {
+            LoginAttempts().TryRemove($"login:{user}", out _);
+        }
+    }
+
+    [Fact]
+    public async Task Login_Success_ClearsFailureCount()
+    {
+        const string user = "lockout-clear-on-success";
+        var db = CreateContext();
+        var auth = await CreateAuthWithUserAsync(db, user, "rightpass123");
+        try
+        {
+            Assert.Null(await auth.Login(user, "wrong"));
+            Assert.Null(await auth.Login(user, "wrong"));
+            Assert.True(LoginAttempts().ContainsKey($"login:{user}"));
+
+            Assert.NotNull(await auth.Login(user, "rightpass123"));
+
+            Assert.False(LoginAttempts().ContainsKey($"login:{user}"));
+        }
+        finally
+        {
+            LoginAttempts().TryRemove($"login:{user}", out _);
+        }
+    }
+
+    [Fact]
+    public async Task Login_AfterExpiry_AnotherFullRoundLocksAgain()
+    {
+        const string user = "lockout-relock";
+        var db = CreateContext();
+        var auth = await CreateAuthWithUserAsync(db, user, "rightpass123");
+        try
+        {
+            for (var i = 0; i < 5; i++)
+                Assert.Null(await auth.Login(user, "wrong"));
+            ExpireLockout(user);
+
+            // 到期后重新开始计数：再满 5 次失败才应锁定
+            for (var i = 0; i < 5; i++)
+                Assert.Null(await auth.Login(user, "wrong"));
+
+            Assert.True(LoginAttempts().TryGetValue($"login:{user}", out var entry));
+            Assert.Equal(5, entry.attempts);
+            Assert.True(AuthService.IsLockoutActive(entry.lockedUntil, DateTime.UtcNow));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => auth.Login(user, "wrong"));
+        }
+        finally
+        {
+            LoginAttempts().TryRemove($"login:{user}", out _);
+        }
+    }
+
+    [Fact]
+    public void IsLockoutActive_ComparesAgainstProvidedClock()
+    {
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Assert.False(AuthService.IsLockoutActive(now, now));                  // 恰到期 → 不再锁定
+        Assert.False(AuthService.IsLockoutActive(now.AddMinutes(-1), now));   // 已过期
+        Assert.True(AuthService.IsLockoutActive(now.AddSeconds(1), now));     // 仍在锁定期
     }
 }
 

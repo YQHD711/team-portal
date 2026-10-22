@@ -65,9 +65,20 @@ public partial class WikiGeneratorService
             _logger.LogError("Document still missing after retry: {Path}", item.Path);
     }
 
-    /// <summary>该目录项对应的知识库相对路径（唯一拼法，生成/校验/恢复都用它）。</summary>
-    private string RelativeDocPath(CatalogItem item) =>
-        $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
+    /// <summary>
+    /// 该目录项对应的知识库相对路径（唯一拼法，生成/校验/恢复都用它）。
+    ///
+    /// 审计 I-04：`_targetFolder/_projectName` 来自任务行 —— 新任务已由入口白名单兜住，
+    /// 但**历史任务**可能带 `..`（旧版本只校验非空）。这里是所有"拼知识库路径"的唯一入口，
+    /// 拼好后必须再验一次终态；不安全就 fail closed，绝不把文档写到别的部门目录。
+    /// </summary>
+    private string RelativeDocPath(CatalogItem item)
+    {
+        var relative = $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
+        if (!IsSafeCatalogPath(relative))
+            throw new InvalidOperationException($"unsafe document path: {relative}");
+        return relative;
+    }
 
     /// <summary>该目录项对应的知识库文件是否已存在。</summary>
     private bool DocumentExists(CatalogItem item)
@@ -102,7 +113,8 @@ public partial class WikiGeneratorService
                     _logger.LogWarning("Skipped unsafe catalog path during review: {Path}", item.Path);
                     continue;
                 }
-                var kbPath = $"{_targetFolder}/{_projectName}/{item.Path}.md".Replace("//", "/");
+                // 审计 I-04：与生成/校验共用 RelativeDocPath（含终态校验），避免这里漏一次
+                var kbPath = RelativeDocPath(item);
                 var content = _knowledge.GetContent(kbPath);
                 if (string.IsNullOrWhiteSpace(content)) continue;
 

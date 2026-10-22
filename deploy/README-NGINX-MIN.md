@@ -26,7 +26,7 @@ bash deploy/nginx-proxy.sh status     # 当前形态
 ## 启用后要看什么（验收）
 1. **真实 IP**：用浏览器登录一次 → 管理端「操作日志」里该条的 IP 应是**你的公网/内网客户端 IP**，
    不再是 `10.255.1.3`。
-2. **伪造对照**：`curl -H 'X-Forwarded-For: 1.2.3.4' http://<host>:3000/api/auth/login -d '{"username":"admin","password":"admin123"}' -H 'Content-Type: application/json'`
+2. **伪造对照**：`curl -H 'X-Forwarded-For: 1.2.3.4' http://<host>:3000/api/auth/login -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' -H 'Content-Type: application/json'`
    → 审计里**不应**出现 `1.2.3.4`（应为你的真实对端地址）。
 3. 站点功能正常：登录、固件下载、大文件上传（`client_max_body_size 1024m` 已在 nginx 里放宽）。
 

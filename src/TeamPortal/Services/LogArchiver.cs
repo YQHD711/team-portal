@@ -63,6 +63,32 @@ public class LogArchiver
         return new LogArchiveOutcome(sys, op, sysRemote, opRemote);
     }
 
+
+    /// <summary>
+    /// 强制清理（force=true）专用：把两表**当前全部**行归档（cutoff=now），不按保留期筛选。
+    /// 归档失败必须抛给调用方 —— 调用方据此拒绝删除，绝不允许"先删后归档"。
+    /// </summary>
+    public async Task<LogArchiveOutcome> ArchiveAllAsync(DateTime? now = null)
+    {
+        var at = now ?? DateTime.UtcNow;
+        var stamp = at.ToString("yyyyMMdd-HHmmss") + "-forced";
+        var cutoff = at.AddSeconds(1); // 含当前时刻已落库的行
+        var sys = await _logs.ExportSystemLogsForArchive(cutoff, Path.Combine(_archiveDir, $"{stamp}-system-logs.csv"));
+        var op = await _logs.ExportOperationsForArchive(cutoff, Path.Combine(_archiveDir, $"{stamp}-operation-logs.csv"));
+
+        string? sysRemote = null;
+        string? opRemote = null;
+        if (await _baidu.IsConfigured())
+        {
+            sysRemote = await TryUploadAsync(sys, "system/logs");
+            opRemote = await TryUploadAsync(op, "system/operation-logs");
+        }
+
+        RotateLocalArchives();
+        _logger.LogInformation("LogArchiver: 强制清理前归档 {Sys} 条请求日志 / {Op} 条操作日志 → {Dir}", sys.Count, op.Count, _archiveDir);
+        return new LogArchiveOutcome(sys, op, sysRemote, opRemote);
+    }
+
     private async Task<string?> TryUploadAsync(LogArchive archive, string folder)
     {
         if (archive.MaxId is null) return null;
