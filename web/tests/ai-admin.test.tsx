@@ -5,11 +5,24 @@ import AIAdminPage from "@/app/(protected)/admin/ai-admin/page";
 import { api } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), download: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), download: vi.fn(), stream: vi.fn() },
 }));
 
 const mockGet = vi.mocked(api.get as (url: string) => Promise<unknown>);
 const mockPost = vi.mocked(api.post as (url: string, body: unknown, timeout?: number) => Promise<unknown>);
+const mockStream = vi.mocked(api.stream);
+
+/** 构造一个 SSE 响应：task-13 起 /analyze 改为 /analyze/stream（工具轮 + 流式回答）。 */
+function sseResponse(frames: string[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(frame));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
 
 const tools = [
   { name: "get_system_health", description: "系统健康总览：数据库连通性、日志写入通道积压。" },
@@ -33,6 +46,11 @@ beforeEach(() => {
     return Promise.resolve({ busy: false });
   });
   mockPost.mockResolvedValue({ result: "系统正常", stats: { total: 4, summaries: 0, byRole: [] } });
+  mockStream.mockResolvedValue(sseResponse([
+    'event: status\ndata: {"phase":"answering","message":"正在生成回答…"}\n\n',
+    'data: {"choices":[{"delta":{"content":"系统正常"}}]}\n\n',
+    'event: done\ndata: {"stats":{"total":4,"summaries":0,"byRole":[]}}\n\n',
+  ]));
 });
 
 describe("AI 系统管理员：只读运维助手", () => {
@@ -51,14 +69,14 @@ describe("AI 系统管理员：只读运维助手", () => {
     expect(screen.queryByText(/变更历史/)).not.toBeInTheDocument();
   });
 
-  it("运维对话的预设任务驱动 /analyze，并把任务原文发出去", async () => {
+  it("运维对话的预设任务驱动 /analyze/stream，并把任务原文发出去", async () => {
     render(<AIAdminPage />);
 
     fireEvent.click(await screen.findByText("排查最近报错"));
 
-    await waitFor(() => expect(mockPost).toHaveBeenCalled());
-    const [url, body] = mockPost.mock.calls[0];
-    expect(url).toBe("/api/admin/agent/analyze");
+    await waitFor(() => expect(mockStream).toHaveBeenCalled());
+    const [url, body] = mockStream.mock.calls[0];
+    expect(url).toBe("/api/admin/agent/analyze/stream");
     expect(JSON.stringify(body)).toContain("错误与警告日志");
 
     expect(await screen.findByText("系统正常")).toBeInTheDocument();

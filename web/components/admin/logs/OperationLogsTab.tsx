@@ -133,6 +133,7 @@ export default function OperationLogsTab() {
             <thead><tr className="border-b border-border bg-background">
               <th className="px-4 py-3 text-left font-medium text-muted w-36 hidden md:table-cell">时间</th>
               <th className="px-4 py-3 text-left font-medium text-muted w-24">操作人</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-32 hidden md:table-cell">IP</th>
               <th className="px-4 py-3 text-left font-medium text-muted w-24">操作类型</th>
               <th className="px-4 py-3 text-left font-medium text-muted">目标</th>
                 <th className="px-4 py-3 text-left font-medium text-muted w-8"></th>
@@ -149,6 +150,10 @@ export default function OperationLogsTab() {
                   onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
                   <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell whitespace-nowrap">{new Date(o.createdAt).toLocaleString("zh-CN")}</td>
                   <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{o.userName}</td>
+                  {/* 真实客户端 IP（HTTPS 后由后端按 X-Forwarded-For 解析）；空值统一显示 —，避免表格出现空洞 */}
+                  <td data-testid={`operation-ip-${o.id}`} className="px-4 py-2.5 text-faint text-xs font-mono whitespace-nowrap hidden md:table-cell">
+                    {o.ipAddress || "—"}
+                  </td>
                   <td className="px-4 py-2.5">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${actionColors[o.action] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>
                       {actionLabel(o.action, o.targetType)}

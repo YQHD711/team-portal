@@ -9,7 +9,8 @@
 export interface OperationEntry {
   id: number; userId: number | null; userName: string; action: string;
   targetType: string | null; targetId: string | null; data: string | null;
-  ipAddress: string | null; createdAt: string;
+  /** 真实客户端 IP（后端 LogService.ClientIp 采集；匿名/测试环境可能为空） */
+  ipAddress?: string | null; createdAt: string;
 }
 
 export interface OperationPage { total: number; items: OperationEntry[]; }
@@ -69,19 +70,42 @@ export function actionLabel(a: string, targetType: string | null): string {
   return refined || baseActionLabels[a] || a;
 }
 
+/**
+ * 解析日志里的结构化字段（OperationLog.Data / SystemLog.Detail 都是 JSON 字符串）。
+ * 历史数据、截断数据、非 JSON 文本都可能存在，所以失败一律返回 null，绝不抛。
+ */
+export function parseLogDetail(detail: string | null): Record<string, unknown> | null {
+  if (!detail) return null;
+  try {
+    const parsed: unknown = JSON.parse(detail);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 请求日志（SystemLog category=http）里真实客户端 IP。
+ * 字段名 `ip` 由 RequestLoggingMiddleware.BuildDetail 写入；代理转发后这里已经是
+ * X-Forwarded-For 链最左侧的真实来源，不是反向代理的地址。
+ */
+export function extractRequestIp(detail: string | null): string | null {
+  const ip = parseLogDetail(detail)?.ip;
+  return typeof ip === "string" && ip.trim() ? ip.trim() : null;
+}
+
 /** 从 data JSON 提炼可读摘要(key: value · ...),忽略嵌套/空值 */
 export function summarize(data: string | null): string {
-  if (!data) return "";
-  try {
-    const obj = JSON.parse(data);
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return "";
-    const parts: string[] = [];
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (v == null || typeof v === "object") continue;
-      if (k === "id" || k === "userId" || k === "success") continue;
-      parts.push(`${k}: ${String(v)}`);
-      if (parts.length >= 6) break;
-    }
-    return parts.join(" · ");
-  } catch { return ""; }
+  const obj = parseLogDetail(data);
+  if (!obj) return "";
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null || typeof v === "object") continue;
+    if (k === "id" || k === "userId" || k === "success") continue;
+    parts.push(`${k}: ${String(v)}`);
+    if (parts.length >= 6) break;
+  }
+  return parts.join(" · ");
 }

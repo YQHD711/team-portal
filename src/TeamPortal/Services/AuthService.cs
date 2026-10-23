@@ -118,19 +118,56 @@ public class AuthService
         return invite;
     }
 
-    /// <summary>admin 看全部;部长仅看自己生成的邀请码(互相隔离)。</summary>
+    /// <summary>
+    /// admin 看全部;部长仅看自己生成的邀请码(互相隔离)。
+    /// Status/IsExpired 只在这里按当前时间计算,不写库:列表查询必须保持只读,
+    /// 过期码的落库由 MaintenanceWorker 定时调用 RevokeExpiredInviteCodesAsync 完成。
+    /// 判定优先级:revoked &gt; expired &gt; used_up &gt; active。
+    /// </summary>
     public async Task<List<object>> GetInviteCodes(string? actorRole, int? actorId)
     {
         var q = _db.InviteCodes.Include(c => c.Department).Include(c => c.CreatedByUser).AsQueryable();
         if (actorRole == "部长") q = q.Where(c => c.CreatedByUserId == actorId);
-        return await q.OrderByDescending(c => c.CreatedAt)
+        var rows = await q.OrderByDescending(c => c.CreatedAt)
             .Select(c => new
             {
                 c.Id, c.Code, c.DepartmentId,
                 DepartmentName = c.Department != null ? c.Department.Name : null,
                 c.MaxUses, c.UsedCount, c.IsRevoked, c.ExpiresAt, c.CreatedAt,
                 CreatedBy = c.CreatedByUser != null ? c.CreatedByUser.Username : null
-            }).ToListAsync<object>();
+            }).ToListAsync();
+
+        var now = DateTime.UtcNow;
+        return rows.Select(c =>
+        {
+            var isExpired = c.ExpiresAt < now;
+            return (object)new
+            {
+                c.Id, c.Code, c.DepartmentId, c.DepartmentName,
+                c.MaxUses, c.UsedCount, c.IsRevoked, c.ExpiresAt, c.CreatedAt, c.CreatedBy,
+                IsExpired = isExpired,
+                Status = c.IsRevoked ? "revoked"
+                    : isExpired ? "expired"
+                    : c.UsedCount >= c.MaxUses ? "used_up"
+                    : "active"
+            };
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 把「已过期但仍未作废」的邀请码批量落库为 IsRevoked=true,返回本次作废数量。
+    /// 注册侧本来就拒绝过期码,这里只是让管理端状态与库一致;可被定时任务反复调用(幂等,第二次返回 0)。
+    /// 刻意不逐条写 OperationLog:一次维护可能命中大量历史码,逐条会刷屏,只记一条数量日志。
+    /// </summary>
+    public async Task<int> RevokeExpiredInviteCodesAsync()
+    {
+        var now = DateTime.UtcNow;
+        var count = await _db.InviteCodes
+            .Where(c => !c.IsRevoked && c.ExpiresAt < now)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.IsRevoked, true));
+        if (count > 0)
+            _log.Info("auth", $"自动作废 {count} 个已过期邀请码");
+        return count;
     }
 
     public enum InviteOp { Ok, NotFound, Forbidden }
