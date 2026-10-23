@@ -114,6 +114,8 @@ public static class WebToolsStaticMiddleware
                 // 兜底目录选择器：http + IP 下没有 showDirectoryPicker，LogFinder 会直接罢工
                 // （详见 WebToolsDirPickerShim）。注入放在属性改写之后，避免脚本内容被误改写。
                 body = WebToolsDirPickerShim.Inject(body);
+                // 中文界面补充：精确词典翻译（幂等；可在页面右下角 EN/中文 切换）
+                body = WebToolsZhShim.Inject(body);
                 bytes = System.Text.Encoding.UTF8.GetBytes(body);
                 context.Response.ContentLength = bytes.Length;
                 await context.Response.Body.WriteAsync(bytes, context.RequestAborted);
