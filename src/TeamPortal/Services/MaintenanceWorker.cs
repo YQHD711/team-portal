@@ -7,17 +7,20 @@ namespace TeamPortal.Services;
 /// - DB-only backup every 6 hours (verified, rotated)
 /// - Daily system backup (DB + settings → Baidu cloud)
 /// - Daily log archiving (export old logs → cloud, then cleanup)
+/// - Daily TLS certificate expiry check (HTTPS/HTTP3 上线后证书是硬依赖，提前预警)
 /// - Temp source-ZIP sweep every hour (审计 M-11：上传的源码包默认永不清理，会慢慢占满容器磁盘)
 /// </summary>
 public class MaintenanceWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MaintenanceWorker> _logger;
+    private readonly IConfiguration _configuration;
 
-    public MaintenanceWorker(IServiceScopeFactory scopeFactory, ILogger<MaintenanceWorker> logger)
+    public MaintenanceWorker(IServiceScopeFactory scopeFactory, ILogger<MaintenanceWorker> logger, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -157,6 +160,10 @@ public class MaintenanceWorker : BackgroundService
                     {
                         logSvc.Error("database", $"数据库完整性自检失败：{ex.Message}");
                     }
+
+                    // 5. TLS 证书到期检查（每日一次）：Tls:CertPath 默认空 → 跳过；
+                    //    证书文件缺失/解析失败由 TlsCertMonitor 内部记 warn，不抛出，不影响其它维护任务。
+                    TlsCertMonitor.Check(logSvc, _configuration["Tls:CertPath"]);
                 }
 
                 // Sleep until next check (re-check every 5 minutes)

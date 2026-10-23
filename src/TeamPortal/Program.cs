@@ -372,15 +372,20 @@ if (!app.Environment.IsDevelopment())
 // OpenAPI 文档：始终注册，但只对 staff 开放（原先仅 Development 注册，生产上就没有了）
 app.MapOpenApi("/api/admin/openapi").RequireAuthorization("StaffOnly");
 
+// ── 请求日志：**必须注册在认证/授权之前**（不要移回去）──
+// 顺序依据（生产实测盲区）：被 401/403 拒绝的请求由鉴权/授权中间件「短路返回」，
+// 若日志中间件注册在它们之后，这些请求根本走不到日志中间件 —— 线上 /api/auth/me 的 401 一条都不落。
+// 放在它们之前后：await next() 内部仍会完整跑认证（ctx.User 在 next 返回后才读取，此时已填充），
+// finally 里记录的 user/status 都是最终值，用户名不会丢。
+// 同时放在 UseRateLimiter 之前 —— 429 限流拒绝也能被记录（RequestBody/响应状态均已在 finally 里取最终值）。
+app.UseRequestLogging();
+
 app.UseStatusCodePages();
 app.UseRateLimiter();
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
-// 请求日志：必须在认证/授权之后（否则 ctx.User 未填充 → 「用户」列永远空）
-app.UseRequestLogging();
 
 // ── WebTools 静态站：直接托管 G:\ardupilot_log_analysis\WebTools 目录（自定义中间件）。
 //    相比反向代理（:8123）：路径天然正确，无 Next rewrite 尾斜杠循环；
@@ -401,6 +406,7 @@ app.MapFirmwareEndpoints();
 app.MapFirmwareAdminEndpoints();
 app.MapAdminEndpoints();
 app.MapLogEndpoints();
+app.MapClientLogEndpoints();
 app.MapWikiEndpoints();
 app.MapBaiduEndpoints();
 app.MapNotificationEndpoints();
@@ -423,6 +429,10 @@ app.MapFlightDiagnosisEndpoints();
 app.MapBackupEndpoints();
 app.MapMcp("/mcp").RequireAuthorization();
 app.MapRuntimeStats();
+
+// 启动时做一次 TLS 证书到期检查（与 MaintenanceWorker 的每日检查同一实现）：
+// 部署后立刻能在「系统日志」看到证书状态，无需等到次日 03:00 的维护任务。
+TlsCertMonitor.Check(app.Services.GetRequiredService<LogService>(), app.Configuration["Tls:CertPath"]);
 
 app.Run();
 

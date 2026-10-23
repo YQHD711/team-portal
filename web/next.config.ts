@@ -40,7 +40,12 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // camera=(self)：库存「二维码查询」用 getUserMedia 调摄像头扫码（components/inventory/
+          // ScanQueryModal.tsx）。录像/拍照是敏感能力，只授权给本站（self），不授权给任意
+          // iframe（如 /webtools 内嵌页需要时会由 allow 属性单独给）。
+          // 生产已启用 HTTPS（Let's Encrypt IP 证书），安全上下文满足 getUserMedia 前置条件；
+          // microphone/geolocation 无业务需求，继续全部禁止。
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
           {
             key: "Content-Security-Policy",
             value: [
