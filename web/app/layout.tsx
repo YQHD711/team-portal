@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { cookies } from "next/headers";
 import { BrandProvider } from "@/lib/brand";
+import ClientLogReporter from "@/components/ClientLogReporter";
 import { AUTO_SCHEME_SNIPPET, parseScheme, serverDarkClass } from "@/lib/scheme";
 
 // 注意：metadata 是构建期静态导出，无法读取运行时数据库中的品牌配置，SEO 保持默认品牌文案；
@@ -59,6 +60,8 @@ export default async function RootLayout({
     >
       <head><script dangerouslySetInnerHTML={{ __html: AUTO_SCHEME_SNIPPET }} /></head>
       <body className="min-h-full bg-background text-foreground font-sans">
+        {/* 全局未捕获错误上报（无 DOM 输出）；HTTPS 上线后多终端访问，浏览器侧异常需回传后端 */}
+        <ClientLogReporter />
         <BrandProvider>{children}</BrandProvider>
       </body>
     </html>

@@ -73,4 +73,72 @@ public class RequestLoggingTests
     [Fact]
     public void ExceptionSummary_NullWhenNoException()
         => Assert.Null(RequestLoggingMiddleware.ExceptionSummary(null));
+
+    // ── 降噪：/health 完全跳过 ──
+    [Theory]
+    [InlineData("/health", true)]
+    [InlineData("/HEALTH", true)]
+    [InlineData("/health/", false)]
+    [InlineData("/healthz", false)]
+    [InlineData("/api/health", false)]
+    public void ShouldSkip_OnlyExactHealthPath(string path, bool expected)
+        => Assert.Equal(expected, RequestLoggingMiddleware.ShouldSkip(path));
+
+    // ── 同请求去重：窗口内同 key 只落一条（键含 status，401 与 200 不会互相吞） ──
+    [Fact]
+    public void ShouldLogOnce_DedupesSameKeyInsideWindow()
+    {
+        var key = "req|GET|/api/public/brand|200|匿名|-|" + Guid.NewGuid().ToString("N");
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key, 60, t0));
+        Assert.False(RequestLoggingMiddleware.ShouldLogOnce(key, 60, t0.AddSeconds(59)));
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key, 60, t0.AddSeconds(61)));
+    }
+
+    [Fact]
+    public void ShouldLogOnce_KeepsDifferentStatuses()
+    {
+        var key200 = "req|GET|/api/x|200|匿名|-|" + Guid.NewGuid().ToString("N");
+        var key401 = key200.Replace("|200|", "|401|");
+        var t0 = DateTime.UtcNow;
+
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key200, 60, t0));
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key401, 60, t0));
+    }
+
+    [Fact]
+    public void ShouldLogOnce_ZeroWindowDisablesDedupe()
+    {
+        var key = "req|GET|/api/y|200|匿名|-|" + Guid.NewGuid().ToString("N");
+        var t0 = DateTime.UtcNow;
+
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key, 0, t0));
+        Assert.True(RequestLoggingMiddleware.ShouldLogOnce(key, 0, t0));
+    }
+
+    // ── HTTPS 可观测性：scheme / host / 原始 X-Forwarded-For ──
+    [Fact]
+    public void BuildDetail_ContainsSchemeHostAndRawXff()
+    {
+        var json = RequestLoggingMiddleware.BuildDetail(
+            "GET", "/api/auth/me", 200, 5, 0, "203.0.113.9", null, "rid", null,
+            scheme: "https", host: "8.137.161.160", xff: "203.0.113.9, 10.255.1.3");
+
+        Assert.Contains("\"scheme\":\"https\"", json);
+        Assert.Contains("\"host\":\"8.137.161.160\"", json);
+        Assert.Contains("\"xff\":\"203.0.113.9, 10.255.1.3\"", json);
+    }
+
+    [Fact]
+    public void BuildDetail_TruncatesLongXff()
+    {
+        var xff = string.Join(", ", Enumerable.Range(0, 100).Select(i => "10.0.0." + i));
+        var json = RequestLoggingMiddleware.BuildDetail(
+            "GET", "/api/x", 403, 5, 0, "-", null, "rid", null, xff: xff);
+
+        Assert.DoesNotContain(xff, json); // 客户端可伪造任意长头，Detail 必须截断
+        Assert.Contains("\"xff\":\"", json);
+    }
 }
+
