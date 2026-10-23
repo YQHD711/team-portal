@@ -66,11 +66,14 @@ describe("物料标签：导出 PDF", () => {
   it("不影响原有打印路径：打印按钮仍在且仍调用 window.print()", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     renderModal();
-    fireEvent.click(screen.getByRole("button", { name: /打印/ }));
+    // 精确匹配「打印」：旁边还有「连接打印机」「直连打印」，正则 /打印/ 会命中多个
+    fireEvent.click(screen.getByRole("button", { name: "打印" }));
     expect(print).toHaveBeenCalledTimes(1);
     // 导出按钮与打印按钮并存
     expect(exportBtn()).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制短链" })).toBeInTheDocument();
+    // 新增的直连打印区块不影响原浏览器打印路径
+    expect(screen.getByTestId("niimbot-panel")).toBeInTheDocument();
   });
 
   it("本机地址警告照旧显示，导出不会削弱它", () => {

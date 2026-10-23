@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import { Printer, X, Copy, Check, FileDown } from "lucide-react";
 import { api } from "@/lib/api";
-import { DEFAULT_TEMPLATE, normalizeTemplates, type LabelTemplate } from "@/lib/labelTemplate";
+import { DEFAULT_TEMPLATE, normalizeTemplates, type LabelData, type LabelTemplate } from "@/lib/labelTemplate";
 import type { InventoryItem } from "./inventoryTypes";
+import NiimbotPrintPanel from "./NiimbotPrintPanel";
 
 interface Props {
   item: InventoryItem;
@@ -35,6 +36,11 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
   const code = item.code ?? "";
   const url = `${baseUrl.replace(/\/+$/, "")}/i/${encodeURIComponent(code)}`;
   const selectedTemplate = templates.find(t => t.id === templateId) ?? templates[0] ?? DEFAULT_TEMPLATE;
+  /** 直连打印与导出 PDF 用同一份物料数据，避免两条路径印出不同内容 */
+  const labelData: LabelData = {
+    code, url, name: item.name,
+    grade: item.grade, locationCode: item.locationCode, category: item.category,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +132,9 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
             ))}
           </select>
         </label>
+
+        {/* 直连打印（精臣 K3W）：需本机安装打印服务；失败时可继续用导出 PDF */}
+        <NiimbotPrintPanel template={selectedTemplate} data={labelData} />
 
         <div className="mt-5 flex flex-wrap gap-2 print:hidden">
           <button onClick={() => window.print()}
