@@ -37,6 +37,8 @@ public class WebToolsZhShimTests
     [InlineData("\"Setup\":\"设置\"")]
     [InlineData("\"Analysis time\":\"分析时间\"")]
     [InlineData("\"Velocity source\":\"速度来源\"")]
+    [InlineData("ArduPilot's in-flight autocalibration uses")]
+    [InlineData("heading changes")]
     [InlineData("\"Hit Calculate to see results.\":\"点击「计算」查看结果。\"")]
     public void Script_ContainsKeyTranslations(string fragment)
     {
