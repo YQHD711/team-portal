@@ -9,6 +9,7 @@ namespace TeamPortal.Services;
 /// - Daily log archiving (export old logs → cloud, then cleanup)
 /// - Daily TLS certificate expiry check (HTTPS/HTTP3 上线后证书是硬依赖，提前预警)
 /// - Temp source-ZIP sweep every hour (审计 M-11：上传的源码包默认永不清理，会慢慢占满容器磁盘)
+/// - Expired invite-code sweep every hour (过期码落库作废，幂等；注册侧本来就拒绝过期码)
 /// </summary>
 public class MaintenanceWorker : BackgroundService
 {
@@ -30,6 +31,8 @@ public class MaintenanceWorker : BackgroundService
         var lastDbBackup = DateTime.MinValue;
         // 临时源码 ZIP 清扫的节流：失败也等一小时再试，避免每 5 分钟刷一条日志
         var lastZipSweep = DateTime.MinValue;
+        // 过期邀请码自动作废的节流：每小时一次
+        var lastInviteSweep = DateTime.MinValue;
         // 每日任务「今天(北京时间)是否已经做过」。判据必须是日期而不是「距上次运行 23 小时」：
         // 后者在每次容器重启时(每次部署都会重启)都会立刻重跑一遍每日任务，而每日备份文件
         // 此前不参与轮转 —— 线上因此攒出 177 份备份(约 1.8GB)、磁盘用到 85%。
@@ -83,6 +86,23 @@ public class MaintenanceWorker : BackgroundService
                                 removedZips, SafeZipExtractor.DefaultArchiveRetention.TotalDays);
                     }
                     catch (Exception ex) { _logger.LogWarning(ex, "Maintenance: temp source ZIP cleanup failed"); }
+                }
+
+                // ── 过期邀请码自动作废：每小时一次（幂等）──
+                // 注册侧本来就拒绝过期码，这里只是把「已过期但仍未 IsRevoked」的码落库，
+                // 让管理端状态和数据库一致；AuthService 内部已按 auth 分类记一条数量日志。
+                if (now - lastInviteSweep >= TimeSpan.FromHours(1))
+                {
+                    lastInviteSweep = now;
+                    try
+                    {
+                        using var inviteScope = _scopeFactory.CreateScope();
+                        var authSvc = inviteScope.ServiceProvider.GetRequiredService<AuthService>();
+                        var revoked = await authSvc.RevokeExpiredInviteCodesAsync();
+                        if (revoked > 0)
+                            _logger.LogInformation("Maintenance: auto-revoked {Count} expired invite code(s)", revoked);
+                    }
+                    catch (Exception ex) { _logger.LogWarning(ex, "Maintenance: expired invite code sweep failed"); }
                 }
 
                 // ── Daily: cloud backup + log archive, 每天凌晨 3 点(北京时间)后第一次检查时执行 ──

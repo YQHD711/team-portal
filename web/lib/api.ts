@@ -93,10 +93,18 @@ export const api = {
    * 注意：timeoutMs 只约束「拿到响应头」这一段，拿到后立即清除定时器 ——
    * 否则 30s 后 abort() 会在读 body 中途掐断长回答（AI 流式回答就是这么被截断的）。
    * 长流的超时控制应由调用方按「读空闲」自行处理。
+   *
+   * signal：调用方取消（如页面的「停止」按钮）时中止流；中止会以「已取消」错误抛出，
+   * 与「请求超时」区分开，前端才能给出不同提示。
    */
-  stream: async (endpoint: string, body: unknown, timeoutMs?: number): Promise<Response> => {
+  stream: async (endpoint: string, body: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
+    const onOuterAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", onOuterAbort, { once: true });
+    }
     const token = isBrowser() ? localStorage.getItem("token") : null;
     try {
       const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -118,10 +126,13 @@ export const api = {
       return res;
     } catch (err) {
       clearTimeout(timeoutId);
+      if (signal?.aborted) throw new Error("已取消");
       if (err instanceof DOMException && err.name === "AbortError") {
         throw new Error("请求超时，请检查网络连接");
       }
       throw err;
+    } finally {
+      signal?.removeEventListener("abort", onOuterAbort);
     }
   },
 };

@@ -13,16 +13,20 @@ const presets = [
 interface Props {
   history: ChatEntry[];
   loading: boolean;
+  /** 流式进度文案（第 N 轮 / 调用了什么工具 / 正在生成回答） */
+  status: string;
   memory: MemoryStats | null;
   task: string;
   onTask: (v: string) => void;
   onRun: (t: string) => void;
+  /** 取消进行中的流（abort 上游请求） */
+  onCancel: () => void;
   onClearMemory: () => void;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
 /** 运维对话 Tab（预设任务 + 聊天区 + 自定义输入） */
-export default function ChatTab({ history, loading, memory, task, onTask, onRun, onClearMemory, chatEndRef }: Props) {
+export default function ChatTab({ history, loading, status, memory, task, onTask, onRun, onCancel, onClearMemory, chatEndRef }: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {/* Presets */}
@@ -76,7 +80,13 @@ export default function ChatTab({ history, loading, memory, task, onTask, onRun,
             </div>
           )}
           {loading && (
-            <div className="flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" />AI 正在读取系统数据...</div>
+            <div className="flex items-center gap-2 text-sm text-muted min-w-0">
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span className="min-w-0 break-words">{status || "AI 正在读取系统数据..."}</span>
+              <button onClick={onCancel} className="ml-1 shrink-0 rounded-lg border border-border px-2 py-0.5 text-xs hover:bg-surface-hover" title="停止本次分析">
+                停止
+              </button>
+            </div>
           )}
           {history.length === 0 && !loading && (
             <div className="flex items-center justify-center h-full text-muted text-sm">

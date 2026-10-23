@@ -5,8 +5,10 @@ import { api } from "@/lib/api";
 import { datedFilename, downloadErrorMessage, saveBlob } from "@/lib/download";
 import {
   RefreshCw, Info, AlertTriangle, XCircle, Download, Trash2,
-  Activity, ShieldCheck, Clock
+  Activity, ShieldCheck, Clock, Copy, Check
 } from "lucide-react";
+import { extractRequestIp } from "@/lib/operationLog";
+import { copyText } from "@/lib/clipboard";
 
 /* ── 请求日志(SystemLog)── */
 interface LogEntry { id: number; level: string; category: string; message: string; detail: string | null; userName: string | null; createdAt: string; }
@@ -40,6 +42,8 @@ export default function RequestLogsTab() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [exporting, setExporting] = useState(false);
+  /** 刚复制过的 IP（用于把复制图标切成对勾；同一时刻只记一个） */
+  const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
   const fetchLogs = useCallback(() => {
     setLoading(true);
@@ -99,6 +103,12 @@ export default function RequestLogsTab() {
       fetchLogs();
       fetchStats();
     } catch { setMsg("❌ 清理失败"); }
+  };
+
+  /** 复制单条请求的客户端 IP；行点击本身是展开详情，必须 stopPropagation */
+  const handleCopyIp = async (event: React.MouseEvent, ip: string) => {
+    event.stopPropagation();
+    if (await copyText(ip)) setCopiedIp(ip);
   };
 
   const handleClearAll = async () => {
@@ -227,34 +237,51 @@ export default function RequestLogsTab() {
               <th className="px-4 py-3 text-left font-medium text-muted w-20">分类</th>
               <th className="px-4 py-3 text-left font-medium text-muted">消息</th>
               <th className="px-4 py-3 text-left font-medium text-muted w-20 hidden sm:table-cell">用户</th>
+              <th className="px-4 py-3 text-left font-medium text-muted w-32 hidden sm:table-cell">IP</th>
               <th className="px-4 py-3 text-left font-medium text-muted w-36 hidden md:table-cell">时间</th>
             </tr></thead>
             <tbody className="divide-y divide-border-subtle">
               {loading && logs.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-faint">加载中...</td></tr>
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-faint">加载中...</td></tr>
               ) : logs.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-faint">
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-faint">
                   <Activity className="h-8 w-8 mx-auto mb-2 opacity-30" />暂无日志记录
                 </td></tr>
-              ) : logs.map(l => (
-                <tr key={l.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer"
-                  onClick={() => setExpanded(expanded === l.id ? null : l.id)}>
-                  <td className="px-4 py-2.5">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${levelColors[l.level] || ""}`}>
-                      {levelIcons[l.level]}{l.level}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted text-xs font-mono">{l.category}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="line-clamp-2 break-all max-w-xs lg:max-w-md">{l.message}</div>
-                    {expanded === l.id && l.detail && (
-                      <div className="mt-1 p-2 rounded bg-background text-xs text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{l.detail}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-faint text-xs hidden sm:table-cell">{l.userName || "—"}</td>
-                  <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell">{new Date(l.createdAt).toLocaleString("zh-CN")}</td>
-                </tr>
-              ))}
+              ) : logs.map(l => {
+                // 请求日志的 Detail 是结构化 JSON（见 RequestLoggingMiddleware.BuildDetail），
+                // 真实客户端 IP 在 `ip` 字段；老数据/截断数据解析失败时显示 —
+                const ip = extractRequestIp(l.detail);
+                return (
+                  <tr key={l.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer"
+                    onClick={() => setExpanded(expanded === l.id ? null : l.id)}>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${levelColors[l.level] || ""}`}>
+                        {levelIcons[l.level]}{l.level}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted text-xs font-mono">{l.category}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="line-clamp-2 break-all max-w-xs lg:max-w-md">{l.message}</div>
+                      {expanded === l.id && l.detail && (
+                        <div className="mt-1 p-2 rounded bg-background text-xs text-muted font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{l.detail}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-faint text-xs hidden sm:table-cell">{l.userName || "—"}</td>
+                    <td data-testid={`request-ip-${l.id}`} className="px-4 py-2.5 text-faint text-xs font-mono hidden sm:table-cell whitespace-nowrap">
+                      {ip ? (
+                        <button type="button" onClick={e => void handleCopyIp(e, ip)} title="复制 IP"
+                          aria-label={`复制 IP ${ip}`} className="inline-flex items-center gap-1 hover:text-foreground">
+                          {ip}
+                          {copiedIp === ip
+                            ? <Check className="h-3 w-3 text-success" />
+                            : <Copy className="h-3 w-3 opacity-60" />}
+                        </button>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell">{new Date(l.createdAt).toLocaleString("zh-CN")}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

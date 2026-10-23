@@ -182,4 +182,85 @@ public class InviteCodeTests
 
         Assert.Equal(0, (await db.InviteCodes.AsNoTracking().FirstAsync(c => c.Code == "SHORT")).UsedCount);
     }
+
+    // ── INV-01: 邀请码过期自动作废 ──
+
+    /// <summary>GetInviteCodes 返回的是匿名对象（序列化成 JSON），测试用反射读计算字段。</summary>
+    private static object? Prop(object row, string name) => row.GetType().GetProperty(name)?.GetValue(row);
+
+    [Fact]
+    public async Task Register_ExpiredCode_Rejected_WithSameMessageAsUnknownCode()
+    {
+        // 过期码与不存在的码必须给出同一条错误信息，否则错误文案本身就成了邀请码有效性探测口。
+        var db = CreateContext();
+        db.InviteCodes.Add(new InviteCode
+        {
+            Code = "OLD", MaxUses = 1, CreatedByUserId = 1, ExpiresAt = DateTime.UtcNow.AddMinutes(-1)
+        });
+        await db.SaveChangesAsync();
+        var auth = CreateAuth(db);
+
+        var expired = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => auth.Register("expired-user", "pw123456", "OLD"));
+        var unknown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => auth.Register("unknown-user", "pw123456", "NOSUCH"));
+
+        Assert.Equal(unknown.Message, expired.Message);
+        Assert.False(await db.Users.AnyAsync(u => u.Username == "expired-user"));
+        // 过期码不消耗名额
+        Assert.Equal(0, (await db.InviteCodes.AsNoTracking().FirstAsync(c => c.Code == "OLD")).UsedCount);
+    }
+
+    [Fact]
+    public async Task GetInviteCodes_ComputesStatus_AndDoesNotWriteDb()
+    {
+        var db = CreateContext();
+        var now = DateTime.UtcNow;
+        db.InviteCodes.AddRange(
+            new InviteCode { Code = "ACTIVE", MaxUses = 2, CreatedByUserId = 1, ExpiresAt = now.AddDays(1) },
+            new InviteCode { Code = "EXPIRED", MaxUses = 2, CreatedByUserId = 1, ExpiresAt = now.AddMinutes(-5) },
+            new InviteCode { Code = "USEDUP", MaxUses = 1, UsedCount = 1, CreatedByUserId = 1, ExpiresAt = now.AddDays(1) },
+            new InviteCode { Code = "REVOKED", MaxUses = 2, IsRevoked = true, CreatedByUserId = 1, ExpiresAt = now.AddMinutes(-5) });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var view = await CreateAuth(db).GetInviteCodes("admin", 1);
+        var byCode = view.ToDictionary(r => (string)Prop(r, "Code")!, r => r);
+
+        Assert.Equal("active", Prop(byCode["ACTIVE"], "Status") as string);
+        Assert.Equal("expired", Prop(byCode["EXPIRED"], "Status") as string);
+        Assert.True((bool)Prop(byCode["EXPIRED"], "IsExpired")!);
+        Assert.Equal("used_up", Prop(byCode["USEDUP"], "Status") as string);
+        // 优先级 revoked > expired：既过期又作废的码算 revoked
+        Assert.Equal("revoked", Prop(byCode["REVOKED"], "Status") as string);
+
+        // 列表只计算不落库：查完之后过期码仍然是 IsRevoked=false
+        Assert.False((await db.InviteCodes.AsNoTracking().FirstAsync(c => c.Code == "EXPIRED")).IsRevoked);
+    }
+
+    [Fact]
+    public async Task RevokeExpiredInviteCodes_IsIdempotent_AndLeavesActiveCodesAlone()
+    {
+        var db = CreateContext();
+        var now = DateTime.UtcNow;
+        db.InviteCodes.AddRange(
+            new InviteCode { Code = "EXP1", MaxUses = 1, CreatedByUserId = 1, ExpiresAt = now.AddMinutes(-1) },
+            new InviteCode { Code = "EXP2", MaxUses = 1, CreatedByUserId = 1, ExpiresAt = now.AddDays(-3) },
+            new InviteCode { Code = "LIVE", MaxUses = 1, CreatedByUserId = 1, ExpiresAt = now.AddDays(3) });
+        await db.SaveChangesAsync();
+        var auth = CreateAuth(db);
+
+        Assert.Equal(2, await auth.RevokeExpiredInviteCodesAsync());
+
+        var rows = await db.InviteCodes.AsNoTracking().ToListAsync();
+        Assert.True(rows.First(c => c.Code == "EXP1").IsRevoked);
+        Assert.True(rows.First(c => c.Code == "EXP2").IsRevoked);
+        Assert.False(rows.First(c => c.Code == "LIVE").IsRevoked);
+
+        // 幂等：第二次没有可作废的码（定时任务每小时都会跑一次）
+        Assert.Equal(0, await auth.RevokeExpiredInviteCodesAsync());
+        // 未过期码仍然可用：作废后它的状态依旧是 active
+        var view = await auth.GetInviteCodes("admin", 1);
+        Assert.Equal("active", Prop(view.First(r => (string)Prop(r, "Code")! == "LIVE"), "Status") as string);
+    }
 }

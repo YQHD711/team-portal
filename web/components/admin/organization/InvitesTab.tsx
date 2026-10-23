@@ -6,7 +6,18 @@ import { copyText } from "@/lib/clipboard";
 import { Ticket, Plus, X, Copy, Check } from "lucide-react";
 import { Dept } from "./types";
 
-interface InviteCode { id: number; code: string; departmentId: number | null; department: { name: string } | null; maxUses: number; usedCount: number; isRevoked: boolean; expiresAt: string; createdAt: string; }
+type InviteStatus = "active" | "expired" | "used_up" | "revoked";
+
+// 后端 GetInviteCodes 投影出的字段是 DepartmentName（camelCase 序列化为 departmentName），不是嵌套的 department 对象。
+interface InviteCode { id: number; code: string; departmentId: number | null; departmentName: string | null; maxUses: number; usedCount: number; isRevoked: boolean; isExpired: boolean; status: InviteStatus; expiresAt: string; createdAt: string; }
+
+/** 后端按 revoked > expired > used_up > active 的优先级算好 status；前端只负责展示与按钮门禁。 */
+const STATUS_BADGE: Record<InviteStatus, { label: string; className: string }> = {
+  active: { label: "有效", className: "text-success bg-success/10" },
+  expired: { label: "已过期", className: "text-warning bg-warning/10" },
+  revoked: { label: "已作废", className: "text-danger bg-red-50 dark:bg-red-950/40" },
+  used_up: { label: "已用完", className: "text-muted bg-zinc-100 dark:bg-zinc-800" },
+};
 
 export function InvitesTab({ depts, onChanged }: { depts: Dept[]; onChanged: () => void }) {
   const [invites, setInvites] = useState<InviteCode[]>([]);
@@ -51,14 +62,15 @@ export function InvitesTab({ depts, onChanged }: { depts: Dept[]; onChanged: () 
               <div className="flex items-center gap-2">
                 <code className="text-lg font-mono font-bold tracking-wider">{c.code}</code>
                 <button onClick={() => copyCode(c.code)} className="p-1 rounded hover:bg-zinc-100 text-faint">{copied === c.code ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}</button>
-                {c.isRevoked && <span className="text-xs text-danger bg-red-50 px-2 py-0.5 rounded-full">已作废</span>}
+                <span data-testid={`invite-status-${c.status}`} className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[c.status].className}`}>{STATUS_BADGE[c.status].label}</span>
               </div>
               <div className="text-xs text-faint mt-1">
-                部门: {c.department?.name || "不限"} · 使用: {c.usedCount}/{c.maxUses} · 过期: {new Date(c.expiresAt).toLocaleDateString("zh-CN")}
+                部门: {c.departmentName || "不限"} · 使用: {c.usedCount}/{c.maxUses} · 过期: {new Date(c.expiresAt).toLocaleDateString("zh-CN")}
               </div>
             </div>
-            {!c.isRevoked && <button onClick={() => revoke(c.id)} className="text-xs text-danger hover:underline">作废</button>}
-            {c.isRevoked && <button onClick={() => remove(c.id)} className="text-xs text-muted hover:underline">删除</button>}
+            {c.status === "active"
+              ? <button onClick={() => revoke(c.id)} className="text-xs text-danger hover:underline">作废</button>
+              : <button onClick={() => remove(c.id)} className="text-xs text-muted hover:underline">删除</button>}
           </div>
         ))}
       </div>
