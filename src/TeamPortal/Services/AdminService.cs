@@ -43,6 +43,9 @@ public class AdminService
         }
         var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", Slug = Slug.NewUser(), DepartmentId = deptId };
         _db.Users.Add(user); await _db.SaveChangesAsync();
+        // 建用户时同步建空档案：管理端档案列表/详情依赖 PilotProfile 行存在
+        _db.PilotProfiles.Add(new PilotProfile { UserId = user.Id });
+        await _db.SaveChangesAsync();
         _log.Info("admin", $"User created: {username}");
         return user;
     }

@@ -272,6 +272,10 @@ using (var scope = app.Services.CreateScope())
     // 标签模板种子：库里一个模板都没有时建内置默认版式（幂等；响应导出的兜底）
     await scope.ServiceProvider.GetRequiredService<LabelTemplateService>().SeedDefaultIfEmptyAsync();
 
+    // 档案补建：历史用户若从未打开过档案，PilotProfile 行不存在 → 管理端档案列表缺人、
+    // 队员卡片链接的 slug 为空打不开详情（线上 bug）。启动时幂等补齐。
+    await scope.ServiceProvider.GetRequiredService<ProfileService>().EnsureProfilesForAllUsersAsync();
+
     // Seed default departments if empty
     if (!db.Departments.Any())
     {
