@@ -153,7 +153,10 @@ public static class RequestLoggingMiddleware
                 var userId = int.TryParse(context.User?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : (int?)null;
                 var scheme = context.Request.Scheme;
                 var host = context.Request.Host.Value ?? "-";
-                var xff = context.Request.Headers["X-Forwarded-For"].ToString();
+                // 原始 XFF 在 Program.cs 里于 UseForwardedHeaders 之前已存入 Items（中间件会清空该头）
+                var xff = context.Items.TryGetValue("raw_xff", out var rawXff) && rawXff is string rawS
+                    ? rawS
+                    : context.Request.Headers["X-Forwarded-For"].ToString();
                 var userAgent = context.Request.Headers.UserAgent.ToString();
                 long bytes = 0;
                 try { bytes = context.Response.ContentLength ?? 0; } catch { /* 未设置记 0 */ }
