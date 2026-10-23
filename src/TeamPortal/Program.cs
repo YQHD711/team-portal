@@ -349,6 +349,15 @@ var forwarded = ForwardedHeadersSetup.Create(
     builder.Configuration["ForwardedHeaders:KnownNetworks"],
     builder.Configuration["ForwardedHeaders:KnownProxies"],
     int.TryParse(builder.Configuration["ForwardedHeaders:ForwardLimit"], out var forwardLimit) ? forwardLimit : 1);
+// 原始 X-Forwarded-For 必须在 UseForwardedHeaders **之前**抓走：中间件消费后会改写/清空该头，
+// 之后的请求日志就拿不到代理链原文了（https 下排查真实 IP 需要它）。
+app.Use(async (ctx, next) =>
+{
+    var raw = ctx.Request.Headers["X-Forwarded-For"].ToString();
+    if (!string.IsNullOrEmpty(raw)) ctx.Items["raw_xff"] = raw.Length <= 500 ? raw : raw[..500];
+    await next();
+});
+
 if (forwarded is not null)
 {
     app.UseForwardedHeaders(forwarded);

@@ -34,7 +34,17 @@ public static class TlsCertMonitor
                 return;
             }
 
-            using var cert = X509Certificate2.CreateFromPemFile(certPath);
+            // 用 ImportFromPemFile 读整条链（fullchain.pem 里是 leaf + 中间证书）：
+            // CreateFromPemFile 在只给证书文件、不给 key 时，某些 PEM 组合会抛
+            // "The key contents do not contain a PEM..."（生产实测），这里改为按集合导入并取第一张（leaf）。
+            var chain = new X509Certificate2Collection();
+            chain.ImportFromPemFile(certPath);
+            if (chain.Count == 0)
+            {
+                log.Warn(Category, $"TLS 证书文件里没有可解析的证书：{certPath}");
+                return;
+            }
+            using var cert = chain[0];
             var days = (cert.NotAfter.ToUniversalTime() - DateTime.UtcNow).TotalDays;
             var detail = JsonSerializer.Serialize(new
             {
