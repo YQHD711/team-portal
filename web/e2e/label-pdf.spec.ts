@@ -50,8 +50,9 @@ test.describe("物料标签：导出 PDF", () => {
     // 表格行与移动端卡片各有一个标签入口，取当前视口里可见的那个
     await page.getByTitle("物料标签（二维码）").locator("visible=true").first().click();
     await expect(page.getByText("物料标签")).toBeVisible();
-    // 原有打印按钮与新的导出按钮并存
-    await expect(page.getByRole("button", { name: /打印/ })).toBeVisible();
+    // 原有打印（浏览器打印）与新的导出按钮并存；精臣直连按钮也含"打印"二字，必须 exact 匹配
+    await expect(page.getByRole("button", { name: "打印", exact: true })).toBeVisible();
+    await expect(page.getByTestId("niimbot-print")).toBeVisible();
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
