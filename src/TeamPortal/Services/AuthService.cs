@@ -89,6 +89,10 @@ public class AuthService
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
+        // 新用户立即可见档案列表（否则管理端档案列表要等本人打开过 /api/profile 才出现）
+        _db.PilotProfiles.Add(new PilotProfile { UserId = user.Id });
+        await _db.SaveChangesAsync();
+
         _log.Info("auth", $"用户注册成功: {username}", $"{{\"role\":\"{user.Role}\",\"id\":{user.Id}}}", username);
         return user;
     }
@@ -206,6 +210,7 @@ public class AuthService
     {
         var lines = csvContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var imported = 0;
+        var importedUsers = new List<User>();
         var pwd = defaultPassword ?? Guid.NewGuid().ToString("N")[..8];
 
         foreach (var line in lines.Skip(1)) // skip header
@@ -232,10 +237,16 @@ public class AuthService
             }
 
             _db.Users.Add(user);
+            importedUsers.Add(user);
             imported++;
         }
 
         await _db.SaveChangesAsync();
+        if (importedUsers.Count > 0)
+        {
+            _db.PilotProfiles.AddRange(importedUsers.Select(u => new PilotProfile { UserId = u.Id }));
+            await _db.SaveChangesAsync();
+        }
         _log.Info("admin", $"Bulk imported {imported} users from CSV");
         return imported;
     }

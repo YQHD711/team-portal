@@ -242,6 +242,28 @@ public class ProfileService
         return lines;
     }
 
+    /// <summary>
+    /// 给所有缺少 PilotProfile 的用户补建空档案（幂等）。
+    ///
+    /// 背景：档案是"懒创建"的——只有本人打开过 /api/profile 或管理员打开过详情页才会有行。
+    /// 结果是"未打开过档案的队员"（线上实测：两个未分配部门的队员）不在 /api/admin/profiles 列表里，
+    /// 前端用列表构建 slug→user 映射，链接就变成 /admin/profiles/（空 slug）→ 详情页 404。
+    /// 启动时补一次；新用户创建路径也会直接建档案，避免继续产生缺口。
+    /// </summary>
+    public async Task<int> EnsureProfilesForAllUsersAsync()
+    {
+        var missing = await _db.Users.AsNoTracking()
+            .Where(u => !_db.PilotProfiles.Any(p => p.UserId == u.Id))
+            .Select(u => u.Id)
+            .ToListAsync();
+        if (missing.Count == 0) return 0;
+
+        _db.PilotProfiles.AddRange(missing.Select(id => new PilotProfile { UserId = id }));
+        await _db.SaveChangesAsync();
+        _log.Info("profile", $"已为 {missing.Count} 名无档案队员补建空档案");
+        return missing.Count;
+    }
+
     // ── Admin: list all profiles ──
 
     /// <summary>列出档案。departmentId 非空时只返回该部门成员(部长视角)。</summary>

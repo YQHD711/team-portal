@@ -362,6 +362,28 @@ public class AuthServiceTests
         Assert.False(AuthService.IsLockoutActive(now.AddMinutes(-1), now));   // 已过期
         Assert.True(AuthService.IsLockoutActive(now.AddSeconds(1), now));     // 仍在锁定期
     }
+
+    [Fact]
+    public async Task Register_CreatesPilotProfileImmediately()
+    {
+        var db = CreateContext();
+        var auth = new AuthService(db, CreateConfig(), CreateLogService(db), CreateSettings(db));
+        // 邀请码外键指向创建者，先种一个创建者用户
+        var creator = new User { Username = "creator", PasswordHash = "x", Role = "admin", Slug = "u_creator" };
+        db.Users.Add(creator);
+        await db.SaveChangesAsync();
+        db.InviteCodes.Add(new InviteCode
+        {
+            Code = "REGPROFILE", MaxUses = 1, CreatedByUserId = creator.Id,
+            ExpiresAt = DateTime.UtcNow.AddDays(1),
+        });
+        await db.SaveChangesAsync();
+
+        var user = await auth.Register("newbie", "password123", "REGPROFILE");
+
+        Assert.NotNull(user);
+        Assert.True(await db.PilotProfiles.AnyAsync(p => p.UserId == user!.Id));
+    }
 }
 
 /// <summary>Minimal IServiceScopeFactory for SettingsService in tests.</summary>
@@ -399,4 +421,5 @@ internal class NullLogService : LogService
         : base(scopeFactory, Microsoft.Extensions.Logging.Abstractions.NullLogger<LogService>.Instance, null!)
     {
     }
+
 }
