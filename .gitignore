@@ -89,3 +89,5 @@ deploy/auto-deploy.log
 # 安全审查报告/分报告含未修复漏洞的利用细节：修复部署到生产前不要提交到公开仓库（本地留存）
 docs/安全审查报告-*.md
 docs/audit-*/
+# 厂商（精臣 NIIMBOT）打印 SDK 原始交付包：仅用于查文档/重新 vendor，运行时不需要
+/_sdk_jc/
