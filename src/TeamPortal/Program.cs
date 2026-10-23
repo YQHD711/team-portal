@@ -424,6 +424,7 @@ app.MapWikiEndpoints();
 app.MapBaiduEndpoints();
 app.MapNotificationEndpoints();
 app.MapFileEndpoints();
+app.MapDownloadEndpoints();
 app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
 app.MapChatEndpoints();
