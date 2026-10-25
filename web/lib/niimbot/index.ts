@@ -6,6 +6,7 @@ export {
   NiimbotPrinter, parseUsbDevices, parseWifiDevices,
   type NiimbotClientOptions, type NiimbotPrintOptions, type NiimbotProgress,
 } from "./client";
+export { runPrintJob, runPrintJobPages, type PrintJobProgress } from "./printJob";
 export { mapLabelToPrintPage, mapLabelElement, ptToMm, horizontalAlign, isK3wCommonSize, k3wSizeWarning, K3W_COMMON_SIZE } from "./labelMapping";
 export { friendlyError, NiimbotError, noWifiDevicesError, serviceUnavailableError, type NiimbotStage } from "./errors";
 export type { NiimbotPrintPage, NiimbotPrintElement, PrinterDevice, WifiPrinterDevice } from "./protocol";

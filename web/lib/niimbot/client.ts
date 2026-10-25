@@ -14,7 +14,7 @@ import Socket from "./Socket";
 import {
   friendlyError, jobError, NiimbotError, noWifiDevicesError, serviceUnavailableError, type NiimbotStage,
 } from "./errors";
-import { runPrintJob } from "./printJob";
+import { runPrintJobPages } from "./printJob";
 import type {
   NiimbotPrintPage, NiimbotResponse, NiimbotSocketLike, PrinterDevice, WifiPrinterDevice,
 } from "./protocol";
@@ -340,12 +340,15 @@ export class NiimbotPrinter {
     return `data:${mimeType};base64,${imageData}`;
   }
 
-  /** 单页打印：生命周期在 printJob.ts（startJob → commitJob ok! → 绘制 → commitJob → 进度 → endJob） */
-  async print(page: NiimbotPrintPage, options: NiimbotPrintOptions = {}): Promise<void> {
+  /**
+   * 多页打印：pages 长度 = 页数，copies = **每页**份数；
+   * 生命周期在 printJob.ts（startJob(页数×份数) → 逐页 commitJob → endJob）。
+   */
+  async printPages(pages: NiimbotPrintPage[], options: NiimbotPrintOptions = {}): Promise<void> {
     const api = this.assertReady("print");
     try {
-      await runPrintJob(
-        { api, page, draw: (p, onProgress) => this.draw(p, onProgress), call: (name, stage, run) => this.call(name, stage, run) },
+      await runPrintJobPages(
+        { api, pages, draw: (p, onProgress) => this.draw(p, onProgress), call: (name, stage, run) => this.call(name, stage, run) },
         {
           copies: Math.max(1, Math.floor(options.copies ?? 1)),
           density: options.density ?? 3,
@@ -358,6 +361,11 @@ export class NiimbotPrinter {
     } catch (error) {
       throw this.normalizeError(error, "print");
     }
+  }
+
+  /** 单页兼容入口：内部走 printPages([page]) */
+  async print(page: NiimbotPrintPage, options: NiimbotPrintOptions = {}): Promise<void> {
+    await this.printPages([page], options);
   }
 
   /** 断开打印机并关闭本机打印服务 WebSocket（不删任务：调用方负责先取消） */

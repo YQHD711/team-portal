@@ -204,6 +204,45 @@ describe("精臣 K3W 客户端 · 预览与打印", () => {
     expect(names.indexOf("endJob")).toBeGreaterThan(names.indexOf("commitJob"));
   });
 
+  it("多页打印：startJob(页数×份数) → 逐页 commitJob(每页份数) → endJob", async () => {
+    const socket = new FakeSocket();
+    const client = new NiimbotPrinter({ socketFactory: () => socket, jobTimeoutMs: 2000 });
+    await client.connect();
+    const page2 = mapLabelToPrintPage(template, {
+      ...data, code: "BAT-002", url: "https://team.example.com/i/BAT-002",
+    });
+    const progress: string[] = [];
+
+    const printing = client.printPages([page, page2], { copies: 2, onProgress: p => progress.push(p.message) });
+
+    const commitCount = () => socket.requests.filter(r => r.apiName === "commitJob").length;
+    const commitQuantity = (index: number) => {
+      const commits = socket.requests.filter(r => r.apiName === "commitJob");
+      const parameter = commits[index]?.parameter as { printerImageProcessingInfo?: { printQuantity?: number } } | undefined;
+      return parameter?.printerImageProcessingInfo?.printQuantity;
+    };
+
+    await until(() => socket.sent("startJob"), "startJob 请求");
+    const start = socket.requests.find(r => r.apiName === "startJob");
+    expect((start?.parameter as { count: number }).count).toBe(4); // 2 页 × 2 份
+
+    socket.emit({ apiName: "commitJob", resultAck: { errorCode: 0, info: "commitJob ok!" } });
+    await until(() => commitCount() === 1, "第 1 页 commitJob");
+    expect(commitQuantity(0)).toBe(2);
+
+    socket.emit({ apiName: "commitJob", resultAck: { errorCode: 0, printPages: 1, printCopies: 2 } });
+    socket.emit({ apiName: "commitJob", resultAck: { errorCode: 0, info: "commitJob ok!" } });
+    await until(() => commitCount() === 2, "第 2 页 commitJob");
+    expect(commitQuantity(1)).toBe(2);
+
+    socket.emit({ apiName: "commitJob", resultAck: { errorCode: 0, printPages: 2, printCopies: 2 } });
+    await printing;
+
+    expect(socket.sent("endJob")).toBe(true);
+    expect(socket.requests.filter(r => r.apiName === "InitDrawingBoard")).toHaveLength(2);
+    expect(progress.some(m => m.includes("2 页"))).toBe(true);
+  });
+
   it("打印异常（缺纸）：翻译成中文错误并停止任务", async () => {
     const socket = new FakeSocket();
     const client = new NiimbotPrinter({ socketFactory: () => socket, jobTimeoutMs: 1000 });

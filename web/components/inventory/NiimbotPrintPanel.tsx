@@ -11,7 +11,8 @@ import {
 
 interface Props {
   template: LabelTemplate;
-  data: LabelData;
+  /** 批量打印：每项一张标签；长度 1 时行为与单张一致 */
+  dataList: LabelData[];
 }
 
 type PanelStatus = "idle" | "connecting" | "connected" | "printing" | "error";
@@ -53,7 +54,7 @@ function storeMode(mode: ConnectionMode): void {
  * 折叠策略：桌面默认展开（右侧操作区常驻），移动端默认折叠成一行标题，避免长面板把按钮挤出屏幕。
  * 连接失败一律给可执行提示 +「改用导出 PDF」的退路（HTTPS 下浏览器可能拦截本机 ws）。
  */
-export default function NiimbotPrintPanel({ template, data }: Props) {
+export default function NiimbotPrintPanel({ template, dataList }: Props) {
   const [expanded, setExpanded] = useState(true);
   // 首帧固定 USB（SSR 无 localStorage，避免 hydration 不一致）；挂载后再恢复上次选择
   const [mode, setMode] = useState<ConnectionMode>("usb");
@@ -177,13 +178,19 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
     }
   };
 
+  /** 多张：每个 LabelData 映射成一页；预览只看第一张（批量预览成本高且意义有限） */
+  const buildPages = () => dataList.map(item => mapLabelToPrintPage(template, item));
+
   const handlePreview = async () => {
     setError(null);
     setProgress("正在生成打印预览…");
     try {
-      const url = await client().preview(mapLabelToPrintPage(template, data), 8, next => setProgress(next.message));
+      const pages = buildPages();
+      const url = await client().preview(pages[0], 8, next => setProgress(next.message));
       setPreviewUrl(url);
-      setProgress("预览生成成功，确认版式后点「直连打印」");
+      setProgress(total > 1
+        ? `已生成第 1/${total} 张预览（只预览第一张，实际会连续打印 ${total} 张）`
+        : "预览生成成功，确认版式后点「直连打印」");
     } catch (err) {
       fail(err);
     }
@@ -194,12 +201,12 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
     setStatus("printing");
     setProgress("正在启动打印任务…");
     try {
-      await client().print(mapLabelToPrintPage(template, data), {
+      await client().printPages(buildPages(), {
         copies: Math.max(1, Math.floor(copies) || 1),
         onProgress: next => setProgress(next.message),
       });
       setStatus("connected");
-      setProgress("打印完成");
+      setProgress(total > 1 ? `打印完成（${total} 张）` : "打印完成");
     } catch (err) {
       fail(err);
     }
@@ -228,6 +235,7 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
   const busy = status === "connecting" || status === "printing";
   const connected = status === "connected" || (status === "printing" && Boolean(deviceName));
   const sizeWarning = k3wSizeWarning(template);
+  const total = dataList.length;
 
   return (
     <section data-testid="niimbot-panel" className="rounded-xl border border-border bg-surface-subtle print:hidden">
@@ -237,6 +245,11 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
         <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold">
           <Printer className="h-4 w-4 shrink-0" />
           <span className="truncate">直连打印（精臣 K3W）</span>
+          {total > 1 && (
+            <span data-testid="niimbot-count" className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              {total} 张
+            </span>
+          )}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <span data-testid="niimbot-status" data-status={status}
@@ -368,7 +381,7 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
               title={connected ? "按当前模板直连打印" : "请先连接打印机"}
               className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50">
               {status === "printing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
-              {status === "printing" ? "打印中…" : "直连打印"}
+              {status === "printing" ? "打印中…" : total > 1 ? `打印 ${total} 张` : "直连打印"}
             </button>
           </div>
 

@@ -18,6 +18,8 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
 });
 import { type InventoryFormState, type InventoryItem, type Transaction, emptyInventoryForm } from "@/components/inventory/inventoryTypes";
 import ItemLabelModal from "@/components/inventory/ItemLabelModal";
+import BatchLabelPrintModal from "@/components/inventory/BatchLabelPrintModal";
+import { toMaterialLabelDataList } from "@/components/inventory/batchLabelData";
 import ScanQueryModal from "@/components/inventory/ScanQueryModal";
 import type { RoomLayoutOption } from "@/components/inventory/locationOptions";
 import { useLowStock } from "@/components/inventory/LowStockProvider";
@@ -36,6 +38,9 @@ export default function InventoryPage() {
   const [genCodeLoading, setGenCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState("");
   const [labelItem, setLabelItem] = useState<InventoryItem | null>(null);
+  /** 批量直连打印多选（仅 staff 可见） */
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchPrintOpen, setBatchPrintOpen] = useState(false);
   const [showScan, setShowScan] = useState(false);
   /** 二维码短链的对外地址（后端下发，见 App:PublicBaseUrl） */
   const [publicBase, setPublicBase] = useState("");
@@ -52,6 +57,18 @@ export default function InventoryPage() {
   const isStaff = role === "admin" || role === "部长";
   // 低库存阈值由后端设置下发（同一来源驱动仪表盘、库存页与库存预警通知）
   const { threshold } = useLowStock();
+
+  /** 批量打印的短链基准：与单张弹窗完全同源（后端 PublicBaseUrl 优先） */
+  const labelBaseUrl = publicBase || (typeof window === "undefined" ? "" : window.location.origin);
+  const selectedItems = items.filter(i => selectedIds.has(i.id));
+  const allSelected = items.length > 0 && items.every(i => selectedIds.has(i.id));
+  const toggleSelect = (id: number) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => setSelectedIds(prev =>
+    prev.size === items.length ? new Set() : new Set(items.map(i => i.id)));
 
   const calcGrade = (price: number) => price >= 1000 ? "A" : price >= 100 ? "B" : "C";
   const [txItem, setTxItem] = useState<InventoryItem | null>(null);
@@ -247,9 +264,28 @@ export default function InventoryPage() {
 
       <InventoryFilters search={search} onSearch={setSearch} category={category} onCategory={setCategory} categories={categories} />
 
+      {/* 批量直连打印（仅 staff）：勾选后出现，打开批量弹窗 */}
+      {isStaff && selectedIds.size > 0 && (
+        <div data-testid="batch-print-bar"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+          <span className="text-sm text-muted">已选 {selectedIds.size} 项</span>
+          <button type="button" data-testid="batch-direct-print"
+            onClick={() => setBatchPrintOpen(true)}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+            批量直连打印（{selectedIds.size}）
+          </button>
+          <button type="button" onClick={() => setSelectedIds(new Set())}
+            className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-surface-hover">
+            取消选择
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <InventoryTable items={items} loading={loading} role={role}
-          onTake={handleTake} onLabel={setLabelItem} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete} />
+          onTake={handleTake} onLabel={setLabelItem} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete}
+          selectable={isStaff} selectedIds={selectedIds} onToggleSelect={toggleSelect}
+          allSelected={allSelected} onToggleSelectAll={toggleSelectAll} />
 
         <div className="rounded-xl border border-border bg-surface p-4">
           <h3 className="font-medium text-sm mb-3">分类分布</h3>
@@ -285,8 +321,16 @@ export default function InventoryPage() {
 
       {/* 物料标签（二维码 + 短链） */}
       {labelItem && (
-        <ItemLabelModal item={labelItem} baseUrl={publicBase || (typeof window === "undefined" ? "" : window.location.origin)}
-          baseLooksLocal={publicBaseLooksLocal} onClose={() => setLabelItem(null)} />
+        <ItemLabelModal item={labelItem} baseUrl={labelBaseUrl}
+          baseLooksLocal={publicBaseLooksLocal} canDirectPrint={isStaff} onClose={() => setLabelItem(null)} />
+      )}
+
+      {/* 批量直连打印（仅 staff）：多选物料 → 连续打印多张标签 */}
+      {isStaff && batchPrintOpen && (
+        <BatchLabelPrintModal
+          title={`批量打印物料标签（${selectedItems.length} 项）`}
+          dataList={toMaterialLabelDataList(selectedItems, labelBaseUrl)}
+          onClose={() => setBatchPrintOpen(false)} />
       )}
 
       {/* 二维码查询：扫码 / 输码 / 扫码枪 */}

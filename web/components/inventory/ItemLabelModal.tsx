@@ -6,6 +6,7 @@ import { Printer, X, Copy, Check, FileDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { DEFAULT_TEMPLATE, normalizeTemplates, type LabelData, type LabelTemplate } from "@/lib/labelTemplate";
 import type { InventoryItem } from "./inventoryTypes";
+import { toMaterialLabelData } from "./batchLabelData";
 import NiimbotPrintPanel from "./NiimbotPrintPanel";
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   baseUrl: string;
   /** 地址看起来是 localhost/回环 —— 印出去队员扫不开，打印前要提醒 */
   baseLooksLocal?: boolean;
+  /** 直连打印仅部长/管理员可用；PDF/浏览器打印不受影响。缺省 true 便于组件级测试 */
+  canDirectPrint?: boolean;
   onClose: () => void;
 }
 
@@ -29,21 +32,18 @@ interface Props {
  * 布局：移动端单列（预览 → 操作），lg 起双栏（左预览+模板 / 右打印方式），
  * 弹窗自身滚动，避免低矮屏幕把底部按钮顶出视野。
  */
-export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose }: Props) {
+export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirectPrint = true, onClose }: Props) {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
   /** 模板列表：接口没上线/失败/返回空 → 只剩内置兜底模板，导出照旧可用 */
   const [templates, setTemplates] = useState<LabelTemplate[]>([DEFAULT_TEMPLATE]);
   const [templateId, setTemplateId] = useState<number>(DEFAULT_TEMPLATE.id);
-  const code = item.code ?? "";
-  const url = `${baseUrl.replace(/\/+$/, "")}/i/${encodeURIComponent(code)}`;
-  const selectedTemplate = templates.find(t => t.id === templateId) ?? templates[0] ?? DEFAULT_TEMPLATE;
   /** 直连打印与导出 PDF 用同一份物料数据，避免两条路径印出不同内容 */
-  const labelData: LabelData = {
-    code, url, name: item.name,
-    grade: item.grade, locationCode: item.locationCode, category: item.category,
-  };
+  const labelData: LabelData = toMaterialLabelData(item, baseUrl);
+  const code = labelData.code;
+  const url = labelData.url;
+  const selectedTemplate = templates.find(t => t.id === templateId) ?? templates[0] ?? DEFAULT_TEMPLATE;
 
   useEffect(() => {
     let cancelled = false;
@@ -146,8 +146,8 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, onClose 
                 </p>
               )}
 
-              {/* 直连打印（精臣 K3W）：需本机安装打印服务；失败时可继续用导出 PDF */}
-              <NiimbotPrintPanel template={selectedTemplate} data={labelData} />
+              {/* 直连打印（精臣 K3W）：仅部长/管理员可见；PDF/浏览器打印保持原权限 */}
+              {canDirectPrint && <NiimbotPrintPanel template={selectedTemplate} dataList={[labelData]} />}
 
               <div data-testid="label-action-buttons" className="grid grid-cols-2 gap-2 print:hidden">
                 <button type="button" onClick={() => window.print()}
