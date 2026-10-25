@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, Printer } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, Printer, Wifi } from "lucide-react";
 import { api } from "@/lib/api";
 import { downloadErrorMessage, saveBlob } from "@/lib/download";
 import type { LabelData, LabelTemplate } from "@/lib/labelTemplate";
-import { NiimbotPrinter, friendlyError, k3wSizeWarning, mapLabelToPrintPage } from "@/lib/niimbot";
+import {
+  NiimbotPrinter, friendlyError, k3wSizeWarning, mapLabelToPrintPage, type WifiPrinterDevice,
+} from "@/lib/niimbot";
 
 interface Props {
   template: LabelTemplate;
@@ -22,6 +24,28 @@ const STATUS_TEXT: Record<PanelStatus, string> = {
   error: "连接失败",
 };
 
+type ConnectionMode = "usb" | "wifi";
+
+const MODE_STORAGE_KEY = "niimbot-connection-mode";
+
+/** 记住上次连接方式（隐私模式下 localStorage 可能抛异常，一律降级为 USB） */
+function readStoredMode(): ConnectionMode {
+  if (typeof window === "undefined") return "usb";
+  try {
+    return window.localStorage.getItem(MODE_STORAGE_KEY) === "wifi" ? "wifi" : "usb";
+  } catch {
+    return "usb";
+  }
+}
+
+function storeMode(mode: ConnectionMode): void {
+  try {
+    window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+  } catch {
+    /* 存不了不影响本次使用 */
+  }
+}
+
 /**
  * 物料标签弹窗里的「直连打印（精臣 K3W）」区块。
  *
@@ -31,6 +55,13 @@ const STATUS_TEXT: Record<PanelStatus, string> = {
  */
 export default function NiimbotPrintPanel({ template, data }: Props) {
   const [expanded, setExpanded] = useState(true);
+  // 首帧固定 USB（SSR 无 localStorage，避免 hydration 不一致）；挂载后再恢复上次选择
+  const [mode, setMode] = useState<ConnectionMode>("usb");
+  const [connectedMode, setConnectedMode] = useState<ConnectionMode | null>(null);
+  const [wifiDevices, setWifiDevices] = useState<WifiPrinterDevice[]>([]);
+  const [selectedWifi, setSelectedWifi] = useState<string | null>(null);
+  const [scanningWifi, setScanningWifi] = useState(false);
+  const [wifiHint, setWifiHint] = useState("");
   const [status, setStatus] = useState<PanelStatus>("idle");
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
@@ -42,6 +73,11 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
   const clientRef = useRef<NiimbotPrinter | null>(null);
 
   useEffect(() => () => { void clientRef.current?.disconnect(); }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 读取 localStorage 只能在挂载后做，否则 SSR/hydration 不一致
+    setMode(readStoredMode());
+  }, []);
 
   /** 移动端（< md）默认折叠；jsdom 没有 matchMedia，测试环境按桌面展开处理 */
   useEffect(() => {
@@ -59,6 +95,7 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
         onConnectionChange: open => {
           if (open) return;
           setDeviceName(null);
+          setConnectedMode(null);
           setStatus(current => (current === "printing" ? current : "idle"));
         },
       });
@@ -72,6 +109,16 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
     setProgress("");
   };
 
+  const changeMode = (next: ConnectionMode) => {
+    setMode(next);
+    storeMode(next);
+    setWifiHint("");
+    if (next === "usb") {
+      setWifiDevices([]);
+      setSelectedWifi(null);
+    }
+  };
+
   const handleConnect = async () => {
     setError(null);
     setPreviewUrl(null);
@@ -80,8 +127,51 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
     try {
       const device = await client().connect(next => setProgress(next.message));
       setDeviceName(device.name);
+      setConnectedMode("usb");
       setStatus("connected");
-      setProgress(`已连接 ${device.name}`);
+      setProgress(`已连接 ${device.name}（USB）`);
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  /** Wi-Fi 搜索：SDK 侧约 25 秒超时；无设备不是"连接失败"，单列排查提示 */
+  const handleScanWifi = async () => {
+    setError(null);
+    setPreviewUrl(null);
+    setWifiHint("");
+    setWifiDevices([]);
+    setSelectedWifi(null);
+    setScanningWifi(true);
+    setProgress("正在搜索 Wi-Fi 打印机（最长约 25 秒）…");
+    try {
+      const devices = await client().discoverWifi(next => setProgress(next.message));
+      setWifiDevices(devices);
+      setSelectedWifi(devices[0]?.deviceName ?? null);
+      setProgress(`发现 ${devices.length} 台 Wi-Fi 打印机，选择后点「连接」`);
+    } catch (err) {
+      const friendly = friendlyError(err);
+      setWifiHint(friendly.recovery ? `${friendly.message}\n${friendly.recovery}` : friendly.message);
+      setProgress("");
+    } finally {
+      setScanningWifi(false);
+    }
+  };
+
+  const handleConnectWifi = async () => {
+    const device = wifiDevices.find(item => item.deviceName === selectedWifi);
+    if (!device) return;
+    setError(null);
+    setPreviewUrl(null);
+    setWifiHint("");
+    setStatus("connecting");
+    setProgress("正在连接 Wi-Fi 打印机…");
+    try {
+      await client().connectWifi(device, next => setProgress(next.message));
+      setDeviceName(device.deviceName);
+      setConnectedMode("wifi");
+      setStatus("connected");
+      setProgress(`已连接 ${device.deviceName}（Wi-Fi）`);
     } catch (err) {
       fail(err);
     }
@@ -150,8 +240,9 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <span data-testid="niimbot-status" data-status={status}
-            className={`max-w-[9rem] truncate rounded-full px-2 py-0.5 text-[11px] font-medium ${connected ? "bg-success/15 text-success" : status === "error" ? "bg-danger/15 text-danger" : "bg-surface-hover text-muted"}`}>
-            {STATUS_TEXT[status]}{deviceName ? `：${deviceName}` : ""}
+            data-mode={connectedMode ?? undefined}
+            className={`max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[11px] font-medium ${connected ? "bg-success/15 text-success" : status === "error" ? "bg-danger/15 text-danger" : "bg-surface-hover text-muted"}`}>
+            {STATUS_TEXT[status]}{deviceName ? `：${deviceName}` : ""}{connectedMode ? `（${connectedMode === "wifi" ? "Wi-Fi" : "USB"}）` : ""}
           </span>
           <ChevronDown className={`h-4 w-4 text-muted transition-transform ${expanded ? "rotate-180" : ""}`} />
         </span>
@@ -188,27 +279,90 @@ export default function NiimbotPrintPanel({ template, data }: Props) {
             </p>
           )}
 
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          {/* 未连接时可选连接方式；连上后隐藏切换，避免误切导致状态不一致 */}
+          {!connected && (
+            <div role="group" aria-label="连接方式"
+              className="mt-2 grid grid-cols-2 gap-1 rounded-lg border border-border bg-background p-1">
+              <button type="button" data-testid="niimbot-mode-usb" aria-pressed={mode === "usb"}
+                onClick={() => changeMode("usb")} disabled={busy}
+                className={`min-h-10 rounded-md text-xs font-medium ${mode === "usb" ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}>
+                USB
+              </button>
+              <button type="button" data-testid="niimbot-mode-wifi" aria-pressed={mode === "wifi"}
+                onClick={() => changeMode("wifi")} disabled={busy}
+                className={`min-h-10 rounded-md text-xs font-medium ${mode === "wifi" ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}>
+                Wi-Fi
+              </button>
+            </div>
+          )}
+
+          {mode === "usb" ? (
             <button type="button" onClick={() => void handleConnect()} disabled={busy || connected}
               data-testid="niimbot-connect"
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
+              className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
               {status === "connecting" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
-              <span className="truncate">{connected ? "已连接" : "连接打印机"}</span>
+              <span className="truncate">{connected ? "已连接" : "连接打印机（USB）"}</span>
             </button>
-            <button type="button" onClick={() => void handlePreview()} disabled={!connected || busy}
-              data-testid="niimbot-preview-button"
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
-              预览
-            </button>
-          </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => void handleScanWifi()} disabled={scanningWifi || busy || connected}
+                  data-testid="niimbot-wifi-scan"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
+                  {scanningWifi ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wifi className="h-3.5 w-3.5" />}
+                  <span className="truncate">{scanningWifi ? "搜索中…" : connected ? "已连接" : "搜索 Wi-Fi 打印机"}</span>
+                </button>
+                <button type="button" onClick={() => void handleConnectWifi()} disabled={!selectedWifi || busy || connected}
+                  data-testid="niimbot-wifi-connect"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
+                  连接
+                </button>
+              </div>
 
-          <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+              {wifiDevices.length > 0 && (
+                <ul data-testid="niimbot-wifi-list" className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border bg-background p-1">
+                  {wifiDevices.map((device, index) => (
+                    <li key={`${device.deviceName}-${device.tcpPort}`}>
+                      <label className={`flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs ${selectedWifi === device.deviceName ? "bg-primary/10 text-primary" : ""}`}>
+                        <input type="radio" name="niimbot-wifi-device" className="h-4 w-4 shrink-0"
+                          data-testid={`niimbot-wifi-device-${index}`}
+                          checked={selectedWifi === device.deviceName}
+                          onChange={() => setSelectedWifi(device.deviceName)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{device.deviceName}</span>
+                          {device.ipAddress && <span className="block font-mono text-[10px] text-faint">{device.ipAddress}</span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {wifiHint && (
+                <p data-testid="niimbot-wifi-hint"
+                  className="whitespace-pre-wrap rounded border-l-2 border-warning bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                  {wifiHint}
+                </p>
+              )}
+
+              <p className="text-[10px] leading-snug text-faint">
+                Wi-Fi 需先在精臣官方 App 里完成 2.4GHz 配网；电脑与打印机要连同一个局域网。
+              </p>
+            </div>
+          )}
+
+          <div className="mt-2 grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2">
             <label className="inline-flex min-h-10 items-center gap-1 text-xs text-muted">
               份数
               <input type="number" min={1} max={20} value={copies} data-testid="niimbot-copies"
                 onChange={e => setCopies(Number(e.target.value) || 1)}
                 className="min-h-10 w-14 rounded-lg border border-border bg-background px-2 py-1 text-xs" />
             </label>
+            <button type="button" onClick={() => void handlePreview()} disabled={!connected || busy}
+              data-testid="niimbot-preview-button"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
+              预览
+            </button>
             <button type="button" onClick={() => void handlePrint()} disabled={!connected || busy}
               data-testid="niimbot-print"
               title={connected ? "按当前模板直连打印" : "请先连接打印机"}

@@ -58,6 +58,16 @@ export interface PrinterDevice {
   port: number;
 }
 
+/**
+ * scanWifiPrinter 返回的 Wi-Fi 设备。
+ * 打印服务原始字段是 deviceName/tcpPort/ipAddress；解析层兼容大小写与 JSON 字符串。
+ */
+export interface WifiPrinterDevice {
+  deviceName: string;
+  tcpPort: number;
+  ipAddress?: string;
+}
+
 /** initSdk 参数 */
 export interface InitSdkParam {
   /** 字体目录；当前服务版本不生效，传 "" 即可 */

@@ -46,7 +46,10 @@ const JOB_ERRORS: Record<number, [string, string | undefined]> = {
   16: ["纸张类型错误", "请检查标签纸类型（K3W 支持间隙纸/黑标纸/透明纸）"],
   20: ["标签损坏或不是 RFID 标签", "请换正品标签纸"],
   22: ["与打印服务通讯超时/异常", "请确认打印服务在运行、USB 线连接稳定后重试"],
-  23: ["打印机连接已断开", "请重新连接打印机（拔插 USB 或重新上电）"],
+  23: [
+    "打印机连接已断开",
+    "USB：拔插数据线或给打印机重新上电后重试；Wi-Fi：确认打印机与电脑在同一局域网、打印机在线（可先在官方 App 里看设备状态），必要时重新给打印机上电。",
+  ],
   28: ["标签纸异常", "请按打印机右键重新定位标签"],
   30: ["浓度设置异常", "K3W 浓度取值 1~5，请重新设置"],
   31: ["打印模式异常", "K3W 只支持热敏模式（printMode=1）"],
@@ -77,6 +80,18 @@ export function serviceUnavailableError(loopbackOptionAccepted: boolean): Niimbo
     "无法连接本机打印服务（ws://127.0.0.1:37989），可能是打印服务未安装/未启动，或浏览器拦截了本机 ws 连接。",
     { recovery },
   );
+}
+
+/** scanWifiPrinter 没搜到设备：排查点必须覆盖 2.4GHz / 同网段 / 防火墙 */
+export function noWifiDevicesError(): NiimbotError {
+  return new NiimbotError("discover", "未发现 Wi-Fi 打印机", {
+    recovery: [
+      "1) 打印机只支持 2.4GHz Wi-Fi：请先在精臣官方 App/软件里用 USB 完成 2.4GHz 配网，5GHz 网络搜不到。",
+      "2) 电脑与打印机必须在同一局域网/同一网段，且没有开启 AP 隔离或访客网络隔离。",
+      "3) 确认 K3W 已开机、Wi-Fi 图标正常；必要时给打印机重新上电后再搜。",
+      "4) 仍搜不到：检查 Windows 防火墙/安全软件是否拦截了打印服务；也可改用 USB 连接或「导出 PDF」打印。",
+    ].join("\n"),
+  });
 }
 
 /** 把任意异常翻译成可展示的 message/recovery */
