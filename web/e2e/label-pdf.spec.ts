@@ -52,7 +52,9 @@ test.describe("物料标签：导出 PDF", () => {
     await expect(page.getByText("物料标签")).toBeVisible();
     // 原有打印（浏览器打印）与新的导出按钮并存；精臣直连按钮也含"打印"二字，必须 exact 匹配
     await expect(page.getByRole("button", { name: "打印", exact: true })).toBeVisible();
-    await expect(page.getByTestId("niimbot-print")).toBeVisible();
+    // 权限：member 不渲染精臣直连面板（仅 admin/部长可用），但 PDF 导出保留
+    await expect(page.getByTestId("niimbot-print")).toHaveCount(0);
+    await expect(page.getByTestId("export-label-pdf")).toBeVisible();
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),

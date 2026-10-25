@@ -16,13 +16,22 @@ vi.mock("@/components/inventory/CategoryDonut", () => ({
   default: () => null,
 }));
 
+// 批量弹窗：只捕获传入的 dataList，不渲染（面板本身另有单测）
+const batchCapture = vi.hoisted(() => ({ dataList: [] as { code: string; url: string }[] }));
+vi.mock("@/components/inventory/BatchLabelPrintModal", () => ({
+  default: (props: { dataList: { code: string; url: string }[] }) => {
+    batchCapture.dataList = props.dataList;
+    return null;
+  },
+}));
+
 const mockedGet = vi.mocked(api.get as (endpoint: string) => Promise<unknown>);
 const mockedUseCurrentUser = vi.mocked(useCurrentUser);
 
 const items = [
-  { id: 1, name: "桨叶", category: "动力系统", quantity: 2, locationCode: "201-01-A-01", status: "available", grade: "B", unitPrice: 45, updatedAt: "2026-09-01T10:00:00Z" },
-  { id: 2, name: "飞控板", category: "飞控系统", quantity: 5, locationCode: "201-02-B-03", status: "in_use", grade: "A", unitPrice: 1200, updatedAt: "2026-09-01T10:00:00Z" },
-  { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "201-01-C-02", status: "available", grade: "C", unitPrice: 0.5, updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 1, name: "桨叶", category: "动力系统", quantity: 2, locationCode: "201-01-A-01", status: "available", grade: "B", unitPrice: 45, code: "PROP-001", updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 2, name: "飞控板", category: "飞控系统", quantity: 5, locationCode: "201-02-B-03", status: "in_use", grade: "A", unitPrice: 1200, code: "FC-002", updatedAt: "2026-09-01T10:00:00Z" },
+  { id: 3, name: "M3螺丝", category: "耗材", quantity: 7, locationCode: "201-01-C-02", status: "available", grade: "C", unitPrice: 0.5, code: "SCREW-003", updatedAt: "2026-09-01T10:00:00Z" },
 ];
 
 const staffUser = { id: 1, username: "admin", role: "admin", department: null, departmentId: null };
@@ -250,6 +259,12 @@ describe("零件库存页", () => {
   });
 
   it("没有编码的物料不显示二维码入口", async () => {
+    mockedGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith("/api/inventory")) return items.map(item => ({ ...item, code: undefined }));
+      if (endpoint === "/api/admin/departments") return [];
+      if (endpoint === "/api/storage/layouts") return [];
+      return {};
+    });
     mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
     render(<InventoryPage />);
 
@@ -301,5 +316,49 @@ describe("零件库存页", () => {
     const warn = await screen.findByTestId("local-base-warning");
     expect(warn).toHaveTextContent(/扫不开/);
     expect(warn).toHaveTextContent(/对外访问地址/);
+  });
+
+  it("staff：多选 3 个物料 → 批量直连打印，dataList 张数与短链正确", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+
+    for (const id of [1, 2, 3]) fireEvent.click(screen.getByTestId(`select-item-${id}`));
+
+    const button = screen.getByTestId("batch-direct-print");
+    expect(button).toHaveTextContent("批量直连打印（3）");
+    fireEvent.click(button);
+
+    await waitFor(() => expect(batchCapture.dataList).toHaveLength(3));
+    expect(batchCapture.dataList.map(d => d.code)).toEqual(["PROP-001", "FC-002", "SCREW-003"]);
+    // 短链规则必须与单张弹窗一致（后端下发的对外地址 / 当前 origin）
+    for (const entry of batchCapture.dataList) {
+      expect(entry.url).toMatch(new RegExp(`/i/${entry.code}$`));
+    }
+  });
+
+  it("非 staff：不渲染多选/批量按钮，单个标签弹窗也不渲染直连打印面板（PDF 导出保留）", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+
+    expect(screen.queryByTestId("select-all-items")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("batch-direct-print")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
+    expect(await screen.findByText("物料标签")).toBeInTheDocument();
+    expect(screen.queryByTestId("niimbot-panel")).not.toBeInTheDocument();
+    // PDF/浏览器打印权限不变
+    expect(screen.getByTestId("export-label-pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打印" })).toBeInTheDocument();
+  });
+
+  it("staff：单个物料标签弹窗渲染直连打印面板", async () => {
+    mockedUseCurrentUser.mockReturnValue({ user: staffUser, loading: false, refresh: vi.fn() });
+    render(<InventoryPage />);
+    await screen.findAllByText("桨叶");
+
+    fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
+    expect(await screen.findByTestId("niimbot-panel")).toBeInTheDocument();
   });
 });

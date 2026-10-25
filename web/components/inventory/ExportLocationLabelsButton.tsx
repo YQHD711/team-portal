@@ -18,7 +18,10 @@ import { elementCells } from "./elementGeometry";
 import type { LabelTemplate } from "@/lib/labelTemplate";
 import { LOCATION_FALLBACK_TEMPLATE } from "@/lib/locationTemplate";
 import { resolveLocationExportTemplate, unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
-import { progressText } from "@/lib/locationLabelPdf";
+import { progressText, toLocationLabelData } from "@/lib/locationLabelPdf";
+import { useCurrentUser } from "@/lib/hooks";
+import type { LabelData } from "@/lib/labelTemplate";
+import BatchLabelPrintModal from "./BatchLabelPrintModal";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
 import {
   buildLocationLabelsPdf, collectLocationSlots, describeBatch, downloadPdf, labelFileName,
@@ -43,6 +46,10 @@ export function roomLocationCodes(items: readonly ItemElement[]): { name: string
 export function ExportLocationLabelsButton({ layout, roomName, template: override }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  /** 直连打印仅部长/管理员；PDF 导出权限不变 */
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
+  const [printData, setPrintData] = useState<{ dataList: LabelData[]; skipped: number } | null>(null);
   const lastProgressAt = useRef(0);   // 进度节流用（见 onProgress 注释）
   // 初始值就是内置**库位**模板（无二维码）：接口还没回来/失败时也不会误用带二维码的物料模板
   const [template, setTemplate] = useState<LabelTemplate>(override ?? LOCATION_FALLBACK_TEMPLATE);
@@ -96,14 +103,35 @@ export function ExportLocationLabelsButton({ layout, roomName, template: overrid
     }
   };
 
+  /** 直连打印：与 PDF 导出同一套取码/模板逻辑，只是把「生成 PDF」换成「连续送打印机」 */
+  const onDirectPrint = () => {
+    const { slots, skipped } = collectLocationSlots(roomLocationCodes(layout.items), roomName);
+    if (slots.length === 0) { setMsg("本屋没有可打印的库位（都未指定库位）"); return; }
+    if (!confirm(describeBatch(slots, skipped))) return;
+    setPrintData({ dataList: slots.map(toLocationLabelData), skipped });
+  };
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <button type="button" data-testid="export-location-labels" onClick={onClick} disabled={busy}
         title="把本屋所有库位编码导出成一个多页 PDF（每页一张标签，可直接送标签机）"
         className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-accent-hover disabled:opacity-60">
         导出本屋库位标签
       </button>
+      {isStaff && (
+        <button type="button" data-testid="direct-print-location-labels" onClick={onDirectPrint} disabled={busy}
+          title="用精臣 K3W 连续打印本屋全部库位标签（仅部长/管理员）"
+          className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+          直连打印库位标签
+        </button>
+      )}
       {msg && <span data-testid="export-location-labels-msg" className="text-[11px] text-muted">{msg}</span>}
+      {printData && (
+        <BatchLabelPrintModal
+          title={`打印本屋库位标签（${printData.dataList.length} 张）`}
+          dataList={printData.dataList} kind="location" skipped={printData.skipped}
+          onClose={() => setPrintData(null)} />
+      )}
     </div>
   );
 }

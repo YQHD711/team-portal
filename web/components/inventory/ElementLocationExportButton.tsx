@@ -19,7 +19,11 @@ import { LOCATION_FALLBACK_TEMPLATE } from "@/lib/locationTemplate";
 import { resolveLocationExportTemplate, unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
 import { collectLocationSlots, describeBatch, downloadPdf, elementLabelFileName } from "@/lib/locationLabelPdf";
 import { buildLocationLabelsVectorPdf, findUnscannableCodes, unscannableWarning } from "@/lib/locationLabelVector";
+import { toLocationLabelData } from "@/lib/locationLabelPdf";
+import { useCurrentUser } from "@/lib/hooks";
+import type { LabelData } from "@/lib/labelTemplate";
 import { roomLocationCodes } from "./ExportLocationLabelsButton";
+import BatchLabelPrintModal from "./BatchLabelPrintModal";
 
 interface Props {
   element: ItemElement;
@@ -30,6 +34,10 @@ interface Props {
 export function ElementLocationExportButton({ element, roomName, template: override }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  /** 直连打印仅部长/管理员；PDF 导出权限不变 */
+  const { user } = useCurrentUser();
+  const isStaff = user?.role === "admin" || user?.role === "部长";
+  const [printData, setPrintData] = useState<{ dataList: LabelData[]; skipped: number } | null>(null);
   // 初始值 = 内置**库位**模板（无二维码）：接口未回来/失败时也不会误用带二维码的物料模板
   const [template, setTemplate] = useState<LabelTemplate>(override ?? LOCATION_FALLBACK_TEMPLATE);
   const lastProgressAt = useRef(0);
@@ -67,14 +75,35 @@ export function ElementLocationExportButton({ element, roomName, template: overr
     }
   };
 
+  /** 直连打印：展开本元素全部真实格位码，连续送打印机（仅 staff） */
+  const onDirectPrint = () => {
+    const { slots, skipped } = collectLocationSlots(roomLocationCodes([element]), roomName);
+    if (slots.length === 0) { setMsg("该元素未指定库位，无可打印的库位标签"); return; }
+    if (!confirm(describeBatch(slots, skipped))) return;
+    setPrintData({ dataList: slots.map(toLocationLabelData), skipped });
+  };
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <button type="button" data-testid="export-element-loc-labels" onClick={onClick} disabled={busy}
         title="导出本元素全部格位的库位标签（每格一张，可直接送标签机）"
         className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-subtle disabled:opacity-60">
         导出本元素库位标签
       </button>
+      {isStaff && (
+        <button type="button" data-testid="direct-print-element-loc-labels" onClick={onDirectPrint} disabled={busy}
+          title="用精臣 K3W 连续打印本元素全部格位的库位标签（仅部长/管理员）"
+          className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+          直连打印库位标签
+        </button>
+      )}
       {msg && <span data-testid="export-element-loc-labels-msg" className="text-[11px] text-muted">{msg}</span>}
+      {printData && (
+        <BatchLabelPrintModal
+          title={`打印本元素库位标签（${printData.dataList.length} 张）`}
+          dataList={printData.dataList} kind="location" skipped={printData.skipped}
+          onClose={() => setPrintData(null)} />
+      )}
     </div>
   );
 }
