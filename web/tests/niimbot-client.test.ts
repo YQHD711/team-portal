@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { LabelData, LabelTemplate } from "@/lib/labelTemplate";
 import { mapLabelToPrintPage } from "@/lib/niimbot/labelMapping";
-import { NiimbotPrinter } from "@/lib/niimbot/client";
+import { NiimbotPrinter, parseWifiDevices } from "@/lib/niimbot/client";
 import { NiimbotError } from "@/lib/niimbot/errors";
 import type { NiimbotRequest, NiimbotResponse, NiimbotSocketLike } from "@/lib/niimbot/protocol";
 
@@ -37,7 +37,11 @@ class FakeSocket implements NiimbotSocketLike {
   private listeners = new Set<(msg: NiimbotResponse) => void>();
   private openChange: ((open: boolean) => void) | null = null;
 
-  constructor(private readonly options: { devices?: Record<string, number>; preview?: string } = {}) {}
+  constructor(private readonly options: {
+    devices?: Record<string, number>;
+    preview?: string;
+    wifiDevices?: unknown[];
+  } = {}) {}
 
   open(openChange?: (open: boolean) => void): Promise<unknown> {
     this.openChange = openChange ?? null;
@@ -61,6 +65,14 @@ class FakeSocket implements NiimbotSocketLike {
       return {
         apiName: "getAllPrinters",
         resultAck: { errorCode: 0, info: JSON.stringify(this.options.devices ?? { "NIIMBOT K3W": 1 }) },
+      };
+    }
+    if (request.apiName === "scanWifiPrinter") {
+      const wifiDevices = this.options.wifiDevices
+        ?? [{ deviceName: "NIIMBOT K3W", tcpPort: 9100, ipAddress: "192.168.1.50" }];
+      return {
+        apiName: "scanWifiPrinter",
+        resultAck: { errorCode: 0, info: JSON.stringify(wifiDevices) },
       };
     }
     if (request.apiName === "generateImagePreviewImage") {
@@ -118,6 +130,7 @@ describe("精臣 K3W 客户端 · 连接", () => {
     expect(device).toEqual({ name: "NIIMBOT K3W", port: 1 });
     expect(client.isConnected).toBe(true);
     expect(client.deviceName).toBe("NIIMBOT K3W");
+    expect(client.connectionMode).toBe("usb");
     expect(socket.requests.map(r => r.apiName)).toEqual(["getAllPrinters", "selectPrinter", "initSdk"]);
   });
 
@@ -216,5 +229,71 @@ describe("精臣 K3W 客户端 · 预览与打印", () => {
     expect(client.isConnected).toBe(false);
     expect(socket.opened).toBe(false);
     expect(socket.sent("closePrinter")).toBe(true);
+  });
+});
+
+describe("精臣 K3W 客户端 · Wi-Fi", () => {
+  const responseWith = (info: unknown): NiimbotResponse => ({
+    resultAck: { errorCode: 0, info: info as string },
+  });
+
+  it("parseWifiDevices：数组 / JSON 字符串 / 大小写 / 缺字段 / 空", () => {
+    const raw = [
+      { deviceName: "K3W-A", tcpPort: 9100, ipAddress: "192.168.1.5" },
+      { DeviceName: "K3W-B", TcpPort: "9101" },
+      { deviceName: "", tcpPort: 9102 },
+      { deviceName: "no-port" },
+      { deviceName: "bad-port", tcpPort: "not-a-number" },
+    ];
+
+    expect(parseWifiDevices(responseWith(raw))).toEqual([
+      { deviceName: "K3W-A", tcpPort: 9100, ipAddress: "192.168.1.5" },
+      { deviceName: "K3W-B", tcpPort: 9101 },
+    ]);
+    expect(parseWifiDevices(responseWith(JSON.stringify(raw)))).toHaveLength(2);
+    expect(parseWifiDevices(responseWith([]))).toEqual([]);
+    expect(parseWifiDevices(responseWith("[]"))).toEqual([]);
+    expect(parseWifiDevices(responseWith("not-json"))).toEqual([]);
+    expect(parseWifiDevices({ resultAck: { errorCode: 0 } })).toEqual([]);
+    expect(parseWifiDevices({})).toEqual([]);
+  });
+
+  it("discoverWifi 走 scanWifiPrinter（不是 getAllPrinters）", async () => {
+    const socket = new FakeSocket();
+    const client = new NiimbotPrinter({ socketFactory: () => socket });
+
+    const devices = await client.discoverWifi();
+
+    expect(devices).toEqual([{ deviceName: "NIIMBOT K3W", tcpPort: 9100, ipAddress: "192.168.1.50" }]);
+    expect(socket.requests.map(r => r.apiName)).toEqual(["scanWifiPrinter"]);
+  });
+
+  it("connectWifi 顺序：connectWifiPrinter → initSdk，且绝不调用 selectPrinter", async () => {
+    const socket = new FakeSocket();
+    const client = new NiimbotPrinter({ socketFactory: () => socket });
+    const [device] = await client.discoverWifi();
+
+    await client.connectWifi(device);
+
+    expect(socket.requests.map(r => r.apiName)).toEqual([
+      "scanWifiPrinter", "connectWifiPrinter", "initSdk",
+    ]);
+    expect(client.isConnected).toBe(true);
+    expect(client.connectionMode).toBe("wifi");
+    expect(client.deviceName).toBe("NIIMBOT K3W");
+    // 关键回归：走 selectPrinter 正是用户之前报错误码 23 的原因
+    expect(socket.sent("selectPrinter")).toBe(false);
+    expect(socket.sent("getAllPrinters")).toBe(false);
+  });
+
+  it("discoverWifi 无设备：可读错误覆盖 2.4GHz / 同网段 / 防火墙", async () => {
+    const client = new NiimbotPrinter({ socketFactory: () => new FakeSocket({ wifiDevices: [] }) });
+    const error = (await client.discoverWifi().catch((err: unknown) => err)) as NiimbotError;
+
+    expect(error).toBeInstanceOf(NiimbotError);
+    expect(error.message).toContain("未发现 Wi-Fi 打印机");
+    expect(error.recovery).toContain("2.4GHz");
+    expect(error.recovery).toContain("同一局域网");
+    expect(error.recovery).toContain("防火墙");
   });
 });

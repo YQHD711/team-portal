@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { LabelData, LabelTemplate } from "@/lib/labelTemplate";
-import { NiimbotError } from "@/lib/niimbot/errors";
+import { NiimbotError, noWifiDevicesError } from "@/lib/niimbot/errors";
 import NiimbotPrintPanel from "@/components/inventory/NiimbotPrintPanel";
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   print: vi.fn(),
   disconnect: vi.fn(),
+  discoverWifi: vi.fn(),
+  connectWifi: vi.fn(),
 }));
 
 const downloadMocks = vi.hoisted(() => ({ download: vi.fn(), saveBlob: vi.fn() }));
@@ -28,6 +30,8 @@ vi.mock("@/lib/niimbot", async importOriginal => {
     preview = mocks.preview;
     print = mocks.print;
     disconnect = mocks.disconnect;
+    discoverWifi = mocks.discoverWifi;
+    connectWifi = mocks.connectWifi;
   }
   return { ...actual, NiimbotPrinter: MockNiimbotPrinter };
 });
@@ -64,9 +68,14 @@ function setViewportMobile(matches: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear(); // 连接方式会记住上次选择，测试间必须隔离
   mocks.connect.mockResolvedValue({ name: "NIIMBOT K3W", port: 1 });
   mocks.preview.mockResolvedValue("data:image/png;base64,QUJD");
   mocks.print.mockResolvedValue(undefined);
+  mocks.discoverWifi.mockResolvedValue([
+    { deviceName: "NIIMBOT K3W", tcpPort: 9100, ipAddress: "192.168.1.50" },
+  ]);
+  mocks.connectWifi.mockImplementation(async (device: unknown) => device);
   downloadMocks.download.mockResolvedValue(new Blob(["exe"], { type: "application/octet-stream" }));
 });
 afterEach(() => {
@@ -194,5 +203,73 @@ describe("精臣 K3W 面板 · 折叠与禁用态", () => {
     await waitFor(() => expect(screen.getByTestId("niimbot-preview-button")).toBeEnabled());
     expect(screen.getByTestId("niimbot-print")).toBeEnabled();
     expect(screen.getByTestId("niimbot-connect")).toBeDisabled();
+  });
+});
+
+describe("精臣 K3W 面板 · Wi-Fi 连接", () => {
+  const wifiDevice = { deviceName: "K3W-HOME", tcpPort: 9100, ipAddress: "192.168.1.50" };
+
+  it("切换到 Wi-Fi：显示搜索/连接控件，USB 连接按钮隐藏，并记住选择", () => {
+    render(<NiimbotPrintPanel template={template} data={data} />);
+    expect(screen.getByTestId("niimbot-connect")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("niimbot-mode-wifi"));
+
+    expect(screen.getByTestId("niimbot-mode-wifi")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("niimbot-mode-usb")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("niimbot-connect")).not.toBeInTheDocument();
+    expect(screen.getByTestId("niimbot-wifi-scan")).toBeInTheDocument();
+    expect(screen.getByTestId("niimbot-wifi-connect")).toBeDisabled();
+    expect(window.localStorage.getItem("niimbot-connection-mode")).toBe("wifi");
+  });
+
+  it("搜索 → 设备列表（名称+IP）→ 选中连接调用 connectWifi（不是 USB）", async () => {
+    mocks.discoverWifi.mockResolvedValue([wifiDevice, { deviceName: "K3W-B", tcpPort: 9101 }]);
+    render(<NiimbotPrintPanel template={template} data={data} />);
+    fireEvent.click(screen.getByTestId("niimbot-mode-wifi"));
+
+    fireEvent.click(screen.getByTestId("niimbot-wifi-scan"));
+    await waitFor(() => expect(mocks.discoverWifi).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("K3W-HOME")).toBeInTheDocument();
+    expect(screen.getByText("192.168.1.50")).toBeInTheDocument();
+    expect(screen.getByTestId("niimbot-wifi-device-0")).toBeChecked();
+    // 默认选中第一台，直接点「连接」
+    fireEvent.click(screen.getByTestId("niimbot-wifi-connect"));
+
+    await waitFor(() => expect(mocks.connectWifi).toHaveBeenCalledTimes(1));
+    expect(mocks.connectWifi.mock.calls[0][0]).toEqual(wifiDevice);
+    await waitFor(() => expect(screen.getByTestId("niimbot-status")).toHaveTextContent("已连接"));
+    expect(screen.getByTestId("niimbot-status")).toHaveTextContent("K3W-HOME");
+    expect(screen.getByTestId("niimbot-status")).toHaveTextContent("（Wi-Fi）");
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
+
+  it("无设备：显示 2.4GHz / 同网段 / 防火墙排查提示", async () => {
+    mocks.discoverWifi.mockRejectedValue(noWifiDevicesError());
+    render(<NiimbotPrintPanel template={template} data={data} />);
+    fireEvent.click(screen.getByTestId("niimbot-mode-wifi"));
+
+    fireEvent.click(screen.getByTestId("niimbot-wifi-scan"));
+
+    const hint = await screen.findByTestId("niimbot-wifi-hint");
+    expect(hint).toHaveTextContent("未发现 Wi-Fi 打印机");
+    expect(hint).toHaveTextContent("2.4GHz");
+    expect(hint).toHaveTextContent("同一局域网");
+    expect(hint).toHaveTextContent("防火墙");
+    expect(screen.getByTestId("niimbot-status")).toHaveTextContent("未连接");
+  });
+
+  it("错误码 23：提示同时覆盖 USB 与 Wi-Fi 的排查", async () => {
+    mocks.connect.mockRejectedValue(new NiimbotError("connect", "打印机连接已断开", { errorCode: 23 }));
+    render(<NiimbotPrintPanel template={template} data={data} />);
+
+    fireEvent.click(screen.getByTestId("niimbot-connect"));
+
+    const errorBox = await screen.findByTestId("niimbot-error");
+    expect(errorBox).toHaveTextContent("打印机连接已断开");
+    expect(errorBox).toHaveTextContent("错误码 23");
+    expect(errorBox).toHaveTextContent("USB");
+    expect(errorBox).toHaveTextContent("Wi-Fi");
+    expect(errorBox).toHaveTextContent("同一局域网");
   });
 });
