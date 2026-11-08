@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags, BatteryCharging
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags, BatteryCharging, Cpu
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
@@ -71,6 +71,7 @@ const adminNavOnly = [
   { href: "/admin/trash", label: "回收站", icon: Trash2 },
   { href: "/admin/backup", label: "备份恢复", icon: HardDrive },
   { href: "/admin/cloud", label: "云存储", icon: Cloud },
+  { href: "/admin/devices", label: "设备管理", icon: Cpu },
   { href: "/admin/ai-admin", label: "AI 管理员", icon: Brain },
 ];
 
