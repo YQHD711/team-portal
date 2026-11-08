@@ -249,9 +249,32 @@ in_stock ──────► borrowed ──────► in_stock
 
 `/b/<code>` 页面在登录保护路由下：未登录会跳登录页，登录后自动回跳原电池页（与物料 `/i/<code>` 同一机制）。
 
-### 7.4 设备直接调接口
+### 7.4 设备通道（X-Device-Key + 设备内用户会话）
 
-如果要用 ESP32/柜内设备自动借还，需要以**真实用户身份**拿 JWT（例如固定一个服务账号）。设备接入 API 的 `X-Device-Key` 目前只能上报遥测/物料库存，**不能**借还电池。
+设备终端（柜边平板/扫码台）不需要网页登录，用设备凭据接入：
+
+1. 管理端创建设备，拿到 `DeviceKey` / `Secret`
+2. 设备端 `POST /api/device/login`（带设备凭据）→ 返回 `sessionToken`（12 小时）
+3. 之后调用电池借还接口，请求头带：
+
+```
+X-Device-Key: dev_xxx
+X-Device-Secret: xxx
+X-Device-Session: <sessionToken>
+```
+
+设备端电池接口（借用人 = 当前会话用户）：
+
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/api/device/battery/{code}` | 按编码查电池 |
+| GET | `/api/device/battery/mine` | 当前用户在此设备上的在借 |
+| POST | `/api/device/battery/{code}/borrow` | 借出 |
+| POST | `/api/device/battery/{code}/return` | 归还 |
+
+设备终端页面：`/device`（免网页登录，打开即可配置设备 + 登录使用人 + 扫码借还）。
+
+> 会话 12 小时自动过期；登出调 `POST /api/device/logout`。会话与设备绑定，换设备无效。
 
 ---
 
