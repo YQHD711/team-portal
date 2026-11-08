@@ -253,6 +253,19 @@ public class AuthService
 
     public async Task<string?> Login(string username, string password)
     {
+        var user = await VerifyCredentials(username, password);
+        if (user is null) return null;
+        _log.Info("auth", $"User logged in: {username}", $"{{\"role\":\"{user.Role}\"}}", username);
+        return await GenerateToken(user);
+    }
+
+    /// <summary>
+    /// 只校验账号密码（含失败锁定），**不签发 JWT**。
+    /// 设备端登录用它换取设备用户会话，从而不复用用户 JWT（见 DeviceAuthService.CreateSessionAsync）。
+    /// 失败时返回 null；触发锁定抛 InvalidOperationException（与 Login 一致）。
+    /// </summary>
+    public async Task<User?> VerifyCredentials(string username, string password)
+    {
         var maxAttempts = await _settings.GetInt("Auth:MaxLoginAttempts", 5);
         var lockoutMin = await _settings.GetInt("Auth:LockoutMinutes", 15);
 
@@ -292,8 +305,7 @@ public class AuthService
 
         // Clear failed attempts on success
         _loginAttempts.TryRemove(key, out _);
-        _log.Info("auth", $"User logged in: {username}", $"{{\"role\":\"{user.Role}\"}}", username);
-        return await GenerateToken(user);
+        return user;
     }
 
     /// <summary>

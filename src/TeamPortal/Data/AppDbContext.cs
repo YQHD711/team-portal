@@ -44,6 +44,7 @@ public class AppDbContext : DbContext
     public DbSet<DeviceTelemetry> DeviceTelemetries => Set<DeviceTelemetry>();
     public DbSet<BatteryItem> BatteryItems => Set<BatteryItem>();
     public DbSet<BatteryLoan> BatteryLoans => Set<BatteryLoan>();
+    public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -467,6 +468,23 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(l => l.ReturnedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── 设备内用户会话（设备登录后借还，不复用用户 JWT）──
+        modelBuilder.Entity<DeviceSession>(entity =>
+        {
+            entity.Property(s => s.TokenHash).IsRequired().HasMaxLength(64);
+            entity.HasIndex(s => s.TokenHash).IsUnique();
+            entity.HasIndex(s => s.ExpiresAt);
+            entity.Property(s => s.CreatedIp).HasMaxLength(64);
+            entity.HasOne(s => s.Device)
+                .WithMany()
+                .HasForeignKey(s => s.DeviceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

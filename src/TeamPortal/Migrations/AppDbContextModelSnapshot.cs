@@ -520,6 +520,50 @@ namespace TeamPortal.Migrations
                     b.ToTable("Devices");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.DeviceSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("DeviceSessions");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.DeviceTelemetry", b =>
                 {
                     b.Property<int>("Id")
@@ -1768,6 +1812,25 @@ namespace TeamPortal.Migrations
                         .IsRequired();
 
                     b.Navigation("Exam");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.DeviceSession", b =>
+                {
+                    b.HasOne("TeamPortal.Data.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TeamPortal.Data.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
 
                     b.Navigation("User");
                 });

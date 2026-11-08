@@ -38,6 +38,58 @@ public static class DeviceEndpoints
             });
         });
 
+        // 设备上登录：用设备凭据换取「设备内用户会话」，不复用用户 JWT。
+        // 设备借还（/api/device/battery/*）携带 X-Device-Session 即代表登录用户。
+        group.MapPost("/login", async (DeviceLoginRequest req, HttpContext ctx, DeviceAuthService auth,
+            AuthService users, LogService log) =>
+        {
+            var device = await auth.AuthenticateAsync(ctx);
+            if (device is null) return Unauthorized();
+            if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
+                return Results.Problem("用户名和密码必填", statusCode: 400);
+
+            User? user;
+            try
+            {
+                user = await users.VerifyCredentials(req.Username.Trim(), req.Password);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 账号锁定：与网页登录同一套策略，返回 429
+                return Results.Problem(ex.Message, statusCode: 429);
+            }
+            if (user is null)
+            {
+                log.Audit("device-login", $"device:{device.DeviceKey}", targetType: "device",
+                    targetId: device.Id.ToString(),
+                    data: new { username = req.Username, success = false },
+                    ipAddress: LogService.ClientIp(ctx));
+                return Results.Problem("用户名或密码错误", statusCode: 401);
+            }
+
+            var (session, token) = await auth.CreateSessionAsync(device, user, ctx);
+            log.Audit("device-login", $"device:{device.DeviceKey}", targetType: "user",
+                targetId: user.Id.ToString(),
+                data: new { username = user.Username, sessionId = session.Id, expiresAt = session.ExpiresAt },
+                ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new
+            {
+                sessionToken = token,
+                expiresAt = session.ExpiresAt,
+                user = new { user.Id, user.Username, user.Role },
+            });
+        });
+
+        group.MapPost("/logout", async (HttpContext ctx, DeviceAuthService auth, LogService log) =>
+        {
+            var device = await auth.AuthenticateAsync(ctx);
+            if (device is null) return Unauthorized();
+            var revoked = await auth.RevokeSessionAsync(ctx, device);
+            log.Audit("device-logout", $"device:{device.DeviceKey}", targetType: "device",
+                targetId: device.Id.ToString(), data: new { revoked }, ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new { revoked });
+        });
+
         // 遥测上报：payload 原样落库，先保证"能收、能回放"
         group.MapPost("/telemetry", async (TelemetryRequest req, HttpContext ctx,
             DeviceAuthService auth, AppDbContext db) =>
@@ -118,3 +170,6 @@ public record TelemetryRequest(string? Kind, JsonElement? Payload);
 
 /// <summary>库存变动上报体：Delta 正数入库、负数出库。</summary>
 public record StockDeltaRequest(int Delta, string? Note);
+
+/// <summary>设备内用户登录体：设备凭据已在请求头，这里只带用户账号密码。</summary>
+public record DeviceLoginRequest(string Username, string Password);

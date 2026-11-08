@@ -17,6 +17,8 @@ public class DeviceAuthService
 {
     public const string KeyHeader = "X-Device-Key";
     public const string SecretHeader = "X-Device-Secret";
+    /// <summary>设备内用户会话 token 的请求头（登录后在设备上借还时携带）。</summary>
+    public const string SessionHeader = "X-Device-Session";
 
     /// <summary>LastSeen 写入节流：设备高频上报时不必每请求都写库。</summary>
     private static readonly TimeSpan LastSeenThrottle = TimeSpan.FromSeconds(60);
@@ -106,6 +108,67 @@ public class DeviceAuthService
         }
 
         return device;
+    }
+
+    // ── 设备内用户会话（设备登录 → 借还，不复用用户 JWT）──
+
+    /// <summary>会话默认有效期：12 小时（设备放在柜子旁，一天一班足够）。</summary>
+    public static readonly TimeSpan SessionTtl = TimeSpan.FromHours(12);
+
+    public static string HashToken(string token)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    /// <summary>为设备上的用户创建会话；返回明文 token（只此一次）。</summary>
+    public async Task<(DeviceSession Session, string Token)> CreateSessionAsync(Device device, User user, HttpContext ctx)
+    {
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        var now = DateTime.UtcNow;
+        var session = new DeviceSession
+        {
+            DeviceId = device.Id,
+            UserId = user.Id,
+            TokenHash = HashToken(token),
+            CreatedAt = now,
+            ExpiresAt = now.Add(SessionTtl),
+            CreatedIp = LogService.ClientIp(ctx),
+        };
+        _db.DeviceSessions.Add(session);
+        await _db.SaveChangesAsync();
+        _log.Info("device", $"Device user session created: {device.DeviceKey} -> {user.Username}");
+        return (session, token);
+    }
+
+    /// <summary>校验设备内用户会话：必须属于当前设备、未撤销、未过期。</summary>
+    public async Task<DeviceSession?> AuthenticateSessionAsync(HttpContext ctx, Device device)
+    {
+        var token = ctx.Request.Headers[SessionHeader].ToString();
+        if (string.IsNullOrWhiteSpace(token)) return null;
+
+        var hash = HashToken(token);
+        var session = await _db.DeviceSessions
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.DeviceId == device.Id && s.TokenHash == hash);
+        if (session is null) return null;
+        if (session.RevokedAt is not null) return null;
+        if (session.ExpiresAt <= DateTime.UtcNow) return null;
+        return session;
+    }
+
+    /// <summary>登出设备内用户（撤销会话）；返回是否找到并撤销。</summary>
+    public async Task<bool> RevokeSessionAsync(HttpContext ctx, Device device)
+    {
+        var token = ctx.Request.Headers[SessionHeader].ToString();
+        if (string.IsNullOrWhiteSpace(token)) return false;
+
+        var hash = HashToken(token);
+        var session = await _db.DeviceSessions
+            .FirstOrDefaultAsync(s => s.DeviceId == device.Id && s.TokenHash == hash);
+        if (session is null || session.RevokedAt is not null) return false;
+
+        session.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        _log.Info("device", $"Device user session revoked: {device.DeviceKey}");
+        return true;
     }
 
     public async Task<string?> RotateSecretAsync(int deviceId)

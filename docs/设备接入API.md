@@ -291,6 +291,43 @@ Content-Type: application/problem+json
 
 > 注意：设备流水和人工领用流水共用一张表，前端「物料交易记录」会同时显示 `device_in/device_out`。
 
+### 5.5 设备内用户登录（电池借还用）
+
+电池借还要求"人"的身份，但设备端不应复用用户 JWT。设备先用凭据登录，再在设备上让使用人登录：
+
+`POST /api/device/login`
+
+**请求头**：`X-Device-Key` + `X-Device-Secret`
+
+**请求体**：
+
+```json
+{ "username": "zhangsan", "password": "..." }
+```
+
+**响应 200**：
+
+```json
+{
+  "sessionToken": "…",
+  "expiresAt": "2026-11-09T07:00:00Z",
+  "user": { "id": 7, "username": "zhangsan", "role": "member" }
+}
+```
+
+- `sessionToken` 只返回一次，设备端保存；默认 **12 小时**过期
+- 账号密码错误 → 401；账号锁定 → 429（与网页登录同一策略）
+
+`POST /api/device/logout`：撤销当前会话（带 `X-Device-Session`）。
+
+之后的电池借还请求同时带三个头：
+
+```
+X-Device-Key / X-Device-Secret / X-Device-Session
+```
+
+详见 `docs/电池借还API.md` 的「设备通道」一节。
+
 ---
 
 ## 6. 管理侧 API

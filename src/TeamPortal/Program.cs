@@ -440,6 +440,7 @@ app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDeviceEndpoints();
 app.MapDeviceAdminEndpoints();
+app.MapDeviceBatteryEndpoints();
 app.MapBatteryEndpoints();
 app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
@@ -831,6 +832,24 @@ static void MigrateExistingTables(AppDbContext db)
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_BatteryId ON BatteryLoans (BatteryId)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_UserId_ReturnedAt ON BatteryLoans (UserId, ReturnedAt)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_BorrowedAt ON BatteryLoans (BorrowedAt)");
+
+        // ── 设备内用户会话（设备登录后借还，不复用用户 JWT）
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS DeviceSessions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                DeviceId INTEGER NOT NULL,
+                UserId INTEGER NOT NULL,
+                TokenHash TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                ExpiresAt TEXT NOT NULL,
+                RevokedAt TEXT,
+                CreatedIp TEXT,
+                FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE,
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            )
+        """);
+        MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_DeviceSessions_TokenHash ON DeviceSessions (TokenHash)");
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DeviceSessions_ExpiresAt ON DeviceSessions (ExpiresAt)");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");
