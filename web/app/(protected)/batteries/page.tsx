@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
 import { Loader2, Plus, QrCode, ScanLine, Search } from "lucide-react";
 import { BatteryCard } from "@/components/battery/BatteryCard";
+import { BatteryLabelExportButton } from "@/components/battery/BatteryLabelExportButton";
 import { type BatteryItem, type BatteryLoan } from "@/components/battery/batteryTypes";
 
 const STATUS_FILTERS = [
@@ -81,6 +82,7 @@ export default function BatteriesPage() {
           <Link href="/batteries/scan" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
             <ScanLine className="h-4 w-4" />扫码借还
           </Link>
+          {isStaff && <BatteryLabelExportButton batteries={items} />}
           {isStaff && (
             <button onClick={() => setShowForm(v => !v)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white">
               <Plus className="h-4 w-4" />新增电池
