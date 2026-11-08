@@ -40,6 +40,8 @@ public class AppDbContext : DbContext
     public DbSet<WikiDocEdit> WikiDocEdits => Set<WikiDocEdit>();
     public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
     public DbSet<FlightDiagnosisRecord> FlightDiagnosisRecords => Set<FlightDiagnosisRecord>();
+    public DbSet<Device> Devices => Set<Device>();
+    public DbSet<DeviceTelemetry> DeviceTelemetries => Set<DeviceTelemetry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -403,6 +405,31 @@ public class AppDbContext : DbContext
             entity.HasIndex(r => new { r.CreatedByUserId, r.CreatedAt });
             entity.HasIndex(r => r.FileName);
             entity.HasIndex(r => r.CreatedAt);
+        });
+
+        // ── 设备接入（ESP32 等）：设备凭据 + 遥测流水 ──
+        modelBuilder.Entity<Device>(entity =>
+        {
+            entity.Property(d => d.Name).IsRequired().HasMaxLength(100);
+            entity.Property(d => d.DeviceKey).IsRequired().HasMaxLength(40);
+            entity.HasIndex(d => d.DeviceKey).IsUnique();
+            entity.Property(d => d.SecretHash).IsRequired().HasMaxLength(200);
+            entity.Property(d => d.Type).HasMaxLength(20);
+            entity.Property(d => d.LocationCode).HasMaxLength(50);
+            entity.Property(d => d.FirmwareVersion).HasMaxLength(50);
+            entity.Property(d => d.LastSeenIp).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<DeviceTelemetry>(entity =>
+        {
+            entity.HasIndex(t => t.DeviceId);
+            entity.HasIndex(t => t.CreatedAt);
+            entity.Property(t => t.Kind).IsRequired().HasMaxLength(32);
+            entity.Property(t => t.PayloadJson).IsRequired();
+            entity.HasOne(t => t.Device)
+                .WithMany()
+                .HasForeignKey(t => t.DeviceId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
