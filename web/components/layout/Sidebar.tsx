@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, BookOpen, Package, BarChart3, X,
-  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags
+  Users, Settings, FileText, ChevronDown, GitBranch, Upload, Sparkles, TrendingUp, Activity, Brain, Cloud, IdCard, Trash2, ShieldAlert, ArrowLeftRight, ClipboardCheck, HardDrive, LayoutGrid, GraduationCap, Tags, BatteryCharging
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
@@ -45,6 +45,7 @@ const materialNav = [
   { href: "/inventory/layout", label: "物料布局", icon: LayoutGrid },
   { href: "/inventory/checkout", label: "领用管理", icon: ArrowLeftRight },
   { href: "/inventory/stocktake", label: "盘点", icon: ClipboardCheck },
+  { href: "/batteries", label: "电池借还", icon: BatteryCharging },
   { href: "/finance", label: "采购申请", icon: BarChart3 },
 ];
 
@@ -121,6 +122,10 @@ export function Sidebar() {
 
   const close = () => setOpen(false);
   const pathname = usePathname();
+  // 物料管理下拉覆盖的路径前缀（含电池借还）
+  const isMaterialPath = pathname.startsWith("/inventory")
+    || pathname.startsWith("/finance")
+    || pathname.startsWith("/batteries");
 
   // 移动端抽屉：打开时锁住页面滚动（否则手指划抽屉会把背后的正文一起滚），
   // 支持 Esc 关闭；桌面端（lg 及以上）抽屉常驻，不做任何处理。
@@ -188,16 +193,16 @@ export function Sidebar() {
                     onClick={() => setMaterialOpen(!materialOpen)}
                     className={cn(
                       "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-colors duration-150",
-                      pathname.startsWith("/inventory") || pathname.startsWith("/finance")
+                      isMaterialPath
                         ? "bg-primary/10 text-foreground"
                         : "text-muted hover:text-foreground hover:bg-surface-hover"
                     )}
                   >
-                    <Package className={cn("h-4.5 w-4.5 shrink-0", (pathname.startsWith("/inventory") || pathname.startsWith("/finance")) ? "text-primary" : "opacity-75")} />
+                    <Package className={cn("h-4.5 w-4.5 shrink-0", isMaterialPath ? "text-primary" : "opacity-75")} />
                     <span className="flex-1 text-left">物料管理</span>
                     <ChevronDown className={cn("h-3 w-3 transition-transform", materialOpen && "rotate-180")} />
                   </button>
-                  {(materialOpen || pathname.startsWith("/inventory") || pathname.startsWith("/finance")) && (
+                  {(materialOpen || isMaterialPath) && (
                     <div className="mt-0.5 ml-4 space-y-0.5 border-l border-border-subtle pl-3">
                       {materialNav.map((item) => {
                         const active = isActive(pathname, item.href);

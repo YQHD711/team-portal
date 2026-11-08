@@ -17,6 +17,93 @@ namespace TeamPortal.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
+            modelBuilder.Entity("TeamPortal.Data.Models.BatteryItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("BorrowedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("CurrentBorrowerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Health")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CurrentBorrowerId");
+
+                    b.ToTable("BatteryItems");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.BatteryLoan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BatteryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("BorrowedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReturnedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReturnedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatteryId");
+
+                    b.HasIndex("BorrowedAt");
+
+                    b.HasIndex("ReturnedByUserId");
+
+                    b.HasIndex("UserId", "ReturnedAt");
+
+                    b.ToTable("BatteryLoans");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.BatteryRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -1535,6 +1622,42 @@ namespace TeamPortal.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("WikiTasks");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.BatteryItem", b =>
+                {
+                    b.HasOne("TeamPortal.Data.Models.User", "CurrentBorrower")
+                        .WithMany()
+                        .HasForeignKey("CurrentBorrowerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CurrentBorrower");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.BatteryLoan", b =>
+                {
+                    b.HasOne("TeamPortal.Data.Models.BatteryItem", "Battery")
+                        .WithMany()
+                        .HasForeignKey("BatteryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TeamPortal.Data.Models.User", "ReturnedBy")
+                        .WithMany()
+                        .HasForeignKey("ReturnedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TeamPortal.Data.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Battery");
+
+                    b.Navigation("ReturnedBy");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TeamPortal.Data.Models.CheckinRecord", b =>

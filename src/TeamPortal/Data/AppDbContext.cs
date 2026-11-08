@@ -42,6 +42,8 @@ public class AppDbContext : DbContext
     public DbSet<FlightDiagnosisRecord> FlightDiagnosisRecords => Set<FlightDiagnosisRecord>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<DeviceTelemetry> DeviceTelemetries => Set<DeviceTelemetry>();
+    public DbSet<BatteryItem> BatteryItems => Set<BatteryItem>();
+    public DbSet<BatteryLoan> BatteryLoans => Set<BatteryLoan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -430,6 +432,41 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(t => t.DeviceId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── 电池单件台账 + 借还流水 ──
+        modelBuilder.Entity<BatteryItem>(entity =>
+        {
+            entity.Property(b => b.Code).IsRequired().HasMaxLength(50);
+            // 编码全队唯一；扫码查询大小写不敏感（查询侧统一转大写）
+            entity.HasIndex(b => b.Code).IsUnique();
+            entity.Property(b => b.Model).HasMaxLength(100);
+            entity.Property(b => b.Status).HasMaxLength(20);
+            entity.Property(b => b.Health).HasMaxLength(20);
+            entity.Property(b => b.Notes).HasMaxLength(500);
+            entity.HasOne(b => b.CurrentBorrower)
+                .WithMany()
+                .HasForeignKey(b => b.CurrentBorrowerId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<BatteryLoan>(entity =>
+        {
+            entity.HasIndex(l => l.BatteryId);
+            entity.HasIndex(l => new { l.UserId, l.ReturnedAt });
+            entity.HasIndex(l => l.BorrowedAt);
+            entity.HasOne(l => l.Battery)
+                .WithMany()
+                .HasForeignKey(l => l.BatteryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(l => l.User)
+                .WithMany()
+                .HasForeignKey(l => l.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(l => l.ReturnedBy)
+                .WithMany()
+                .HasForeignKey(l => l.ReturnedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

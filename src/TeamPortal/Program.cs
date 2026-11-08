@@ -210,6 +210,7 @@ builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<MaterialService>();
 builder.Services.AddScoped<DeviceAuthService>();
+builder.Services.AddScoped<BatteryService>();
 builder.Services.AddScoped<StudyProgressService>();
 builder.Services.AddScoped<RagStatsService>();
 // 标签导出模板（task-17）：管理员维护、全队共用
@@ -439,6 +440,7 @@ app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
 app.MapDeviceEndpoints();
 app.MapDeviceAdminEndpoints();
+app.MapBatteryEndpoints();
 app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
 app.MapLabelTemplateEndpoints();
@@ -793,6 +795,42 @@ static void MigrateExistingTables(AppDbContext db)
             )
         """);
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DeviceTelemetries_DeviceId_CreatedAt ON DeviceTelemetries (DeviceId, CreatedAt)");
+
+        // ── 电池单件台账 + 借还流水 — 全新表,已有库不会由迁移自动创建
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS BatteryItems (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT NOT NULL,
+                Model TEXT,
+                Status TEXT NOT NULL DEFAULT 'in_stock',
+                Health TEXT,
+                CurrentBorrowerId INTEGER,
+                BorrowedAt TEXT,
+                Notes TEXT,
+                CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (CurrentBorrowerId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+        MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_BatteryItems_Code ON BatteryItems (Code)");
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS BatteryLoans (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                BatteryId INTEGER NOT NULL,
+                UserId INTEGER NOT NULL,
+                BorrowedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                ReturnedAt TEXT,
+                ReturnedByUserId INTEGER,
+                Note TEXT,
+                FOREIGN KEY (BatteryId) REFERENCES BatteryItems(Id) ON DELETE CASCADE,
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE RESTRICT,
+                FOREIGN KEY (ReturnedByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_BatteryId ON BatteryLoans (BatteryId)");
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_UserId_ReturnedAt ON BatteryLoans (UserId, ReturnedAt)");
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_BorrowedAt ON BatteryLoans (BorrowedAt)");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");
