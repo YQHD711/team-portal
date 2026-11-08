@@ -15,6 +15,11 @@ public partial class BatteryService
     public const string StatusInStock = "in_stock";
     public const string StatusBorrowed = "borrowed";
 
+    /// <summary>字段长度上限：与 EF MaxLength 及前端展示一致，超长直接 400（SQLite 不强制长度）。</summary>
+    public const int CodeMaxLength = 50;
+    public const int ModelMaxLength = 100;
+    public const int NotesMaxLength = 500;
+
     private static readonly string[] BorrowableStatuses = { StatusInStock };
 
     private readonly AppDbContext _db;
@@ -80,6 +85,11 @@ public partial class BatteryService
         if (await _db.BatteryItems.AnyAsync(b => b.Code == normalized))
             throw new InvalidOperationException($"编码 {normalized} 已存在");
 
+        if (normalized.Length > CodeMaxLength)
+            throw new InvalidOperationException($"编码不能超过 {CodeMaxLength} 个字符");
+        EnsureLength(model, ModelMaxLength, "型号");
+        EnsureLength(notes, NotesMaxLength, "备注");
+
         var item = new BatteryItem
         {
             Code = normalized,
@@ -99,6 +109,8 @@ public partial class BatteryService
         var item = await _db.BatteryItems.FindAsync(id);
         if (item is null) return null;
 
+        EnsureLength(model, ModelMaxLength, "型号");
+        EnsureLength(notes, NotesMaxLength, "备注");
         if (model is not null) item.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         if (clearModel) item.Model = null;
         if (health is not null) item.Health = health;
@@ -170,6 +182,31 @@ public partial class BatteryService
 
         _log.Info("battery", $"Battery returned: {item.Code} by user#{operatorId}");
         return loan;
+    }
+
+    /// <summary>删除电池（仅管理员）：在借或存在未归还流水时拒绝，避免留下悬空责任。</summary>
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var item = await _db.BatteryItems.FindAsync(id);
+        if (item is null) return false;
+
+        if (item.Status == StatusBorrowed)
+            throw new InvalidOperationException("电池在借出状态，请先归还再删除");
+        var hasOpenLoan = await _db.BatteryLoans.AnyAsync(l => l.BatteryId == id && l.ReturnedAt == null);
+        if (hasOpenLoan)
+            throw new InvalidOperationException("电池还有未归还的借出记录，请先归还再删除");
+
+        _db.BatteryItems.Remove(item);
+        await _db.SaveChangesAsync();
+        _log.Info("battery", $"Battery deleted: {item.Code}");
+        return true;
+    }
+
+    /// <summary>字段长度校验（Trim 后）：超长抛 InvalidOperationException，由端点转 400。</summary>
+    private static void EnsureLength(string? value, int max, string fieldName)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value.Trim().Length > max)
+            throw new InvalidOperationException($"{fieldName}不能超过 {max} 个字符");
     }
 
     private async Task CloseOpenLoanAsync(int batteryId, int? operatorId, string note)

@@ -19,6 +19,13 @@ public static class BatteryEndpoints
     private static bool IsStaff(ClaimsPrincipal u)
         => u.FindFirstValue(ClaimTypes.Role) is "admin" or "部长";
 
+    private static bool IsAdmin(ClaimsPrincipal u)
+        => u.FindFirstValue(ClaimTypes.Role) is "admin";
+
+    /// <summary>危险 HTML/脚本片段拦截（与物料接口同源），电池字段与物料一样不应接受脚本片段。</summary>
+    private static bool HasUnsafe(params string?[] fields)
+        => fields.Any(InputSanitizer.HasUnsafeFragment);
+
     private static int? GetUserId(ClaimsPrincipal u)
         => int.TryParse(u.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
@@ -54,6 +61,8 @@ public static class BatteryEndpoints
             LogService log, HttpContext ctx) =>
         {
             if (!IsStaff(user)) return Results.Problem("仅管理员和部长可新增电池", statusCode: 403);
+            if (HasUnsafe(req.Code, req.Model, req.Notes))
+                return Results.Problem("字段包含非法字符", statusCode: 400);
             try
             {
                 var item = await svc.CreateAsync(req.Code, req.Model, req.Health, req.Notes);
@@ -73,6 +82,8 @@ public static class BatteryEndpoints
             BatteryService svc, LogService log, HttpContext ctx) =>
         {
             if (!IsStaff(user)) return Results.Problem("仅管理员和部长可编辑电池", statusCode: 403);
+            if (HasUnsafe(req.Model, req.Notes))
+                return Results.Problem("字段包含非法字符", statusCode: 400);
             try
             {
                 var item = await svc.UpdateAsync(id, req.Model, req.Status, req.Health, req.Notes, req.ClearModel);
@@ -85,6 +96,25 @@ public static class BatteryEndpoints
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(ex.Message, statusCode: 400);
+            }
+        });
+
+        // ── 删除（仅管理员；在借/有未归还流水时拒绝）──
+        group.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, BatteryService svc,
+            LogService log, HttpContext ctx) =>
+        {
+            if (!IsAdmin(user)) return Results.Problem("仅管理员可删除电池", statusCode: 403);
+            try
+            {
+                var ok = await svc.DeleteAsync(id);
+                if (!ok) return Results.Problem("电池不存在", statusCode: 404);
+                log.Audit("delete", user.Identity?.Name ?? "unknown", targetType: "battery",
+                    targetId: id.ToString(), ipAddress: LogService.ClientIp(ctx));
+                return Results.Ok(new { success = true });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 409);
             }
         });
 
