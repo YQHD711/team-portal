@@ -209,6 +209,7 @@ builder.Services.AddScoped<FlightService>();
 builder.Services.AddScoped<TrashService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<MaterialService>();
+builder.Services.AddScoped<DeviceAuthService>();
 builder.Services.AddScoped<StudyProgressService>();
 builder.Services.AddScoped<RagStatsService>();
 // 标签导出模板（task-17）：管理员维护、全队共用
@@ -436,6 +437,8 @@ app.MapSearchEndpoints();
 app.MapTrashEndpoints();
 app.MapFinanceEndpoints();
 app.MapMaterialEndpoints();
+app.MapDeviceEndpoints();
+app.MapDeviceAdminEndpoints();
 app.MapDashboardEndpoints();
 app.MapStorageEndpoints();
 app.MapLabelTemplateEndpoints();
@@ -760,6 +763,36 @@ static void MigrateExistingTables(AppDbContext db)
         """);
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_UserName_CreatedAt ON OperationLogs (UserName, CreatedAt)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_OperationLogs_Action_CreatedAt ON OperationLogs (Action, CreatedAt)");
+
+        // ── 设备接入(ESP32 等):设备凭据 + 遥测流水 — 全新表,已有库不会由迁移自动创建
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS Devices (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL,
+                DeviceKey TEXT NOT NULL,
+                SecretHash TEXT NOT NULL,
+                Type TEXT DEFAULT 'esp32',
+                LocationCode TEXT,
+                FirmwareVersion TEXT,
+                Enabled INTEGER NOT NULL DEFAULT 1,
+                CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                LastSeenAt TEXT,
+                LastSeenIp TEXT
+            )
+        """);
+        MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Devices_DeviceKey ON Devices (DeviceKey)");
+
+        MigrateSql(conn, """
+            CREATE TABLE IF NOT EXISTS DeviceTelemetries (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                DeviceId INTEGER NOT NULL,
+                Kind TEXT NOT NULL DEFAULT 'telemetry',
+                PayloadJson TEXT NOT NULL DEFAULT '{}',
+                CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE
+            )
+        """);
+        MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DeviceTelemetries_DeviceId_CreatedAt ON DeviceTelemetries (DeviceId, CreatedAt)");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");
