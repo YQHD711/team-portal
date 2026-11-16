@@ -29,6 +29,8 @@ function safeDecode(s: string): string {
   const [busy, setBusy] = useState(false);
   // 归还健康检查：归还前必须声明健康度（异常自动转维修，坏电池不静默回库）
   const [showReturnHealth, setShowReturnHealth] = useState(false);
+  // 电池事故关联：事故记录（/api/batteries）按编号关联到本电池
+  const [incidents, setIncidents] = useState<{ id: number; batteryNumber: string; health: string; incidentDate: string; notes: string | null }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -41,6 +43,13 @@ function safeDecode(s: string): string {
   }, [code]);
 
   useEffect(() => { load(); }, [load]);
+
+  // 拉取该电池的事故记录（弱关联：按编号匹配台账编码）
+  useEffect(() => {
+    api.get<{ id: number; batteryNumber: string; health: string; incidentDate: string; notes: string | null }[]>("/api/batteries")
+      .then(list => setIncidents(list.filter(b => b.batteryNumber?.toUpperCase() === code.toUpperCase())))
+      .catch(() => {});
+  }, [code]);
 
   const act = async (kind: "borrow" | "return", health?: string) => {
     if (!battery) return;
@@ -149,6 +158,23 @@ function safeDecode(s: string): string {
           )}
         </div>
       </div>
+
+      {/* 事故关联：按编号匹配台账编码（事故安全页登记的记录） */}
+      {incidents.length > 0 && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/5 p-4">
+          <div className="text-sm font-medium text-warning">⚠ 该电池有 {incidents.length} 条事故记录</div>
+          <div className="mt-2 space-y-1.5">
+            {incidents.map(i => (
+              <div key={i.id} className="text-xs">
+                <span className="text-faint">{new Date(i.incidentDate).toLocaleDateString("zh-CN")}</span>
+                <span className="mx-1 rounded bg-warning/10 px-1.5 py-0.5 text-warning">{i.health}</span>
+                {i.notes && <span className="text-muted">{i.notes}</span>}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-faint">事故详情在「事故安全 → 电池事故」维护；此处按电池编号关联</p>
+        </div>
+      )}
 
       <p className="text-center text-xs text-faint">
         借出/归还都会记录操作人和时间，可在「电池借还」页查看记录
