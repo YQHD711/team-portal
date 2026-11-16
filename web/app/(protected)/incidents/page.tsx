@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { todayLocal } from "@/lib/date";
 import { useCurrentUser } from "@/lib/hooks";
 import { AlertTriangle, Battery, Loader2, Plus, Trash2, Pencil } from "lucide-react";
 
@@ -23,11 +24,11 @@ export default function IncidentsPage() {
 
   // Battery form
   const [showBatForm, setShowBatForm] = useState(false); const [editBatId, setEditBatId] = useState<number | null>(null);
-  const [bNum, setBNum] = useState(""); const [bHealth, setBHealth] = useState("正常"); const [bDate, setBDate] = useState(new Date().toISOString().slice(0, 10)); const [bNotes, setBNotes] = useState("");
+  const [bNum, setBNum] = useState(""); const [bHealth, setBHealth] = useState("正常"); const [bDate, setBDate] = useState(todayLocal()); const [bNotes, setBNotes] = useState("");
 
   // Incident form
   const [showIncForm, setShowIncForm] = useState(false); const [editIncId, setEditIncId] = useState<number | null>(null);
-  const [iType, setIType] = useState("设备故障"); const [iSev, setISev] = useState("一般"); const [iDesc, setIDesc] = useState(""); const [iDate, setIDate] = useState(new Date().toISOString().slice(0, 10)); const [iRes, setIRes] = useState(""); const [iReporter, setIReporter] = useState("");
+  const [iType, setIType] = useState("设备故障"); const [iSev, setISev] = useState("一般"); const [iDesc, setIDesc] = useState(""); const [iDate, setIDate] = useState(todayLocal()); const [iRes, setIRes] = useState(""); const [iReporter, setIReporter] = useState("");
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -46,7 +47,7 @@ export default function IncidentsPage() {
     setShowBatForm(false); setEditBatId(null); fetchAll();
   };
   const editBattery = (b: BatteryRec) => { setEditBatId(b.id); setBNum(b.batteryNumber); setBHealth(b.health); setBDate(b.incidentDate?.slice(0,10) || ""); setBNotes(b.notes||""); setShowBatForm(true); };
-  const resetBatForm = () => { setShowBatForm(false); setEditBatId(null); setBNum(""); setBHealth("正常"); setBDate(new Date().toISOString().slice(0,10)); setBNotes(""); };
+  const resetBatForm = () => { setShowBatForm(false); setEditBatId(null); setBNum(""); setBHealth("正常"); setBDate(todayLocal()); setBNotes(""); };
 
   // ── Incident ──
   const saveIncident = async () => {
@@ -55,7 +56,7 @@ export default function IncidentsPage() {
     setShowIncForm(false); setEditIncId(null); fetchAll();
   };
   const editIncident = (i: IncidentRec) => { setEditIncId(i.id); setIType(i.type); setISev(i.severity); setIDesc(i.description); setIDate(i.date.slice(0,10)); setIRes(i.resolution||""); setIReporter(i.reportedBy||""); setShowIncForm(true); };
-  const resetIncForm = () => { setShowIncForm(false); setEditIncId(null); setIType("设备故障"); setISev("一般"); setIDesc(""); setIDate(new Date().toISOString().slice(0,10)); setIRes(""); setIReporter(""); };
+  const resetIncForm = () => { setShowIncForm(false); setEditIncId(null); setIType("设备故障"); setISev("一般"); setIDesc(""); setIDate(todayLocal()); setIRes(""); setIReporter(""); };
 
   const tabs = [
     { key: "battery", label: "电池事故", icon: Battery },

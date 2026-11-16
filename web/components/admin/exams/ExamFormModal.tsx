@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { toLocalDate, todayLocal } from "@/lib/date";
 
 interface Dept { id: number; name: string; }
 interface Exam { id: number; departmentId: number; title: string; examType: string; status: string; examDate: string | null; }
@@ -27,7 +28,7 @@ export default function ExamFormModal({ depts, exam, onClose, onSaved }: Props) 
     title: exam?.title ?? "",
     examType: exam?.examType ?? "theory",
     status: exam?.status ?? "ongoing",
-    examDate: (exam?.examDate ?? new Date().toISOString().slice(0, 10)).slice(0, 10),
+    examDate: toLocalDate(exam?.examDate) || todayLocal(),
   });
   const [deptId, setDeptId] = useState(exam?.departmentId ?? depts[0]?.id ?? 0);
   const [selDepts, setSelDepts] = useState<Set<number>>(new Set(depts.map(d => d.id)));
