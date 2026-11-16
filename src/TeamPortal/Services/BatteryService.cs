@@ -88,6 +88,24 @@ public partial class BatteryService
         return $"BAT-{max + 1:D4}";
     }
 
+    /// <summary>批量录入：一次建 N 块（连续编码 BAT-xxxx），同型号同备注。N 上限 500。</summary>
+    public async Task<List<BatteryItem>> CreateBatchAsync(int count, string? model, string? health, string? notes)
+    {
+        if (count <= 0 || count > 500)
+            throw new InvalidOperationException("批量录入数量在 1~500 之间");
+        EnsureLength(model, ModelMaxLength, "型号");
+        EnsureLength(health, HealthMaxLength, "健康度");
+        EnsureLength(notes, NotesMaxLength, "备注");
+
+        var created = new List<BatteryItem>();
+        for (var i = 0; i < count; i++)
+        {
+            // 逐块走 CreateAsync 的校验与编号（含唯一码生成），避免重复逻辑
+            created.Add(await CreateAsync(null, model, health, notes));
+        }
+        return created;
+    }
+
     public async Task<BatteryItem> CreateAsync(string? code, string? model, string? health, string? notes)
     {
         var normalized = string.IsNullOrWhiteSpace(code)
