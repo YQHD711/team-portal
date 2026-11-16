@@ -33,7 +33,7 @@ describe("设备终端 /device", () => {
     localStorage.setItem("battery-device-secret", "secret");
     render(<DeviceTerminalPage />);
     expect(await screen.findByText("识别使用人")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/扫身份码/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/输入学号/)).toBeInTheDocument();
     // 账号密码登录降级为可切换入口
     expect(screen.getByRole("button", { name: /改用账号密码登录/ })).toBeInTheDocument();
     expect(screen.queryByText("配置本设备")).not.toBeInTheDocument();

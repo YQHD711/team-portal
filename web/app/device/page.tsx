@@ -164,14 +164,14 @@ export default function DeviceTerminalPage() {
       {config && !user && (
         <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
           <div className="flex items-center gap-2 text-sm font-medium"><UserRound className="h-4 w-4" />识别使用人</div>
-          <p className="text-xs text-faint">扫工牌身份码或输入学号（回车），借还都会记录到这个人名下。</p>
+          <p className="text-xs text-faint">输入学号（回车），借还都会记录到这个人名下。</p>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
               <input autoFocus value={identity} onChange={e => setIdentity(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") identify(identity); }}
                 className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 font-mono text-sm"
-                placeholder="扫身份码 / 输入学号后回车" />
+                placeholder="输入学号后回车" />
             </div>
             <button onClick={() => identify(identity)} disabled={busy}
               className="rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">识别</button>

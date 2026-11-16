@@ -31,9 +31,11 @@ public class AdminService
         }).ToListAsync<object>();
     }
 
-    public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept)
+    public async Task<User?> CreateUser(string username, string password, string userRole, int? deptId, string? currentRole, string? currentDept, string? studentId = null)
     {
         if (await _db.Users.AnyAsync(u => u.Username == username)) return null;
+        studentId = string.IsNullOrWhiteSpace(studentId) ? null : studentId.Trim();
+        if (studentId != null && await _db.Users.AnyAsync(u => u.StudentId == studentId)) return null;
         // Non-admin may not mint admin/部长 accounts (C-1 fix)
         if (currentRole != "admin" && (userRole == "admin" || userRole == "部长")) return null;
         if (currentRole == "部长" && !string.IsNullOrEmpty(currentDept))
@@ -41,7 +43,7 @@ public class AdminService
             var dept = await _db.Departments.FirstOrDefaultAsync(d => d.Name == currentDept);
             deptId = dept?.Id;
         }
-        var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", Slug = Slug.NewUser(), DepartmentId = deptId };
+        var user = new User { Username = username, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), Role = (userRole == "admin" || userRole == "部长") ? userRole : "member", Slug = Slug.NewUser(), DepartmentId = deptId, StudentId = studentId };
         _db.Users.Add(user); await _db.SaveChangesAsync();
         // 建用户时同步建空档案：管理端档案列表/详情依赖 PilotProfile 行存在
         _db.PilotProfiles.Add(new PilotProfile { UserId = user.Id });
@@ -51,10 +53,14 @@ public class AdminService
     }
 
     public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? username,
-        string? currentRole, string? currentDept, int currentUserId)
+        string? currentRole, string? currentDept, int currentUserId, string? studentId = null)
     {
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
+
+        // 学号是设备认人的身份标识，修改仅 admin（防伪造认人链条）
+        studentId = studentId == null ? null : (string.IsNullOrWhiteSpace(studentId) ? "" : studentId.Trim());
+        if (studentId != null && currentRole != "admin") return false;
 
         // 部长在“本部门内”有限自主：可编辑本部门非 admin 成员的姓名/备注类字段。
         // 越权收口（安全审计发现的三条横向接管路径，一律仅 admin）：
@@ -80,6 +86,11 @@ public class AdminService
             changes.Add($"username:{user.Username}→{username}"); user.Username = username;
         }
         if (userRole is not null && user.Role != userRole) { changes.Add($"role:{user.Role}→{userRole}"); user.Role = (userRole == "admin" || userRole == "部长") ? userRole : "member"; }
+        if (studentId is not null && user.StudentId != (studentId == "" ? null : studentId))
+        {
+            if (studentId != "" && await _db.Users.AnyAsync(u => u.StudentId == studentId && u.Id != id)) return false; // 学号唯一
+            changes.Add("studentId:set"); user.StudentId = studentId == "" ? null : studentId;
+        }
         if (deptId.HasValue) { var newDept = deptId == 0 ? null : deptId; if (user.DepartmentId != newDept) { changes.Add($"dept:{user.DepartmentId}→{newDept}"); user.DepartmentId = newDept; } }
         if (!string.IsNullOrWhiteSpace(password)) { changes.Add("password:reset"); user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); }
 

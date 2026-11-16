@@ -45,6 +45,7 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
     password: "",
     role: user?.role || "member",
     departmentId: user?.departmentId ?? 0,
+    studentId: user?.studentId || "",
   });
 
   // 非 admin:不可“添加队员”，也不可编辑 admin
@@ -53,9 +54,13 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (user) {
-      await api.put(`/api/admin/users/${user.id}`, { role: form.role, departmentId: form.departmentId || null, password: form.password || null });
+      await api.put(`/api/admin/users/${user.id}`, {
+        role: form.role, departmentId: form.departmentId || null, password: form.password || null,
+        // 学号仅 admin 可改（设备认人身份标识）；部长不传 = 不改
+        studentId: isAdmin ? form.studentId.trim() || "" : undefined,
+      });
     } else {
-      await api.post("/api/admin/users", form);
+      await api.post("/api/admin/users", { ...form, studentId: form.studentId.trim() || null });
     }
     onSaved();
   };
@@ -70,6 +75,13 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
         <form onSubmit={save} className="space-y-3">
           <div><label className="block text-sm font-medium mb-1">队员名</label><input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} className={inputCls} required disabled={!!user} /></div>
           <div><label className="block text-sm font-medium mb-1">密码{user && " (留空不修改)"}</label><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={inputCls} required={!user} /></div>
+          {isAdmin && (
+            <div>
+              <label className="block text-sm font-medium mb-1">学号</label>
+              <input value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })} className={inputCls} placeholder="柜边终端认人用，如 20240001" />
+              <p className="text-xs text-faint mt-1">全队唯一；设备借还按学号认人（仅管理员可改）</p>
+            </div>
+          )}
           <div><label className="block text-sm font-medium mb-1">角色</label>
             <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls}>
               <option value="member">成员</option><option value="部长">部长</option>

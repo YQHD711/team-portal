@@ -56,6 +56,9 @@ public class AppDbContext : DbContext
             // 公开 URL 标识：唯一、不可枚举（见 Services/Slug.cs）
             entity.Property(u => u.Slug).HasMaxLength(40);
             entity.HasIndex(u => u.Slug).IsUnique();
+            // 学号：设备认人的现实标识，全队唯一（可空）
+            entity.Property(u => u.StudentId).HasMaxLength(30);
+            entity.HasIndex(u => u.StudentId).IsUnique();
         });
 
         modelBuilder.Entity<User>()

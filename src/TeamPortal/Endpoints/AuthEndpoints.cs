@@ -158,6 +158,7 @@ public static class AuthEndpoints
                 Id = int.Parse(idClaim),
                 Username = username,
                 DisplayName = u?.DisplayName,
+                StudentId = u?.StudentId,
                 Role = role,
                 Department = department,
                 DepartmentId = u?.DepartmentId,

@@ -36,7 +36,7 @@ public static class AdminEndpoints
                 return Results.Problem("用户名和密码必填", statusCode: 400);
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
-            var u = await svc.CreateUser(req.Username, req.Password, req.Role ?? "member", req.DepartmentId, role, dept);
+            var u = await svc.CreateUser(req.Username, req.Password, req.Role ?? "member", req.DepartmentId, role, dept, req.StudentId);
             if (u is not null)
             {
                 log.Audit("create", actor, targetType: "user", targetId: u.Id.ToString(),
@@ -55,7 +55,7 @@ public static class AdminEndpoints
         {
             var (role, dept, actorId) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
-            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId);
+            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId, req.StudentId);
             if (ok)
             {
                 var changes = new List<string>();
@@ -314,8 +314,8 @@ public static class AdminEndpoints
     };
 }
 
-public record CreateUserReq(string Username, string Password, string? Role, int? DepartmentId);
-public record UpdateUserReq(string? Role, int? DepartmentId, string? Password, string? Username = null);
+public record CreateUserReq(string Username, string Password, string? Role, int? DepartmentId, string? StudentId = null);
+public record UpdateUserReq(string? Role, int? DepartmentId, string? Password, string? Username = null, string? StudentId = null);
 public record CreateDeptReq(string Name, string? Description);
 public record UpdateDeptReq(string Name, string? Description);
 public record KnowledgeWriteReq(string Path, string? Content);

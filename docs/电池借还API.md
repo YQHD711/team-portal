@@ -284,9 +284,9 @@ in_stock ──────► borrowed ──────► in_stock
 
 1. 管理端创建设备，拿到 `DeviceKey` / `Secret`
 2. 在设备上认人（二选一）→ 返回 `sessionToken`（12 小时）：
-   - **扫身份码 / 输学号**（主流程，免密）：`POST /api/device/login-by-id`
-     `{"identifier": "https://…/u/u_b34a" 或 "u_b34a" 或 "20240001"}`
-     也接受完整短链 `/u/{slug}`，自动提取 slug；找不到用户 → 404
+   - **输入学号**（主流程，免密）：`POST /api/device/login-by-id`
+     `{"identifier": "20240001"}`（学号由管理员在组织架构录入；也兼容登录名）
+     找不到用户 → 404
    - **账号密码**（兜底/严格模式）：`POST /api/device/login`
      `{"username":"…","password":"…"}`
 3. 之后调用电池借还接口，请求头带：
@@ -310,9 +310,9 @@ X-Device-Session: <sessionToken>
 
 > 会话 12 小时自动过期；登出调 `POST /api/device/logout`。会话与设备绑定，换设备无效。
 
-**身份码**：每人一张二维码（内容 `{baseUrl}/u/{slug}`），贴工牌/卡套，标识「人」；
-电池码标识「物」。柜边终端流程 = 扫身份码（或输学号）→ 扫电池码 → 借出/归还。
-`login-by-id` 是免密认定，信任模型 = 设备凭据（柜边终端）+ 身份标识；审计标记 `device-login-noauth`。
+柜边终端流程 = 输学号认人 → 扫电池码 → 借出/归还。
+`login-by-id` 是免密认定，信任模型 = 设备凭据（柜边终端）+ 学号；审计标记 `device-login-noauth`。
+（身份码/工牌二维码方案已移除：每人发二维码不现实，学号是队员互知的现实标识。）
 
 ---
 
