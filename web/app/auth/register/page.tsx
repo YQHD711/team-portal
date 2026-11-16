@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(""); setSuccess(""); setLoading(true);
     try {
-      await api.post("/api/auth/register", { username, password, inviteCode: inviteCode || null });
+      await api.post("/api/auth/register", { username, password, inviteCode: inviteCode || null, displayName: displayName.trim() || null });
       setSuccess("注册成功！即将跳转到登录页...");
       setTimeout(() => router.push("/auth/login"), 2000);
     } catch (err) { setError(err instanceof Error ? err.message : "注册失败"); }
@@ -62,6 +63,12 @@ export default function RegisterPage() {
             <div className="space-y-1.5">
               <label className="block text-sm font-medium">用户名</label>
               <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="至少2个字符" required minLength={2}
+                className="w-full rounded-xl border border-border bg-surface-subtle px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium">显示姓名 <span className="text-muted font-normal">（真实姓名，可稍后改）</span></label>
+              <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="如：张三"
                 className="w-full rounded-xl border border-border bg-surface-subtle px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow" />
             </div>
 

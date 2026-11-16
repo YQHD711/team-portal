@@ -28,8 +28,12 @@ public class AuthService
         _db = db; _config = config; _log = log; _settings = settings;
     }
 
-    public async Task<User?> Register(string username, string password, string? inviteCode = null)
+    public async Task<User?> Register(string username, string password, string? inviteCode = null, string? displayName = null)
     {
+        // 显示姓名：注册时直接填（新人在组织架构里可读，不用事后自己补）
+        displayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
+        if (displayName is { Length: > 50 })
+            throw new InvalidOperationException("显示姓名不超过 50 字符");
         if (await _db.Users.AnyAsync(u => u.Username == username))
         {
             _log.Warn("auth", $"注册失败，用户名已存在: {username}", null, username);
@@ -80,6 +84,7 @@ public class AuthService
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = "member",
+            DisplayName = displayName,
             Slug = Slug.NewUser(),
             DepartmentId = deptId,
             InvitedByUserId = invitedById,
