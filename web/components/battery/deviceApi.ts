@@ -26,6 +26,8 @@ export interface DeviceBattery {
   status: string;
   health: string | null;
   borrower: string | null;
+  /** 显示姓名（为空回落 borrower 登录名） */
+  borrowerName?: string | null;
   borrowedAt: string | null;
 }
 

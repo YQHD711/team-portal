@@ -8,6 +8,16 @@ const PUBLIC_PATHS = ["/auth/login"];
 const ADMIN_PATHS = ["/admin"];
 const BAIDU_PATHS = ["/admin/cloud"];
 
+/**
+ * 「仅管理员」页面：侧边栏对部长隐藏，但 URL 直达此前只拦 /admin/cloud——
+ * 部长输 URL 就能看到完整管理界面（随后 API 全 403 且前端静默吞掉）。
+ * 这里把菜单「仅管理员可见」的路径统一收口（前端隐藏 + 前端拦截 + 后端 AdminOnly 三层）。
+ */
+const ADMIN_ONLY_PATHS = [
+  "/admin/settings", "/admin/label-templates", "/admin/logs",
+  "/admin/trash", "/admin/backup", "/admin/cloud", "/admin/ai-admin", "/admin/devices",
+];
+
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -29,7 +39,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
     // Admin pages require staff role
     if (pathname.startsWith("/admin")) {
-      if (BAIDU_PATHS.some(p => pathname.startsWith(p))) {
+      if (ADMIN_ONLY_PATHS.some(p => pathname.startsWith(p))) {
+        // 仅管理员页面：部长直达 URL 也拦回首页（与侧边栏菜单承诺一致）
         if (!isAdmin()) {
           setAuthorized(false);
           router.replace("/");

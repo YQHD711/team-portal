@@ -34,7 +34,10 @@ export default function BatteryScanPage() {
 
   const lookup = async (raw: string) => {
     const normalized = extractBatteryCode(raw);
-    if (!normalized) return;
+    if (!normalized) {
+      setError("请输入或扫描电池编码");
+      return;
+    }
     setBusy(true);
     setError(null);
     setBattery(null);

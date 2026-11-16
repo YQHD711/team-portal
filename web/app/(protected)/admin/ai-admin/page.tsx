@@ -56,9 +56,13 @@ export default function AIAdminPage() {
 
   const clearMemory = async () => {
     if (!confirm("清除所有AI管理员记忆？此操作不可恢复。")) return;
-    await api.post("/api/admin/agent/memory/clear", {});
-    setHistory([]);
-    setMemory({ total: 0, summaries: 0, byRole: [] });
+    try {
+      await api.post("/api/admin/agent/memory/clear", {});
+      setHistory([]);
+      setMemory({ total: 0, summaries: 0, byRole: [] });
+    } catch (e) {
+      appendError(e instanceof Error ? e.message : "清除记忆失败");
+    }
   };
 
   const cancelAnalysis = () => abortRef.current?.abort();

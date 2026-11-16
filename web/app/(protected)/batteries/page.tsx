@@ -9,6 +9,7 @@ import { BatteryCard } from "@/components/battery/BatteryCard";
 import { BatteryLabelExportButton } from "@/components/battery/BatteryLabelExportButton";
 import { type BatteryItem, type BatteryLoan } from "@/components/battery/batteryTypes";
 import { RecentLoans } from "@/components/battery/RecentLoans";
+import { BatteryCreateForm } from "@/components/battery/BatteryCreateForm";
 
 const STATUS_FILTERS = [
   { value: "", label: "全部" },
@@ -31,47 +32,67 @@ export default function BatteriesPage() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ code: "", model: "", health: "正常", notes: "" });
 
   const fetchAll = useCallback(() => {
     setLoading(true);
+    setLoadError(null);
     const q = new URLSearchParams();
     if (status) q.set("status", status);
     if (search.trim()) q.set("search", search.trim());
-    Promise.all([
-      api.get<BatteryItem[]>(`/api/battery?${q.toString()}`).then(setItems).catch(() => {}),
-      api.get<BatteryLoan[]>("/api/battery/mine").then(setMine).catch(() => {}),
-      api.get<BatteryLoan[]>("/api/battery/overdue").then(setOverdue).catch(() => {}),
-      api.get<BatteryLoan[]>("/api/battery/loans?take=10").then(setRecentLoans).catch(() => {}),
-    ]).finally(() => setLoading(false));
+    // 加载失败必须与"空数据"区分开：否则管理员会以为没电池而重复建档
+    api.get<BatteryItem[]>(`/api/battery?${q.toString()}`)
+      .then(setItems)
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "加载失败"))
+      .finally(() => setLoading(false));
+    api.get<BatteryLoan[]>("/api/battery/mine").then(setMine).catch(() => {});
+    api.get<BatteryLoan[]>("/api/battery/overdue").then(setOverdue).catch(() => {});
+    api.get<BatteryLoan[]>("/api/battery/loans?take=10").then(setRecentLoans).catch(() => {});
   }, [status, search]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // 写操作失败必须可见：借出失败被当成成功会直接导致账实错乱
   const doBorrow = async (b: BatteryItem) => {
     setBusyId(b.id);
-    try { await api.post(`/api/battery/${b.id}/borrow`, {}); fetchAll(); }
-    finally { setBusyId(null); }
+    setActionError(null);
+    try {
+      await api.post(`/api/battery/${b.id}/borrow`, {});
+      fetchAll();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "借出失败");
+    } finally { setBusyId(null); }
   };
 
   const doReturn = async (b: BatteryItem) => {
     setBusyId(b.id);
-    try { await api.post(`/api/battery/${b.id}/return`, {}); fetchAll(); }
-    finally { setBusyId(null); }
+    setActionError(null);
+    try {
+      await api.post(`/api/battery/${b.id}/return`, {});
+      fetchAll();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "归还失败");
+    } finally { setBusyId(null); }
   };
 
-  const createBattery = async () => {
-    await api.post("/api/battery", {
-      code: form.code.trim() || null,
-      model: form.model.trim() || null,
-      health: form.health,
-      notes: form.notes.trim() || null,
-    });
-    setShowForm(false);
-    setForm({ code: "", model: "", health: "正常", notes: "" });
-    fetchAll();
+  const createBattery = async (form: { code: string; model: string; health: string; notes: string }) => {
+    setActionError(null);
+    try {
+      await api.post("/api/battery", {
+        code: form.code.trim() || null,
+        model: form.model.trim() || null,
+        health: form.health,
+        notes: form.notes.trim() || null,
+      });
+      setShowForm(false);
+      fetchAll();
+    } catch (e) {
+      // 保留表单并显示原因（如编码重复），否则用户不知道为什么没建成
+      setActionError(e instanceof Error ? e.message : "新增失败");
+    }
   };
 
   return (
@@ -108,36 +129,7 @@ export default function BatteriesPage() {
       )}
 
       {showForm && (
-        <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs font-medium">
-              编码（留空自动生成）
-              <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm" placeholder="BAT-0001" />
-            </label>
-            <label className="block text-xs font-medium">
-              型号
-              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm" placeholder="6S 3300mAh" />
-            </label>
-            <label className="block text-xs font-medium">
-              健康度
-              <select value={form.health} onChange={e => setForm({ ...form, health: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                {["正常", "鼓包", "漏液", "过放", "报废"].map(h => <option key={h}>{h}</option>)}
-              </select>
-            </label>
-            <label className="block text-xs font-medium">
-              备注
-              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm" />
-            </label>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setShowForm(false)} className="rounded-lg border border-border px-3 py-1.5 text-sm">取消</button>
-            <button onClick={createBattery} className="rounded-lg bg-primary px-3 py-1.5 text-sm text-white">保存</button>
-          </div>
-        </div>
+        <BatteryCreateForm onSubmit={createBattery} onCancel={() => setShowForm(false)} />
       )}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -153,8 +145,15 @@ export default function BatteriesPage() {
         <button onClick={fetchAll} className="rounded-lg border border-border px-3 py-2 text-sm">刷新</button>
       </div>
 
+      {actionError && <div className="rounded-lg bg-danger/10 p-3 text-sm text-danger">{actionError}</div>}
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-faint" /></div>
+      ) : loadError ? (
+        <div className="rounded-xl border border-danger/40 bg-danger/5 p-12 text-center">
+          <p className="text-sm font-medium text-danger">加载失败：{loadError}</p>
+          <button onClick={fetchAll} className="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-surface-hover">重试</button>
+        </div>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-12 text-center text-faint">
           <QrCode className="mx-auto mb-3 h-10 w-10 opacity-40" />

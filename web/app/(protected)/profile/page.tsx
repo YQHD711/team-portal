@@ -37,6 +37,7 @@ export default function ProfilePage() {
   const [skills, setSkills] = useState("");
   // 显示姓名（Users.DisplayName，与档案 PilotProfile 分开）
   const [displayName, setDisplayName] = useState("");
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [nameSaving, setNameSaving] = useState(false);
   // 团队认证(考核通过记录,只读)
   const [certItems, setCertItems] = useState<ExamPassView[]>([]);
@@ -49,13 +50,16 @@ export default function ProfilePage() {
       .catch(() => {});
   }, []);
 
+  // 空值 = 清空（回落登录名显示），与后端能力对齐
   const saveDisplayName = async () => {
-    if (!displayName.trim()) return;
     setNameSaving(true);
+    setNameMsg(null);
     try {
       await api.put("/api/profile/display-name", { displayName: displayName.trim() });
-    } catch { /* 保留输入，允许重试 */ }
-    finally { setNameSaving(false); }
+      setNameMsg({ ok: true, text: displayName.trim() ? "已保存" : "已清空，显示登录名" });
+    } catch (e) {
+      setNameMsg({ ok: false, text: e instanceof Error ? e.message : "保存失败" });
+    } finally { setNameSaving(false); }
   };
 
   useEffect(() => {
@@ -94,7 +98,9 @@ export default function ProfilePage() {
         flightTypes: flightTypes.join(",") || null, skills: skills || null
       } : null);
       setEditMode(false);
-    } catch { /* ignore */ }
+    } catch (e) {
+      setNameMsg({ ok: false, text: e instanceof Error ? e.message : "档案保存失败" });
+    }
     finally { setSaving(false); }
   };
 
@@ -152,12 +158,13 @@ export default function ProfilePage() {
                 className="mt-1 w-48 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 placeholder="如：张三" />
             </label>
-            <button onClick={saveDisplayName} disabled={nameSaving || !displayName.trim()}
+            <button onClick={saveDisplayName} disabled={nameSaving}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">
               {nameSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               保存姓名
             </button>
-            <span className="text-xs text-faint">借还记录/组织架构显示用；登录名（学号）不会变</span>
+            <span className="text-xs text-faint">借还记录/组织架构显示用；登录名（学号）不会变；留空保存=清空并回落登录名</span>
+            {nameMsg && <span className={nameMsg.ok ? "text-xs text-success" : "text-xs text-danger"}>{nameMsg.text}</span>}
           </div>
           {editMode ? (
             <>

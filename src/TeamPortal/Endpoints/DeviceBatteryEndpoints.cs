@@ -53,6 +53,7 @@ public static class DeviceBatteryEndpoints
             {
                 item.Id, item.Code, item.Model, item.Status, item.Health,
                 borrower = item.CurrentBorrower?.Username,
+                borrowerName = item.CurrentBorrower?.DisplayName,
                 borrowedAt = item.BorrowedAt,
             });
         });
