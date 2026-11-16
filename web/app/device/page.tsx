@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BatteryCharging, KeyRound, Loader2, LogOut, RotateCcw, ScanLine, Settings2, UserRound } from "lucide-react";
 import { DeviceCameraScanner } from "@/components/battery/DeviceCameraScanner";
 import { extractBatteryCode, extractUserIdentity } from "@/components/battery/batteryCode";
+import { statusMeta } from "@/components/battery/batteryTypes";
 import {
   clearDeviceConfig, deviceBorrow, deviceGetBattery, deviceLogin, deviceLoginById, deviceLogout, deviceReturn,
   getDeviceConfig, getDeviceSession, saveDeviceConfig,
@@ -68,7 +69,10 @@ export default function DeviceTerminalPage() {
   // 现场认人：扫身份码 / 输学号（免密），责任记到识别出的用户
   const identify = async (raw: string) => {
     const identifier = extractUserIdentity(raw);
-    if (!identifier) return;
+    if (!identifier) {
+      setError("请扫身份码或输入学号");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -90,7 +94,10 @@ export default function DeviceTerminalPage() {
 
   const lookup = useCallback(async (raw: string) => {
     const normalized = extractBatteryCode(raw);
-    if (!normalized) return;
+    if (!normalized) {
+      setError("请扫电池标签或输入编码");
+      return;
+    }
     setBusy(true);
     setError(null);
     setBattery(null);
@@ -227,10 +234,10 @@ export default function DeviceTerminalPage() {
                   <div className="font-mono text-sm text-faint">{battery.code}</div>
                   <div className="text-lg font-bold">{battery.model || "未填型号"}</div>
                 </div>
-                <span className="rounded-full bg-surface-hover px-2.5 py-1 text-xs">{battery.status === "in_stock" ? "在库" : battery.status === "borrowed" ? "借出" : battery.status}</span>
+                <span className={"rounded-full px-2.5 py-1 text-xs " + statusMeta(battery.status).cls}>{statusMeta(battery.status).text}</span>
               </div>
               {battery.status === "borrowed" && battery.borrower && (
-                <div className="text-sm text-muted">当前借用人：{battery.borrower}</div>
+                <div className="text-sm text-muted">当前借用人：{battery.borrowerName?.trim() || battery.borrower}</div>
               )}
               <div className="space-y-2">
                 {battery.status === "in_stock" && (

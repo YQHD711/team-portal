@@ -16,7 +16,8 @@ export default function AdminDevicesPage() {
 
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  // busy 按设备 id 记录：全局 busy 会让一台设备操作时其它设备按钮一起禁用
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -75,7 +76,7 @@ export default function AdminDevicesPage() {
   };
 
   const save = async () => {
-    setBusy(true);
+    setBusyId(editId ?? -1);
     setError(null);
     try {
       if (editId) {
@@ -89,45 +90,48 @@ export default function AdminDevicesPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存失败");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
   const rotate = async (d: DeviceRow) => {
     if (!confirm(`重置「${d.name}」的密钥？旧密钥会立即失效，设备需要重新配置。`)) return;
-    setBusy(true);
+    setBusyId(d.id);
+    setError(null);
     try {
       const res = await api.post<{ id: number; secret: string }>(`/api/admin/devices/${d.id}/rotate-secret`, {});
       setSecretInfo({ title: "密钥已重置", deviceName: d.name, deviceKey: d.deviceKey, secret: res.secret });
     } catch (e) {
       setError(e instanceof Error ? e.message : "重置失败");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
   const toggleEnabled = async (d: DeviceRow) => {
-    setBusy(true);
+    setBusyId(d.id);
+    setError(null);
     try {
       await api.put(`/api/admin/devices/${d.id}`, { enabled: !d.enabled });
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "操作失败");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
   const remove = async (d: DeviceRow) => {
     if (!confirm(`删除设备「${d.name}」？该设备的遥测记录会一并删除。`)) return;
-    setBusy(true);
+    setBusyId(d.id);
+    setError(null);
     try {
       await api.delete(`/api/admin/devices/${d.id}`);
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
@@ -190,9 +194,9 @@ export default function AdminDevicesPage() {
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={resetForm} className="rounded-lg border border-border px-3 py-1.5 text-sm">取消</button>
-            <button onClick={save} disabled={busy || !name.trim()}
+            <button onClick={save} disabled={busyId !== null || !name.trim()}
               className="rounded-lg bg-primary px-3 py-1.5 text-sm text-white disabled:opacity-50">
-              {busy ? "保存中…" : "保存"}
+              {busyId !== null ? "保存中…" : "保存"}
             </button>
           </div>
         </div>
@@ -208,7 +212,7 @@ export default function AdminDevicesPage() {
       ) : (
         <div className="space-y-3">
           {devices.map(d => (
-            <DeviceRowCard key={d.id} device={d} busy={busy} telemetry={telemetry[d.id]}
+            <DeviceRowCard key={d.id} device={d} busy={busyId === d.id} telemetry={telemetry[d.id]}
               onEdit={() => openEdit(d)}
               onRotate={() => void rotate(d)}
               onToggle={() => void toggleEnabled(d)}

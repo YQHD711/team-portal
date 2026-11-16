@@ -16,7 +16,12 @@ export default function BatteryByCodePage() {
   const params = useParams();
   const router = useRouter();
   const raw = params.code;
-  const code = decodeURIComponent(Array.isArray(raw) ? raw[0] : (raw ?? ""));
+/** URL 段解码：畸形 % 序列（标签磨损后手输）会抛 URIError，回落原始字符串。 */
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+  const code = safeDecode(Array.isArray(raw) ? raw[0] : (raw ?? ""));
 
   const [battery, setBattery] = useState<BatteryItem | null>(null);
   const [loading, setLoading] = useState(true);

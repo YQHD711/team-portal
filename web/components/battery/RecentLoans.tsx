@@ -15,7 +15,8 @@ export function RecentLoans({ loans }: Props) {
       <div className="mt-2 space-y-1.5">
         {loans.map(l => {
           const borrower = displayName(l.user) || l.user?.username || "用户 #" + l.userId;
-          const returner = l.returnedAt ? (displayName(l.returnedBy) || l.returnedBy?.username || "本人") : null;
+          // returnedBy 为空只出现在「管理员强制回库」（无操作人）——显示"系统/管理员"而非误导性的"本人"
+          const returner = l.returnedAt ? (displayName(l.returnedBy) || l.returnedBy?.username || "系统/管理员") : null;
           return (
             <div key={l.id} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-mono text-xs text-faint">{l.battery?.code ?? "电池 #" + l.batteryId}</span>

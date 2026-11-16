@@ -138,7 +138,7 @@ export default function CheckoutPage() {
       setCheckinTarget(null);
       fetchData();
       setOutRefresh(n => n + 1);
-    } catch (e: any) { alert(e.message || "归还失败"); }
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : "归还失败"); }
     finally { setCkSubmitting(false); }
   };
 
