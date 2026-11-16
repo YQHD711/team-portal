@@ -122,17 +122,26 @@ public static class ExamEndpoints
                 : [body.Deserialize<ExamResultInput>(WebJson) ?? new(0, false, null, null)];
             inputs = inputs.Where(i => i.UserId > 0).ToList();
             if (inputs.Count == 0) return Results.Problem("请选择队员", statusCode: 400);
+            var operatorId = int.TryParse(user.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier), out var opId) ? opId : 0;
 
-            var results = await svc.AddResults(id, inputs);
-            log.Audit("exam", user.Identity?.Name ?? "unknown", "exam-result", id.ToString(),
-                data: new { count = results.Count }, ipAddress: LogService.ClientIp(ctx));
-            return Results.Ok(results);
+            try
+            {
+                var results = await svc.AddResults(id, operatorId, inputs);
+                log.Audit("exam", user.Identity?.Name ?? "unknown", "exam-result", id.ToString(),
+                    data: new { count = results.Count }, ipAddress: LogService.ClientIp(ctx));
+                return Results.Ok(results);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
         });
 
         group.MapDelete("/{id:int}/results/{resultId:int}", async (int id, int resultId, ClaimsPrincipal user, AppDbContext db, ExamService svc, LogService log, HttpContext ctx) =>
         {
             if (await DenyIfOutOfScopeAsync(user, db, id) is { } denied) return denied;
-            var ok = await svc.DeleteResult(resultId);
+            // DeleteResult 必须带 examId 归属校验（防用自己部门 examId 删他部门成绩的 IDOR）
+            var ok = await svc.DeleteResult(id, resultId);
             if (ok) log.Audit("exam", user.Identity?.Name ?? "unknown", "exam-result", resultId.ToString(),
                 data: new { action = "delete", examId = id }, ipAddress: LogService.ClientIp(ctx));
             return ok ? Results.Ok(new { message = "已删除" }) : Results.Problem("结果不存在", statusCode: 404);

@@ -28,6 +28,10 @@ public static partial class WikiEndpoints
                 return Results.Problem("目标目录非法：只允许单段目录名", statusCode: 400);
             if (!knowledge.CanAccess(targetFolder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
+            // 写入收口（安全审计：CanAccess 对单段目录名一律放行，可写进他部门知识库）：
+            // 非 admin 只能写自己部门目录或"公共"
+            if (role != "admin" && targetFolder != (dept ?? "公共") && targetFolder != "公共")
+                return Results.Problem("只能提交到本部门目录或公共目录", statusCode: 403);
 
             var visibility = req.Visibility ?? "public";
             if (visibility is not "public" and not "department" and not "personal")
@@ -77,6 +81,9 @@ public static partial class WikiEndpoints
                 return Results.Problem("目标目录非法：只允许单段目录名", statusCode: 400);
             if (!knowledge.CanAccess(folder, role, dept))
                 return Results.Problem("Access denied for target folder", statusCode: 403);
+            // 同 submit-git：非 admin 只能写自己部门目录或"公共"（防写入他部门知识库）
+            if (role != "admin" && folder != (dept ?? "公共") && folder != "公共")
+                return Results.Problem("只能提交到本部门目录或公共目录", statusCode: 403);
 
             var vis = visibility ?? "public";
             if (vis is not "public" and not "department" and not "personal")
@@ -146,7 +153,7 @@ public static partial class WikiEndpoints
         // Delete a wiki task
         wiki.MapDelete("/tasks/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge, TrashService trash, HttpContext ctx) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
+            var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
             var log = app.Services.GetRequiredService<LogService>();
@@ -158,6 +165,8 @@ public static partial class WikiEndpoints
                 log.Warn("wiki", $"Wiki task {id} delete failed (not found) by {actor}");
                 return Results.Problem("任务不存在", statusCode: 404);
             }
+            if (!CanManageTask(task, role, dept, uid))
+                return Results.Problem("只能删除自己创建或本部门的任务", statusCode: 403);
 
             // 删除会连知识库里的项目目录一起清掉 —— 先把目录整体搬进回收站（可恢复），再删任务行
             // ⚠️ 审计 #4：TargetFolder/ProjectName 来自任务创建时的用户输入，直接拼路径可把任意文件
@@ -195,9 +204,13 @@ public static partial class WikiEndpoints
         // force=true 表示"用户已确认覆盖人工修改"；不带 force 且存在人工修改标记时返回 409，绝不直接覆盖。
         wiki.MapPost("/tasks/{id}/update", async (string id, bool? force, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, HttpContext ctx) =>
         {
-            var (role, _) = await GetUserCtx(user, db);
+            var (role, dept) = await GetUserCtx(user, db);
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可更新", statusCode: 403);
             var log = app.Services.GetRequiredService<LogService>();
+            var updateTask = await generator.GetTask(id);
+            if (updateTask is null) return Results.Problem("任务不存在或未完成", statusCode: 400);
+            if (!CanManageTask(updateTask, role, dept, GetUserId(user)))
+                return Results.Problem("只能重新生成自己创建或本部门的任务", statusCode: 403);
 
             var edits = await generator.GetEditMarks(id);
             if (edits.Count > 0 && force != true)
@@ -294,6 +307,11 @@ public static partial class WikiEndpoints
             if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可修改", statusCode: 403);
             if (req.Visibility is not "public" and not "department" and not "personal")
                 return Results.Problem("Invalid visibility", statusCode: 400);
+            var visTask = await generator.GetTask(id);
+            if (visTask is null) return Results.Problem("任务不存在", statusCode: 404);
+            // 归属校验：防部长把他部门/personal 任务改成 public（源码泄露）或隐藏公共资产
+            if (!CanManageTask(visTask, role, dept, GetUserId(user)))
+                return Results.Problem("只能修改自己创建或本部门的任务", statusCode: 403);
             var ok = await generator.UpdateVisibility(id, req.Visibility);
             var log = app.Services.GetRequiredService<LogService>();
             if (ok) log.Info("wiki", $"Wiki task {id} visibility -> {req.Visibility} by {user.Identity?.Name}");
@@ -456,6 +474,16 @@ td.code{{white-space:pre;padding-left:12px;color:#d4d4d4}}.lang{{font-size:11px;
         task.Visibility == "public" ||
         (task.Visibility == "department" && (role == "admin" || dept == task.TargetFolder)) ||
         (task.Visibility == "personal" && (role == "admin" || task.UserId == userId));
+
+    /// <summary>
+    /// 写操作（删除/重新生成/改可见性）的归属判定。此前只判 role，任何部长可删改他部门
+    /// 与他人 personal 任务（审计发现的横向越权）。规则：
+    /// admin 全权；创建者本人；本部门部长对其部门目录的任务。
+    /// </summary>
+    private static bool CanManageTask(Data.Models.WikiTask task, string? role, string? dept, int userId) =>
+        role == "admin" ||
+        task.UserId == userId ||
+        (role == "部长" && task.TargetFolder == dept);
 }
 
 public record GitSubmitRequest(string Url, string ProjectName, string? TargetFolder, string? Visibility, string? Model = null, string? CustomCatalogJson = null, bool CloneOnly = false);

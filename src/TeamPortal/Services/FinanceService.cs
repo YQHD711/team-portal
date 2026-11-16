@@ -16,6 +16,9 @@ public class FinanceService
 
     public async Task<PurchaseRequest> CreateRequest(int userId, string itemName, int quantity, decimal estimatedPrice, string reason)
     {
+        if (quantity <= 0) throw new InvalidOperationException("数量必须为正数");
+        if (estimatedPrice < 0) throw new InvalidOperationException("预估价格不能为负");
+        if (string.IsNullOrWhiteSpace(itemName)) throw new InvalidOperationException("物品名称必填");
         var req = new PurchaseRequest
         {
             RequesterUserId = userId, ItemName = itemName, Quantity = quantity,
@@ -43,6 +46,9 @@ public class FinanceService
     {
         var req = await _db.PurchaseRequests.FindAsync(id);
         if (req is null || req.Status != "pending") return false;
+        // 自批自采禁止：申请人不得审批自己的采购（此前部长可自己申请自己批准任意金额）
+        if (req.RequesterUserId == approverId)
+            throw new InvalidOperationException("不能审批自己提交的采购申请");
         req.Status = "approved"; req.ApproverUserId = approverId; req.ApprovedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         _log.Info("finance", $"Purchase request #{id} approved: {req.ItemName}");
@@ -63,6 +69,7 @@ public class FinanceService
 
     public async Task<bool> MarkPurchased(int id, decimal actualPrice)
     {
+        if (actualPrice < 0) throw new InvalidOperationException("实际价格不能为负");
         var req = await _db.PurchaseRequests.FindAsync(id);
         if (req is null || req.Status != "approved") return false;
         req.Status = "purchased"; req.ActualPrice = actualPrice; req.PurchasedAt = DateTime.UtcNow;
