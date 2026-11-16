@@ -9,10 +9,16 @@ public class User
 
     /// <summary>
     /// 显示姓名（真实姓名/昵称），用户可自行修改；为空时前端回落 Username。
-    /// 与 Username（登录名/学号）分离：登录名稳定，身份码/审计/登录都锚定它；
+    /// 与 Username（登录名）分离：登录名稳定，审计/登录都锚定它；
     /// 显示名只影响展示，改名不影响任何追溯链。
     /// </summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// 学号：柜边终端认人的现实标识（队员人人知道自己的学号）。
+    /// 登录名是自定义的、队友之间互不知道，所以设备认人只能按学号。可空、全队唯一。
+    /// </summary>
+    public string? StudentId { get; set; }
     [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "member";

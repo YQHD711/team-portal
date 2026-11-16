@@ -833,9 +833,13 @@ static void MigrateExistingTables(AppDbContext db)
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_UserId_ReturnedAt ON BatteryLoans (UserId, ReturnedAt)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_BatteryLoans_BorrowedAt ON BatteryLoans (BorrowedAt)");
 
-        // Users.DisplayName — 显示姓名（用户可自改），登录名/学号不动
+        // Users.DisplayName — 显示姓名（用户可自改），登录名不动
         MigrateSql(conn, "ALTER TABLE Users ADD COLUMN DisplayName TEXT",
             "duplicate column");
+        // Users.StudentId — 学号（设备终端认人）
+        MigrateSql(conn, "ALTER TABLE Users ADD COLUMN StudentId TEXT",
+            "duplicate column");
+        MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_StudentId ON Users (StudentId)");
 
         // ── 设备内用户会话（设备登录后借还，不复用用户 JWT）
         MigrateSql(conn, """

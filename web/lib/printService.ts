@@ -14,13 +14,12 @@ import { downloadPdf, type BuildProgressOptions } from "./locationLabelPdf";
 export type { BuildProgressOptions };
 
 /** 标签用途：决定文件名。 */
-export type LabelKind = "material" | "location" | "battery" | "identity";
+export type LabelKind = "material" | "location" | "battery";
 
 const KIND_FILE_PREFIX: Record<LabelKind, string> = {
   material: "物料标签",
   location: "库位标签",
   battery: "电池标签",
-  identity: "身份码",
 };
 
 /** 统一文件名：用途-YYYY-MM-DD.pdf */

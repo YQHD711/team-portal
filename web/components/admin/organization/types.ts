@@ -4,6 +4,8 @@ export interface OrgUser {
   id: number; username: string; role: string;
   /** 显示姓名（用户自改），为空回落 username */
   displayName?: string | null;
+  /** 学号（设备终端认人用），可空 */
+  studentId?: string | null;
   department: string | null; departmentId: number | null; createdAt: string;
 }
 

@@ -9,7 +9,6 @@ import ProfilesTab from "@/components/admin/organization/ProfilesTab";
 import { InvitesTab } from "@/components/admin/organization/InvitesTab";
 import { ImportTab } from "@/components/admin/organization/ImportTab";
 import { Dept, OrgUser, ProfileBrief, Certification, ExamBrief, ExamPass } from "@/components/admin/organization/types";
-import { IdentityLabelExportButton } from "@/components/device/IdentityLabelExportButton";
 
 export default function OrganizationPage() {
   const { user: me } = useCurrentUser();
@@ -89,16 +88,11 @@ export default function OrganizationPage() {
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">组织架构</h1>
           <p className="text-sm text-muted">{isAdmin ? "部门与队员统一管理 · 按部门展示队员技能与认证" : "本部门队员管理 · 技能与认证"}</p>
         </div>
-        <IdentityLabelExportButton people={users.map(u => ({
-          username: u.username,
-          displayName: u.displayName ?? null,
-          slug: slugByUser.get(u.id) ?? null,
-        }))} />
       </div>
 
       {/* Stats */}

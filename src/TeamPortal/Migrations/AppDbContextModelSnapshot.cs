@@ -1550,6 +1550,10 @@ namespace TeamPortal.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("StudentId")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("TokenVersion")
                         .HasColumnType("INTEGER");
 
@@ -1565,6 +1569,9 @@ namespace TeamPortal.Migrations
                     b.HasIndex("InvitedByUserId");
 
                     b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("StudentId")
                         .IsUnique();
 
                     b.HasIndex("Username")

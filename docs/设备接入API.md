@@ -291,7 +291,7 @@ Content-Type: application/problem+json
 
 > 注意：设备流水和人工领用流水共用一张表，前端「物料交易记录」会同时显示 `device_in/device_out`。
 
-### 5.4b 设备终端现场认人（扫身份码 / 输学号，免密）
+### 5.4b 设备终端现场认人（输入学号，免密）
 
 `POST /api/device/login-by-id`
 
@@ -300,11 +300,14 @@ Content-Type: application/problem+json
 **请求体**：
 
 ```json
-{ "identifier": "https://team.example.com/u/u_b34a0763" }
+{ "identifier": "20240001" }
 ```
 
-`identifier` 接受三种形态：身份码完整短链 `/u/{slug}`、纯 slug、纯学号/用户名。
+`identifier` 接受：**学号**（主用，User.StudentId）、登录名、历史 `/u/{slug}` 短链。
 找不到用户 → **404**。
+
+> 身份码（工牌二维码）方案已移除：每人发二维码不现实。设备终端直接输学号认人；
+> 学号由管理员在「组织架构 → 编辑队员」录入（全队唯一，仅管理员可改）。
 
 **响应 200**：与 `/api/device/login` 相同（`sessionToken` + `user`）。
 

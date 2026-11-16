@@ -1,6 +1,6 @@
 /**
- * 从身份码内容取用户标识：支持完整短链 /u/{slug}、纯 slug、纯学号/用户名。
- * 与 extractBatteryCode 对称——身份码标识「人」，电池码标识「物」。
+ * 从认人输入里取用户标识：学号/用户名，或历史遗留的 /u/{slug} 短链。
+ * （身份码打印已移除：每人发二维码不现实，输学号认人即可；此函数兼容旧输入。）
  */
 export function extractUserIdentity(text: string): string {
   const trimmed = text.trim();

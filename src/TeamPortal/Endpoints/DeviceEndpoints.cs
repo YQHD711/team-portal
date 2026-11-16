@@ -104,9 +104,10 @@ public static class DeviceEndpoints
             if (DeviceAuthService.IsIdLoginLocked(device.Id))
                 return Results.Problem("认人尝试过于频繁，请稍后再试", statusCode: 429);
 
-            // 身份码内容是 /u/{slug}；扫码枪也可能是纯 slug 或学号/用户名
+            // 认人输入：**学号优先**（队员互知的现实标识），兼容登录名与历史 /u/{slug} 短链
             var slug = ExtractSlug(identifier);
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Slug == slug || u.Username == identifier);
+            var user = await db.Users.FirstOrDefaultAsync(u =>
+                u.StudentId == identifier || u.Slug == slug || u.Username == identifier);
             if (user is null)
             {
                 DeviceAuthService.RegisterIdLoginFailure(device.Id);
@@ -126,7 +127,7 @@ public static class DeviceEndpoints
             {
                 sessionToken = token,
                 expiresAt = session.ExpiresAt,
-                user = new { user.Id, user.Username, DisplayName = user.DisplayName, user.Role },
+                user = new { user.Id, user.Username, DisplayName = user.DisplayName, user.StudentId, user.Role },
             });
         });
 
