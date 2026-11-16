@@ -85,6 +85,9 @@ namespace TeamPortal.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("RemindedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("ReturnedAt")
                         .HasColumnType("TEXT");
 
