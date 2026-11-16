@@ -171,6 +171,7 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
                     </span>
                     {u.displayName?.trim() && <span className="truncate text-[11px] text-faint">{u.username}</span>}
                     {u.studentId && <span className="truncate text-[11px] text-faint">学号 {u.studentId}</span>}
+                    {u.identityDisabled && <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] text-danger">已挂失</span>}
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">

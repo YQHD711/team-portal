@@ -132,7 +132,7 @@ public class AuthServiceTests
         }
 
         // 6th attempt should throw due to lockout
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             auth.Login("target", "wrong"));
     }
 
@@ -248,7 +248,7 @@ public class AuthServiceTests
             Assert.True(AuthService.IsLockoutActive(entry.lockedUntil, DateTime.UtcNow));
 
             // 锁定期内即使口令正确也必须被拒（锁定优先于口令校验）
-            await Assert.ThrowsAsync<InvalidOperationException>(() => auth.Login(user, "rightpass123"));
+            await Assert.ThrowsAnyAsync<InvalidOperationException>(() => auth.Login(user, "rightpass123"));
         }
         finally
         {
@@ -346,7 +346,7 @@ public class AuthServiceTests
             Assert.True(LoginAttempts().TryGetValue($"login:{user}", out var entry));
             Assert.Equal(5, entry.attempts);
             Assert.True(AuthService.IsLockoutActive(entry.lockedUntil, DateTime.UtcNow));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => auth.Login(user, "wrong"));
+            await Assert.ThrowsAnyAsync<InvalidOperationException>(() => auth.Login(user, "wrong"));
         }
         finally
         {

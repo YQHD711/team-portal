@@ -117,6 +117,10 @@ public static class DeviceEndpoints
                 return Results.Problem("没有找到该身份标识对应的用户", statusCode: 404);
             }
 
+            // 身份挂失：学号泄露/被冒名后管理员一键挂失，免密认人立即失效
+            if (user.IdentityDisabled)
+                return Results.Problem("该成员身份已挂失，学号认人已停用", statusCode: 403);
+
             DeviceAuthService.ClearIdLoginFailures(device.Id);
             var (session, token) = await auth.CreateSessionAsync(device, user, ctx, method: "idcode");
             log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "user",

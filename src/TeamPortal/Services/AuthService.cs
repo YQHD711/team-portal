@@ -28,6 +28,18 @@ public class AuthService
         _db = db; _config = config; _log = log; _settings = settings;
     }
 
+    /// <summary>账号已挂失：登录/设备认人被封禁（HTTP 语义 403）。</summary>
+    public class IdentityDisabledException : InvalidOperationException
+    {
+        public IdentityDisabledException(string message) : base(message) { }
+    }
+
+    /// <summary>登录锁定：密码错太多次（HTTP 语义 429）。</summary>
+    public class LoginLockedException : InvalidOperationException
+    {
+        public LoginLockedException(string message) : base(message) { }
+    }
+
     public async Task<User?> Register(string username, string password, string? inviteCode = null, string? displayName = null)
     {
         // 显示姓名：注册时直接填（新人在组织架构里可读，不用事后自己补）
@@ -283,7 +295,7 @@ public class AuthService
             {
                 var waitMin = (int)(entry.lockedUntil - now).TotalMinutes + 1;
                 _log.Warn("auth", $"Login blocked (rate limit): {username}", null, username);
-                throw new InvalidOperationException($"登录尝试过于频繁，请 {waitMin} 分钟后再试");
+                throw new LoginLockedException($"登录尝试过于频繁，请 {waitMin} 分钟后再试");
             }
             // 锁定期已过:必须先把失败计数清零。此前只在成功登录时清零,到期后 attempts 仍 >= maxAttempts,
             // 于是下一次请求会立刻"再锁一次"并顺延 lockedUntil,账号实际上永久无法登录(A-01)。
@@ -307,6 +319,10 @@ public class AuthService
             _log.Warn("auth", $"Login failed: {username}", null, username);
             return null;
         }
+
+        // 身份挂失：账号级封禁（学号/密码泄露后管理员一键挂失，登录与设备认人同时失效）
+        if (user.IdentityDisabled)
+            throw new IdentityDisabledException("该账号已挂失，请联系管理员解挂");
 
         // Clear failed attempts on success
         _loginAttempts.TryRemove(key, out _);

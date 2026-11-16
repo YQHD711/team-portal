@@ -53,7 +53,7 @@ public class AdminService
     }
 
     public async Task<bool> UpdateUser(int id, string? userRole, int? deptId, string? password, string? username,
-        string? currentRole, string? currentDept, int currentUserId, string? studentId = null)
+        string? currentRole, string? currentDept, int currentUserId, string? studentId = null, bool? identityDisabled = null)
     {
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
@@ -61,6 +61,8 @@ public class AdminService
         // 学号是设备认人的身份标识，修改仅 admin（防伪造认人链条）
         studentId = studentId == null ? null : (string.IsNullOrWhiteSpace(studentId) ? "" : studentId.Trim());
         if (studentId != null && currentRole != "admin") return false;
+        // 身份挂失/解挂仅 admin（账号级封禁，部长不可挂失他人）
+        if (identityDisabled.HasValue && currentRole != "admin") return false;
 
         // 部长在“本部门内”有限自主：可编辑本部门非 admin 成员的姓名/备注类字段。
         // 越权收口（安全审计发现的三条横向接管路径，一律仅 admin）：
@@ -93,6 +95,13 @@ public class AdminService
         }
         if (deptId.HasValue) { var newDept = deptId == 0 ? null : deptId; if (user.DepartmentId != newDept) { changes.Add($"dept:{user.DepartmentId}→{newDept}"); user.DepartmentId = newDept; } }
         if (!string.IsNullOrWhiteSpace(password)) { changes.Add("password:reset"); user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); }
+        if (identityDisabled.HasValue && user.IdentityDisabled != identityDisabled.Value)
+        {
+            changes.Add($"identity:{(identityDisabled.Value ? "挂失" : "解挂")}");
+            user.IdentityDisabled = identityDisabled.Value;
+            // 挂失时顺带自增 TokenVersion：已签发的 JWT 立即作废
+            if (identityDisabled.Value) user.TokenVersion++;
+        }
 
         // 角色 / 部门 / 密码变了 → 让已签发的 token 立即失效。
         // 否则被免职的部长、被换部门的人、被改密码的账号，旧 token 还会带着旧身份

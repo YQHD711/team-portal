@@ -19,6 +19,12 @@ public class User
     /// 登录名是自定义的、队友之间互不知道，所以设备认人只能按学号。可空、全队唯一。
     /// </summary>
     public string? StudentId { get; set; }
+
+    /// <summary>
+    /// 身份挂失：学号泄露/被冒名时管理员一键挂失——设备免密认人与账号登录同时失效。
+    /// 解挂 = 改回 false。堵的是"知道学号/密码就能冒名"的整条通道。
+    /// </summary>
+    public bool IdentityDisabled { get; set; }
     [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "member";
