@@ -33,7 +33,7 @@ public static class AuthEndpoints
 
             try
             {
-                var user = await auth.Register(req.Username.Trim(), req.Password, req.InviteCode);
+                var user = await auth.Register(req.Username.Trim(), req.Password, req.InviteCode, req.DisplayName);
                 if (user is null)
                 {
                     log.Audit("register", req.Username.Trim(), targetType: "user", data: new { success = false, error = "用户名已存在" }, ipAddress: LogService.ClientIp(ctx));
@@ -181,7 +181,7 @@ public static class AuthEndpoints
     }
 }
 
-public record RegisterRequest(string Username, string Password, string? InviteCode = null);
+public record RegisterRequest(string Username, string Password, string? InviteCode = null, string? DisplayName = null);
 public record GenerateInviteReq(int? DepartmentId, int? MaxUses = 1, int? DaysValid = 30);
 public record LoginRequest(string Username, string Password);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
