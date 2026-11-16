@@ -30,5 +30,8 @@ public class BatteryLoan
     /// </summary>
     public string? AuthMethod { get; set; }
 
+    /// <summary>上次超时提醒时间：每日提醒去重（同一条借出一天只提醒一次）。</summary>
+    public DateTime? RemindedAt { get; set; }
+
     public string? Note { get; set; }
 }

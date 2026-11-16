@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 
 namespace TeamPortal.Services;
@@ -164,6 +165,35 @@ public class MaintenanceWorker : BackgroundService
                     {
                         _logger.LogError(ex, "Maintenance: log archive failed — cleanup skipped for this run");
                     }
+
+                    // 4b. 电池超时未还提醒：主动推给借用人（此前只有台账页数字，借的人不知道自己超时）
+                    try
+                    {
+                        using var overdueScope = _scopeFactory.CreateScope();
+                        var overdueDb = overdueScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                        var notifySvc = overdueScope.ServiceProvider.GetRequiredService<NotificationService>();
+                        var overdueHours = await scope.ServiceProvider.GetRequiredService<SettingsService>()
+                            .GetInt("Battery:OverdueHours", 24);
+                        var cutoff = DateTime.UtcNow.AddHours(-overdueHours);
+                        var due = await overdueDb.BatteryLoans
+                            .Include(l => l.Battery)
+                            .Where(l => l.ReturnedAt == null && l.BorrowedAt < cutoff
+                                && (l.RemindedAt == null || l.RemindedAt < DateTime.UtcNow.AddHours(-20)))
+                            .ToListAsync();
+                        foreach (var loan in due)
+                        {
+                            notifySvc.Notify("电池超时未还",
+                                $"「{loan.Battery?.Code}」已借出超过 {overdueHours} 小时，请尽快归还",
+                                "/batteries", userId: loan.UserId, level: "warning");
+                            loan.RemindedAt = DateTime.UtcNow;
+                        }
+                        if (due.Count > 0)
+                        {
+                            await overdueDb.SaveChangesAsync();
+                            _logger.LogInformation("Maintenance: sent {N} battery overdue reminders", due.Count);
+                        }
+                    }
+                    catch (Exception ex) { _logger.LogWarning(ex, "Maintenance: battery overdue reminders failed"); }
 
                     // 4. 数据库完整性自检（每日一次，只诊断不修复）
                     try

@@ -866,6 +866,9 @@ static void MigrateExistingTables(AppDbContext db)
             "duplicate column");
         MigrateSql(conn, "ALTER TABLE BatteryLoans ADD COLUMN AuthMethod TEXT",
             "duplicate column");
+        // RemindedAt — 超时提醒去重（每日提醒一次）
+        MigrateSql(conn, "ALTER TABLE BatteryLoans ADD COLUMN RemindedAt TEXT",
+            "duplicate column");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");
