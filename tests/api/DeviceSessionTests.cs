@@ -125,8 +125,16 @@ public class DeviceSessionTests : IClassFixture<WebApplicationFactory<Program>>
             var loan = (await borrow.Content.ReadFromJsonAsync<BorrowResp>())!;
             Assert.Equal("BAT-9001", loan.Code);
 
-            var again = await client.PostAsJsonAsync("/api/device/battery/BAT-9001/borrow", new { });
-            Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+            // 一次认人一次操作：借出后会话已撤销（防张冠李戴），再操作需重新认人
+            var stale = await client.PostAsJsonAsync("/api/device/battery/BAT-9001/borrow", new { });
+            Assert.Equal(HttpStatusCode.Unauthorized, stale.StatusCode);
+
+            // 重新认人后可归还（模拟下一位/同一位重新登录）
+            var relogin = await client.PostAsJsonAsync("/api/device/login",
+                new { username = "dsadmin", password = "pw123456" });
+            var sess2 = (await relogin.Content.ReadFromJsonAsync<SessionResp>())!;
+            client.DefaultRequestHeaders.Remove("X-Device-Session");
+            client.DefaultRequestHeaders.Add("X-Device-Session", sess2.SessionToken);
 
             var mine = await client.GetAsync("/api/device/battery/mine");
             Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
