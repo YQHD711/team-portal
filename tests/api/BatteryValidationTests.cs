@@ -137,27 +137,42 @@ public class BatteryValidationTests : IClassFixture<WebApplicationFactory<Progra
     }
 
     [Fact]
-    public async Task Delete_ByAdmin_RemovesBatteryAndLoans()
+    public async Task Delete_ByAdmin_RemovesBatteryWithoutHistory()
     {
         var dbPath = NewDbPath();
         try
         {
             var admin = await LoginAsync(dbPath, "badmin6", "admin");
             var item = await CreateBatteryAsync(admin, "BAT-8100", "删除测试");
-            // 借出再归还，产生流水
-            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/battery/{item.Id}/borrow", new { })).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/battery/{item.Id}/return", new { })).StatusCode);
 
+            // 无任何借还历史的电池可物理删除
             var del = await admin.DeleteAsync($"/api/battery/{item.Id}");
             Assert.Equal(HttpStatusCode.OK, del.StatusCode);
 
             var byCode = await admin.GetAsync("/api/battery/by-code/BAT-8100");
             Assert.Equal(HttpStatusCode.NotFound, byCode.StatusCode);
+        }
+        finally { try { File.Delete(dbPath); } catch { } }
+    }
 
-            // 流水随电池级联删除
-            var opts = new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={dbPath}").Options;
-            await using var db = new AppDbContext(opts);
-            Assert.False(await db.BatteryLoans.AnyAsync(l => l.BatteryId == item.Id));
+    [Fact]
+    public async Task Delete_WithLoanHistory_IsRejected()
+    {
+        // 数据完整性收紧：有借还历史的电池不许物理删除（追责记录），只能退役
+        var dbPath = NewDbPath();
+        try
+        {
+            var admin = await LoginAsync(dbPath, "badmin6b", "admin");
+            var item = await CreateBatteryAsync(admin, "BAT-8103", "历史测试");
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/battery/{item.Id}/borrow", new { })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/battery/{item.Id}/return", new { })).StatusCode);
+
+            var del = await admin.DeleteAsync($"/api/battery/{item.Id}");
+            Assert.Equal(HttpStatusCode.Conflict, del.StatusCode);
+
+            // 退役路径仍可用
+            var retire = await admin.PutAsJsonAsync($"/api/battery/{item.Id}", new { status = "retired" });
+            Assert.Equal(HttpStatusCode.OK, retire.StatusCode);
         }
         finally { try { File.Delete(dbPath); } catch { } }
     }

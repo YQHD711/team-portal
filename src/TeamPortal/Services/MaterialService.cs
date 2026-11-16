@@ -90,30 +90,46 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {itemId} AND Quantity >= {quantity}");
     public async Task<CheckoutRequest?> ApproveDept(int requestId, int approverUserId)
     {
         var req = await _db.CheckoutRequests.Include(r => r.Item).FirstOrDefaultAsync(r => r.Id == requestId);
-        if (req is null || req.Status != "pending_dept") return null;
+        if (req is null) return null;
 
+        // 状态抢占（条件更新）：并发双批准只会有一个成功 —— 此前两人同时批会各扣一次库存
+        var now = DateTime.UtcNow;
         if (req.Grade == "B")
         {
-            // 原子扣库存(B级批准即扣),失败抛库存不足
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE CheckoutRequests SET Status = 'approved', ApprovedAt = {now},
+DeptApproverUserId = {approverUserId} WHERE Id = {requestId} AND Status = 'pending_dept'");
+            if (claimed == 0) { await tx.RollbackAsync(); return null; }
+
             var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
                 $@"UPDATE InventoryItems SET Quantity = Quantity - {req.Quantity},
 Status = CASE WHEN Quantity - {req.Quantity} <= 0 THEN 'in_use' ELSE Status END,
-UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
-            if (updated == 0) throw new InvalidOperationException("库存不足");
-            req.Status = "approved"; req.ApprovedAt = DateTime.UtcNow; req.DeptApproverUserId = approverUserId;
+UpdatedAt = {now} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
+            if (updated == 0)
+            {
+                await tx.RollbackAsync();
+                throw new InvalidOperationException("库存不足");
+            }
             _db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
-                UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = DateTime.UtcNow,
+                UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = now,
             });
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+            req.Status = "approved"; req.ApprovedAt = now; req.DeptApproverUserId = approverUserId;
         }
         else
         {
+            var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE CheckoutRequests SET Status = 'pending_admin', DeptApproverUserId = {approverUserId}
+WHERE Id = {requestId} AND Status = 'pending_dept'");
+            if (claimed == 0) return null;
             req.Status = "pending_admin"; req.DeptApproverUserId = approverUserId;
             _notify?.Notify("待管理员审批", $"「{req.Item?.Name}」(A级) 需终审", "/inventory/checkout", targetRole: "admin");
         }
 
-        await _db.SaveChangesAsync();
         _log?.Info("inventory", $"Checkout #{requestId} dept-ok -> {req.Status}");
         return req;
     }
@@ -122,21 +138,35 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
     {
         var req = await _db.CheckoutRequests.Include(r => r.Item).FirstOrDefaultAsync(r => r.Id == requestId);
         // 无部门/部门无部长的 A/B 级申请直接在此一次性通过(不再要求先经部长审)
-        if (req is null || req.Status != "pending_admin") return null;
-        req.Status = "approved"; req.ApprovedAt = DateTime.UtcNow; req.AdminApproverUserId = approverUserId;
+        if (req is null) return null;
         var item = req.Item!;
-        // 原子扣库存(A级终审即扣),失败抛库存不足
+        var now = DateTime.UtcNow;
+
+        // 状态抢占 + 扣库存 + 流水 同一事务（防并发双批准双扣）
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE CheckoutRequests SET Status = 'approved', ApprovedAt = {now},
+AdminApproverUserId = {approverUserId} WHERE Id = {requestId} AND Status = 'pending_admin'");
+        if (claimed == 0) { await tx.RollbackAsync(); return null; }
+
         var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
             $@"UPDATE InventoryItems SET Quantity = Quantity - {req.Quantity},
 Status = CASE WHEN Quantity - {req.Quantity} <= 0 THEN 'in_use' ELSE Status END,
-UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
-        if (updated == 0) throw new InvalidOperationException("库存不足");
+UpdatedAt = {now} WHERE Id = {req.InventoryItemId} AND Quantity >= {req.Quantity}");
+        if (updated == 0)
+        {
+            await tx.RollbackAsync();
+            throw new InvalidOperationException("库存不足");
+        }
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkout", Quantity = req.Quantity,
-            UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = DateTime.UtcNow,
+            UserName = await GetUsername(req.RequesterUserId), Note = req.Note, CreatedAt = now,
         });
         await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        req.Status = "approved"; req.ApprovedAt = now; req.AdminApproverUserId = approverUserId;
+
         _log?.Info("inventory", $"Checkout #{requestId} admin-ok");
         _notify?.Notify("领用已批准", $"「{item.Name}」(A级) 已通过", "/inventory/checkout", userId: req.RequesterUserId);
         return req;
@@ -146,6 +176,11 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
     {
         var req = await _db.CheckoutRequests.Include(r => r.Item).FirstOrDefaultAsync(r => r.Id == requestId);
         if (req is null || req.Status is "approved" or "rejected" or "returned") return null;
+        // 条件更新抢占：防与批准并发交错（已扣库存却显示被驳回）
+        var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE CheckoutRequests SET Status = 'rejected', RejectReason = {reason}
+WHERE Id = {requestId} AND Status IN ('pending_dept', 'pending_admin')");
+        if (claimed == 0) return null;
         req.Status = "rejected"; req.RejectReason = reason;
         await _db.SaveChangesAsync();
         _log?.Warn("inventory", $"Checkout #{requestId} rejected: {reason}");
@@ -219,34 +254,48 @@ UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId} AND Quantity >= {
         string condition, bool hasPhoto, string? testNotes, string? photoUrl)
     {
         var req = await _db.CheckoutRequests.Include(r => r.Item).FirstOrDefaultAsync(r => r.Id == requestId);
-        if (req is null || req.Status != "approved") return null;
+        if (req is null) return null;
         if (req.Grade == "A" && !hasPhoto) throw new InvalidOperationException("A级物料归还必须上传照片");
 
-        req.Status = "returned"; req.ReturnedAt = DateTime.UtcNow;
         var item = req.Item!;
-        // 原子加库存并恢复状态(损坏→broken,否则→available),防并发丢更新
+        var now = DateTime.UtcNow;
+        // 状态抢占 + 加库存 + 流水 + 归还单 同一事务：
+        // 此前"读状态→UPDATE 已自动提交→再插单"，并发双击归还会把库存加两次（第二次插单才失败，UPDATE 回不去）
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE CheckoutRequests SET Status = 'returned', ReturnedAt = {now}
+WHERE Id = {requestId} AND Status = 'approved'");
+        if (claimed == 0) { await tx.RollbackAsync(); return null; }
+
         var status = condition == "damaged" ? "broken" : "available";
         var updated = await _db.Database.ExecuteSqlInterpolatedAsync(
             $@"UPDATE InventoryItems SET Quantity = Quantity + {req.Quantity}, Status = {status},
-UpdatedAt = {DateTime.UtcNow} WHERE Id = {req.InventoryItemId}");
-        if (updated == 0) throw new InvalidOperationException("零件不存在");
+UpdatedAt = {now} WHERE Id = {req.InventoryItemId}");
+        if (updated == 0)
+        {
+            await tx.RollbackAsync();
+            throw new InvalidOperationException("零件不存在");
+        }
         _db.InventoryTransactions.Add(new InventoryTransaction
         {
             InventoryItemId = req.InventoryItemId, Type = "checkin", Quantity = req.Quantity,
-            UserName = await GetUsername(checkedByUserId), Note = condition == "damaged" ? "有损坏" : "完好", CreatedAt = DateTime.UtcNow,
+            UserName = await GetUsername(checkedByUserId), Note = condition == "damaged" ? "有损坏" : "完好", CreatedAt = now,
         });
         var record = new CheckinRecord
         {
             CheckoutRequestId = requestId, Condition = condition, HasPhoto = hasPhoto,
-            TestNotes = testNotes, PhotoUrl = photoUrl, CheckedByUserId = checkedByUserId, CreatedAt = DateTime.UtcNow,
+            TestNotes = testNotes, PhotoUrl = photoUrl, CheckedByUserId = checkedByUserId, CreatedAt = now,
         };
         _db.CheckinRecords.Add(record);
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        req.Status = "returned"; req.ReturnedAt = now;
         if (condition == "damaged")
         {
             _log?.Warn("inventory", $"Damaged return: {item.Name}");
             _notify?.Notify("损坏归还", $"「{item.Name}」归还损坏", "/inventory/checkout", targetRole: "admin");
         }
-        await _db.SaveChangesAsync();
         _log?.Info("inventory", $"Checkin: {item.Name} +{req.Quantity} [checkout #{requestId}]");
         return record;
     }

@@ -165,6 +165,10 @@ public class BackupService
         // (and File.Delete on -wal fails while the app's own connection holds the lock).
         await Task.Run(() => RestoreDatabase(backupPath, _dbPath));
 
+        // 恢复后旧连接池里的连接指向恢复前的库状态 —— 必须清池，否则后续读写不确定
+        // （启动自恢复路径 TryAutoRecover 有同样处理）。设置缓存的清理在端点层做。
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
         _log.Warn("backup", $"Database restored from {backupFileName}. App restart required.");
 
         return true;

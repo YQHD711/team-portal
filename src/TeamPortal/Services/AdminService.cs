@@ -100,6 +100,14 @@ public class AdminService
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null || user.Role == "admin" || user.Role == "部长") return false;
         if (currentRole == "部长" && user.Department?.Name != currentDept) return false;
+        // 有业务记录的成员不许物理删除（借还/领用/报损外键 Restrict，删了责任链就断）：
+        // 离队场景应保留记录，只移除账号访问（改密码+降级或后续加停用标记）
+        var hasBusiness =
+            await _db.BatteryLoans.AnyAsync(l => l.UserId == id || l.ReturnedByUserId == id) ||
+            await _db.CheckoutRequests.AnyAsync(c => c.RequesterUserId == id) ||
+            await _db.DamageReports.AnyAsync(d => d.UserId == id);
+        if (hasBusiness)
+            throw new InvalidOperationException("该成员有借还/领用/报损记录，不能删除；请保留账号或改为停用");
         _db.Users.Remove(user); await _db.SaveChangesAsync();
         _log.Warn("admin", $"User deleted: {user.Username}", $"{{\"role\":\"{user.Role}\"}}");
         return true;

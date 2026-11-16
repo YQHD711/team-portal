@@ -7,7 +7,10 @@
  */
 
 export interface OperationEntry {
-  id: number; userId: number | null; userName: string; action: string;
+  id: number; userId: number | null; userName: string;
+  /** 显示姓名（Users.DisplayName）；为空回落 userName */
+  displayName?: string | null;
+  action: string;
   targetType: string | null; targetId: string | null; data: string | null;
   /** 真实客户端 IP（后端 LogService.ClientIp 采集；匿名/测试环境可能为空） */
   ipAddress?: string | null; createdAt: string;

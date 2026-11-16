@@ -149,7 +149,7 @@ export default function OperationLogsTab() {
                 <tr key={o.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer align-top"
                   onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
                   <td className="px-4 py-2.5 text-faint text-xs hidden md:table-cell whitespace-nowrap">{new Date(o.createdAt).toLocaleString("zh-CN")}</td>
-                  <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{o.userName}</td>
+                  <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300">{o.displayName?.trim() || o.userName}</td>
                   {/* 真实客户端 IP（HTTPS 后由后端按 X-Forwarded-For 解析）；空值统一显示 —，避免表格出现空洞 */}
                   <td data-testid={`operation-ip-${o.id}`} className="px-4 py-2.5 text-faint text-xs font-mono whitespace-nowrap hidden md:table-cell">
                     {o.ipAddress || "—"}

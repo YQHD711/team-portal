@@ -1686,7 +1686,7 @@ namespace TeamPortal.Migrations
                     b.HasOne("TeamPortal.Data.Models.BatteryItem", "Battery")
                         .WithMany()
                         .HasForeignKey("BatteryId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TeamPortal.Data.Models.User", "ReturnedBy")
@@ -1741,13 +1741,13 @@ namespace TeamPortal.Migrations
                     b.HasOne("TeamPortal.Data.Models.InventoryItem", "Item")
                         .WithMany()
                         .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TeamPortal.Data.Models.User", "Requester")
                         .WithMany()
                         .HasForeignKey("RequesterUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("AdminApprover");
@@ -1775,13 +1775,13 @@ namespace TeamPortal.Migrations
                     b.HasOne("TeamPortal.Data.Models.InventoryItem", "Item")
                         .WithMany()
                         .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TeamPortal.Data.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Item");
@@ -1854,7 +1854,7 @@ namespace TeamPortal.Migrations
                     b.HasOne("TeamPortal.Data.Models.InventoryItem", "Item")
                         .WithMany()
                         .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Item");
@@ -1947,7 +1947,7 @@ namespace TeamPortal.Migrations
                     b.HasOne("TeamPortal.Data.Models.InventoryItem", "InventoryItem")
                         .WithMany()
                         .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TeamPortal.Data.Models.Stocktake", "Stocktake")

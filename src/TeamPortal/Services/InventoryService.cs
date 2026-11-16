@@ -253,6 +253,16 @@ public class InventoryService
     {
         var item = await _db.InventoryItems.FindAsync(id);
         if (item is null) return false;
+        // 有历史记录的物料不许物理删除（流水/领用/盘点/报损外键已改 Restrict）：
+        // 删了会让 Quantity 与变动流水永久对不上，责任单据也一并消失
+        var hasHistory =
+            await _db.InventoryTransactions.AnyAsync(t => t.InventoryItemId == id) ||
+            await _db.CheckoutRequests.AnyAsync(c => c.InventoryItemId == id) ||
+            await _db.StocktakeItems.AnyAsync(s => s.InventoryItemId == id) ||
+            await _db.DamageReports.AnyAsync(d => d.InventoryItemId == id);
+        if (hasHistory)
+            throw new InvalidOperationException("该物料存在流水/领用/盘点/报损记录，不能删除；如需停用请改为修改状态");
+
         _db.InventoryItems.Remove(item);
         await _db.SaveChangesAsync();
         _log.Warn("inventory", $"Part deleted: {item.Name}");

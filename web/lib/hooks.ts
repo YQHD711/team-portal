@@ -17,6 +17,8 @@ const CACHE_TTL = 30_000;
 export interface CurrentUser {
   id: number;
   username: string;
+  /** 显示姓名（用户自改）；为空回落 username */
+  displayName?: string | null;
   role: string;
   department: string | null;
   departmentId: number | null;

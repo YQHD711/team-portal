@@ -196,9 +196,10 @@ public partial class BatteryService
 
         if (item.Status == StatusBorrowed)
             throw new InvalidOperationException("电池在借出状态，请先归还再删除");
-        var hasOpenLoan = await _db.BatteryLoans.AnyAsync(l => l.BatteryId == id && l.ReturnedAt == null);
-        if (hasOpenLoan)
-            throw new InvalidOperationException("电池还有未归还的借出记录，请先归还再删除");
+        // 历史流水也是追责证据（外键 Restrict）：有借还记录的电池只能退役，不能物理删除
+        var hasAnyLoan = await _db.BatteryLoans.AnyAsync(l => l.BatteryId == id);
+        if (hasAnyLoan)
+            throw new InvalidOperationException("该电池有借还历史记录，不能删除；请改为标记退役（状态=retired）");
 
         _db.BatteryItems.Remove(item);
         await _db.SaveChangesAsync();
@@ -225,8 +226,18 @@ public partial class BatteryService
         var inStock = await _db.BatteryItems.CountAsync(b => b.Status == StatusInStock);
         if (item.Quantity == inStock) return;
 
+        // 同步写一条调整流水：否则 Quantity 被覆盖写后与 InventoryTransactions 永远对不上账
+        var delta = inStock - item.Quantity;
         item.Quantity = inStock;
         item.UpdatedAt = DateTime.UtcNow;
+        _db.InventoryTransactions.Add(new InventoryTransaction
+        {
+            InventoryItemId = item.Id,
+            Type = "sync",
+            Quantity = Math.Abs(delta),
+            UserName = "system:battery-sync",
+            Note = delta > 0 ? $"电池在库数同步 +{delta}" : $"电池在库数同步 {delta}",
+        });
         await _db.SaveChangesAsync();
         _log.Info("battery", $"Battery inventory synced: {item.Code} quantity={inStock}");
     }

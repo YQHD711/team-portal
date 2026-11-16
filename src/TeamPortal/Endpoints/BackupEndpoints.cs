@@ -46,7 +46,8 @@ public static class BackupEndpoints
 
         // Restore from a specific backup
         backup.MapPost("/restore", async (RestoreRequest req, BackupService svc,
-            IHostApplicationLifetime lifetime, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
+            IHostApplicationLifetime lifetime, ClaimsPrincipal user, LogService log,
+            SettingsService settings, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(req.FileName))
                 return Results.Problem("请指定备份文件名", statusCode: 400);
@@ -67,6 +68,8 @@ public static class BackupEndpoints
                 return Results.Problem("恢复失败，请检查备份文件是否完整", statusCode: 500);
             }
 
+            // 恢复出的库与内存设置缓存不一致 —— 立即清缓存（重启是兜底，重启失败时缓存也已正确）
+            settings.ClearCache();
             log.Warn("backup", $"Database restored by {username}: {req.FileName}, app restarting");
             log.Audit("restore", username, targetType: "backup", targetId: req.FileName,
                 data: new { success = true }, ipAddress: ip);

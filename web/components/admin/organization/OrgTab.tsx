@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Plus, Pencil, Trash2, Building2, Users as UsersIcon, BadgeCheck, Tag, ClipboardCheck } from "lucide-react";
+import { Plus, Pencil, Printer, Trash2, Building2, Users as UsersIcon, BadgeCheck, Tag, ClipboardCheck } from "lucide-react";
 import { Dept, OrgUser, Certification, ExamBrief, ExamPass } from "./types";
 import { DeptFormModal, UserFormModal } from "./OrgModals";
+import { exportLabelsPdf } from "@/lib/printService";
+import { toIdentityLabelData } from "@/lib/identityLabelPdf";
 
 interface Props {
   users: OrgUser[];
@@ -142,6 +144,16 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
   slugByUser: Map<number, string | null>;
   onEdit: (u: OrgUser) => void; onDelete: (u: OrgUser) => void;
 }) {
+  // 单人身份码导出（补工牌场景）；批量导出在 OrgTab 页头
+  const exportIdentity = async (u: OrgUser) => {
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
+    await exportLabelsPdf("identity", [toIdentityLabelData({
+      username: u.username,
+      displayName: u.displayName ?? null,
+      slug: slugByUser.get(u.id) ?? null,
+    }, origin)], undefined, { filename: "身份码-" + u.username + ".pdf" });
+  };
+
   if (members.length === 0) return null;
   return (
     <div className="mb-5">
@@ -161,17 +173,19 @@ function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByU
               className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">
-                  {u.username[0]?.toUpperCase() || "?"}
+                  {(u.displayName?.trim() || u.username)[0]?.toUpperCase() || "?"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{u.username}</div>
-                  <div>
+                  <div className="font-medium truncate">{u.displayName?.trim() || u.username}</div>
+                  <div className="flex items-center gap-1.5">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_BADGE[u.role] || ROLE_BADGE.member}`}>
                       {u.role === "admin" ? "管理员" : u.role === "部长" ? "部长" : "成员"}
                     </span>
+                    {u.displayName?.trim() && <span className="truncate text-[11px] text-faint">{u.username}</span>}
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
+                  <button onClick={e => { e.preventDefault(); void exportIdentity(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="导出身份码（工牌二维码）"><Printer className="h-4 w-4" /></button>
                   {canEdit && (
                     <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
                   )}
