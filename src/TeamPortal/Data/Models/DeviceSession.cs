@@ -23,6 +23,12 @@ public class DeviceSession
     [JsonIgnore]
     public string TokenHash { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 会话创建时用户的 TokenVersion。用户改密/改角色/被重置密码时 TokenVersion 自增，
+    /// 校验时比对不上即作废会话——否则改密后设备会话仍能以该用户名义借还满 12 小时。
+    /// </summary>
+    public int UserTokenVersion { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime ExpiresAt { get; set; }

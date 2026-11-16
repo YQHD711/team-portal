@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
 using TeamPortal.Services;
@@ -120,13 +121,16 @@ public static class BatteryEndpoints
 
         // ── 借出（body.UserId 存在 = 代借，仅 staff）──
         group.MapPost("/{id:int}/borrow", async (int id, BorrowBatteryRequest req, ClaimsPrincipal user,
-            BatteryService svc, LogService log, HttpContext ctx) =>
+            BatteryService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             var operatorId = GetUserId(user);
             if (operatorId is null) return Results.Problem("未登录", statusCode: 401);
             var borrowerId = req.UserId ?? operatorId.Value;
             if (borrowerId != operatorId.Value && !IsStaff(user))
                 return Results.Problem("只能为自己借出电池", statusCode: 403);
+            // 借用人必须存在：外键 Restrict 会让不存在的 userId 抛 DbUpdateException → 500
+            if (borrowerId <= 0 || !await db.Users.AnyAsync(u => u.Id == borrowerId))
+                return Results.Problem("借用人不存在", statusCode: 400);
             try
             {
                 var loan = await svc.BorrowAsync(id, borrowerId, req.Note);

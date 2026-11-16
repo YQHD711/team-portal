@@ -115,6 +115,34 @@ public class DeviceAuthService
     /// <summary>会话默认有效期：12 小时（设备放在柜子旁，一天一班足够）。</summary>
     public static readonly TimeSpan SessionTtl = TimeSpan.FromHours(12);
 
+    /// <summary>
+    /// login-by-id 失败锁定（per device）：免密认人没有密码作门槛，必须防学号枚举/爆破。
+    /// 5 分钟内失败 5 次 → 锁 5 分钟。进程内计数（与登录锁定同一取舍）。
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (int Failures, DateTime LockedUntil)> _idLoginFailures = new();
+    private const int IdLoginMaxFailures = 5;
+    private static readonly TimeSpan IdLoginLockout = TimeSpan.FromMinutes(5);
+
+    public static bool IsIdLoginLocked(int deviceId)
+    {
+        if (!_idLoginFailures.TryGetValue(deviceId, out var e)) return false;
+        if (e.LockedUntil <= DateTime.UtcNow) { _idLoginFailures.TryRemove(deviceId, out _); return false; }
+        return e.Failures >= IdLoginMaxFailures;
+    }
+
+    public static void RegisterIdLoginFailure(int deviceId)
+    {
+        _idLoginFailures.AddOrUpdate(deviceId,
+            _ => (1, DateTime.UtcNow.Add(IdLoginLockout)),
+            (_, e) =>
+            {
+                var n = e.Failures + 1;
+                return (n, n >= IdLoginMaxFailures ? DateTime.UtcNow.Add(IdLoginLockout) : e.LockedUntil);
+            });
+    }
+
+    public static void ClearIdLoginFailures(int deviceId) => _idLoginFailures.TryRemove(deviceId, out _);
+
     public static string HashToken(string token)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
@@ -128,6 +156,7 @@ public class DeviceAuthService
             DeviceId = device.Id,
             UserId = user.Id,
             TokenHash = HashToken(token),
+            UserTokenVersion = user.TokenVersion,
             CreatedAt = now,
             ExpiresAt = now.Add(SessionTtl),
             CreatedIp = LogService.ClientIp(ctx),
@@ -151,6 +180,8 @@ public class DeviceAuthService
         if (session is null) return null;
         if (session.RevokedAt is not null) return null;
         if (session.ExpiresAt <= DateTime.UtcNow) return null;
+        // TokenVersion 比对：用户改密/改角色/被重置后旧会话立即作废（与 JWT 同一机制）
+        if (session.User is null || session.User.TokenVersion != session.UserTokenVersion) return null;
         return session;
     }
 
