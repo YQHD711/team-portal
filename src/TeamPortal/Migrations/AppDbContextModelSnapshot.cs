@@ -1528,6 +1528,9 @@ namespace TeamPortal.Migrations
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("InvitedByUserId")
                         .HasColumnType("INTEGER");
 

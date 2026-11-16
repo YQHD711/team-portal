@@ -19,6 +19,15 @@ public static class DeviceEndpoints
 
     private static IResult Unauthorized() => Results.Problem("设备认证失败", statusCode: 401);
 
+    /// <summary>从身份码内容提取 slug：支持完整短链 /u/{slug}、纯 slug、以及纯学号（原样返回）。</summary>
+    private static string ExtractSlug(string identifier)
+    {
+        if (!identifier.Contains('/')) return identifier;
+        var parts = identifier.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var idx = Array.IndexOf(parts, "u");
+        return idx >= 0 && idx + 1 < parts.Length ? parts[idx + 1] : identifier;
+    }
+
     public static void MapDeviceEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/device");
@@ -77,6 +86,41 @@ public static class DeviceEndpoints
                 sessionToken = token,
                 expiresAt = session.ExpiresAt,
                 user = new { user.Id, user.Username, user.Role },
+            });
+        });
+
+        // 设备终端现场认人（扫身份码 / 输入学号）：免密、快，责任记到识别出的用户。
+        // 信任模型 = 设备凭据（柜边终端）+ 身份标识；与密码登录并存，审计区分标记 noauth。
+        group.MapPost("/login-by-id", async (DeviceLoginByIdRequest req, HttpContext ctx, DeviceAuthService auth,
+            AppDbContext db, LogService log) =>
+        {
+            var device = await auth.AuthenticateAsync(ctx);
+            if (device is null) return Unauthorized();
+            var identifier = req.Identifier?.Trim();
+            if (string.IsNullOrWhiteSpace(identifier) || identifier.Length > 60)
+                return Results.Problem("身份标识不能为空且不超过 60 字符", statusCode: 400);
+
+            // 身份码内容是 /u/{slug}；扫码枪也可能是纯 slug 或学号/用户名
+            var slug = ExtractSlug(identifier);
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Slug == slug || u.Username == identifier);
+            if (user is null)
+            {
+                log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "device",
+                    targetId: device.Id.ToString(),
+                    data: new { identifier, success = false }, ipAddress: LogService.ClientIp(ctx));
+                return Results.Problem("没有找到该身份标识对应的用户", statusCode: 404);
+            }
+
+            var (session, token) = await auth.CreateSessionAsync(device, user, ctx);
+            log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "user",
+                targetId: user.Id.ToString(),
+                data: new { identifier, username = user.Username, sessionId = session.Id },
+                ipAddress: LogService.ClientIp(ctx));
+            return Results.Ok(new
+            {
+                sessionToken = token,
+                expiresAt = session.ExpiresAt,
+                user = new { user.Id, user.Username, DisplayName = user.DisplayName, user.Role },
             });
         });
 
@@ -173,3 +217,6 @@ public record StockDeltaRequest(int Delta, string? Note);
 
 /// <summary>设备内用户登录体：设备凭据已在请求头，这里只带用户账号密码。</summary>
 public record DeviceLoginRequest(string Username, string Password);
+
+/// <summary>设备终端现场认人体：身份码内容（/u/{slug} 或纯 slug/学号）。</summary>
+public record DeviceLoginByIdRequest(string Identifier);

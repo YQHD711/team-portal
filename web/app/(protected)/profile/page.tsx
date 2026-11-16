@@ -35,9 +35,28 @@ export default function ProfilePage() {
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [flightTypes, setFlightTypes] = useState<string[]>([]);
   const [skills, setSkills] = useState("");
+  // 显示姓名（Users.DisplayName，与档案 PilotProfile 分开）
+  const [displayName, setDisplayName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
   // 团队认证(考核通过记录,只读)
   const [certItems, setCertItems] = useState<ExamPassView[]>([]);
   const [certsLoading, setCertsLoading] = useState(false);
+
+  // 显示姓名取自 /api/auth/me（Users 表字段）；登录名不动
+  useEffect(() => {
+    api.get<{ username: string; displayName?: string | null }>("/api/auth/me")
+      .then(me => setDisplayName(me.displayName?.trim() || ""))
+      .catch(() => {});
+  }, []);
+
+  const saveDisplayName = async () => {
+    if (!displayName.trim()) return;
+    setNameSaving(true);
+    try {
+      await api.put("/api/profile/display-name", { displayName: displayName.trim() });
+    } catch { /* 保留输入，允许重试 */ }
+    finally { setNameSaving(false); }
+  };
 
   useEffect(() => {
     api.get<Profile>("/api/profile").then(data => {
@@ -125,6 +144,21 @@ export default function ProfilePage() {
       {/* Tab: Info */}
       {tab === "info" && (
         <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
+          {/* 显示姓名：独立于档案编辑模式，走 Users.DisplayName（登录名/学号不动） */}
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border-subtle p-3">
+            <label className="block text-xs font-medium">
+              显示姓名
+              <input value={displayName} onChange={e => setDisplayName(e.target.value)}
+                className="mt-1 w-48 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                placeholder="如：张三" />
+            </label>
+            <button onClick={saveDisplayName} disabled={nameSaving || !displayName.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">
+              {nameSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              保存姓名
+            </button>
+            <span className="text-xs text-faint">借还记录/组织架构显示用；登录名（学号）不会变</span>
+          </div>
           {editMode ? (
             <>
               <div className="grid grid-cols-2 gap-4">

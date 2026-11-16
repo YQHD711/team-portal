@@ -8,6 +8,7 @@ import { Loader2, Plus, QrCode, ScanLine, Search } from "lucide-react";
 import { BatteryCard } from "@/components/battery/BatteryCard";
 import { BatteryLabelExportButton } from "@/components/battery/BatteryLabelExportButton";
 import { type BatteryItem, type BatteryLoan } from "@/components/battery/batteryTypes";
+import { RecentLoans } from "@/components/battery/RecentLoans";
 
 const STATUS_FILTERS = [
   { value: "", label: "全部" },
@@ -25,6 +26,7 @@ export default function BatteriesPage() {
   const [items, setItems] = useState<BatteryItem[]>([]);
   const [mine, setMine] = useState<BatteryLoan[]>([]);
   const [overdue, setOverdue] = useState<BatteryLoan[]>([]);
+  const [recentLoans, setRecentLoans] = useState<BatteryLoan[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -42,6 +44,7 @@ export default function BatteriesPage() {
       api.get<BatteryItem[]>(`/api/battery?${q.toString()}`).then(setItems).catch(() => {}),
       api.get<BatteryLoan[]>("/api/battery/mine").then(setMine).catch(() => {}),
       api.get<BatteryLoan[]>("/api/battery/overdue").then(setOverdue).catch(() => {}),
+      api.get<BatteryLoan[]>("/api/battery/loans?take=10").then(setRecentLoans).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [status, search]);
 
@@ -76,7 +79,7 @@ export default function BatteriesPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">电池借还</h1>
-          <p className="text-sm text-muted">扫码或点按钮即可借出/归还，记录自动关联到当前账号</p>
+          <p className="text-sm text-muted">到电池柜扫码借出/归还（或用柜边终端），记录自动关联到本人</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/batteries/scan" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
@@ -161,10 +164,13 @@ export default function BatteriesPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map(b => (
             <BatteryCard key={b.id} battery={b} busy={busyId === b.id}
+              readOnly={!isStaff}
               onBorrow={doBorrow} onReturn={doReturn} />
           ))}
         </div>
       )}
+
+      <RecentLoans loans={recentLoans} />
     </div>
   );
 }

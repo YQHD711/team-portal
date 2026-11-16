@@ -101,6 +101,7 @@ public partial class BatteryService
         _db.BatteryItems.Add(item);
         await _db.SaveChangesAsync();
         _log.Info("battery", $"Battery added: {item.Code} {item.Model}");
+        await SyncInventoryCountAsync();
         return item;
     }
 
@@ -129,6 +130,7 @@ public partial class BatteryService
         }
         item.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        await SyncInventoryCountAsync();
         return item;
     }
 
@@ -156,6 +158,7 @@ public partial class BatteryService
         await _db.SaveChangesAsync();
 
         _log.Info("battery", $"Battery borrowed: {item.Code} -> user#{borrowerId}");
+        await SyncInventoryCountAsync();
         return loan;
     }
 
@@ -181,6 +184,7 @@ public partial class BatteryService
         await _db.SaveChangesAsync();
 
         _log.Info("battery", $"Battery returned: {item.Code} by user#{operatorId}");
+        await SyncInventoryCountAsync();
         return loan;
     }
 
@@ -199,7 +203,32 @@ public partial class BatteryService
         _db.BatteryItems.Remove(item);
         await _db.SaveChangesAsync();
         _log.Info("battery", $"Battery deleted: {item.Code}");
+        await SyncInventoryCountAsync();
         return true;
+    }
+
+    /// <summary>
+    /// 把电池台账「在库数」同步到物料表汇总条目（数量对账）。
+    ///
+    /// 关联条目由设置项 Battery:InventoryItemCode 指定（物料编码），未配置则跳过。
+    /// 同步口径 = status=in_stock 的电池数（借出/充电/维修/退役都不算在库）。
+    /// 物料条目是数量型汇总，电池台账才是单件主数据——方向永远是台账 → 物料，不反向。
+    /// </summary>
+    public async Task SyncInventoryCountAsync()
+    {
+        var code = await _settings.Get("Battery:InventoryItemCode", "");
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        var item = await _db.InventoryItems.FirstOrDefaultAsync(i => i.Code == code.Trim().ToUpperInvariant());
+        if (item is null) return;
+
+        var inStock = await _db.BatteryItems.CountAsync(b => b.Status == StatusInStock);
+        if (item.Quantity == inStock) return;
+
+        item.Quantity = inStock;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        _log.Info("battery", $"Battery inventory synced: {item.Code} quantity={inStock}");
     }
 
     /// <summary>字段长度校验（Trim 后）：超长抛 InvalidOperationException，由端点转 400。</summary>

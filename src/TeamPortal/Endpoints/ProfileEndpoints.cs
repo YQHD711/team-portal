@@ -100,6 +100,31 @@ public static class ProfileEndpoints
             return ok ? Results.Ok(new { message = "已更新" }) : Results.Problem("档案不存在", statusCode: 404);
         });
 
+        // 改显示姓名（自己改自己的）：登录名/学号不动，只改展示用姓名。
+        // 与档案自改分开：显示名是 Users 表字段（影响借还记录/审计展示），不是 PilotProfile。
+        profileGroup.MapPut("/display-name", async (UpdateDisplayNameRequest req, ClaimsPrincipal user,
+            AppDbContext db, LogService log, HttpContext ctx) =>
+        {
+            var userId = GetUserId(user);
+            if (userId is null) return Results.Problem("未登录", statusCode: 401);
+
+            var name = req.DisplayName?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 50)
+                return Results.Problem("显示姓名不能为空且不超过 50 字符", statusCode: 400);
+            if (InputSanitizer.HasUnsafeFragment(name))
+                return Results.Problem("字段包含非法字符", statusCode: 400);
+
+            var u = await db.Users.FindAsync(userId.Value);
+            if (u is null) return Results.Problem("用户不存在", statusCode: 404);
+            u.DisplayName = name;
+            await db.SaveChangesAsync();
+
+            log.Audit("profile", u.Username, "user", userId.Value.ToString(),
+                data: new { action = "display-name.update", displayName = name },
+                ipAddress: LogService.ClientIp(ctx), userId: userId);
+            return Results.Ok(new { displayName = name });
+        });
+
         profileGroup.MapGet("/training", async (ClaimsPrincipal user, ProfileService svc) =>
         {
             var userId = GetUserId(user);
@@ -255,6 +280,9 @@ public static class ProfileEndpoints
 }
 
 // ── Request DTOs ──
+
+/// <summary>改显示姓名（用户自改）；登录名/学号不动。</summary>
+public record UpdateDisplayNameRequest(string? DisplayName);
 
 public record UpdateProfileRequest(
     string? Level,

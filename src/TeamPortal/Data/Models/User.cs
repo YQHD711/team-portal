@@ -6,6 +6,13 @@ public class User
 {
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 显示姓名（真实姓名/昵称），用户可自行修改；为空时前端回落 Username。
+    /// 与 Username（登录名/学号）分离：登录名稳定，身份码/审计/登录都锚定它；
+    /// 显示名只影响展示，改名不影响任何追溯链。
+    /// </summary>
+    public string? DisplayName { get; set; }
     [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = "member";
