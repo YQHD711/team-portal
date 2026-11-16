@@ -59,6 +59,7 @@ public class AppDbContext : DbContext
             // 学号：设备认人的现实标识，全队唯一（可空）
             entity.Property(u => u.StudentId).HasMaxLength(30);
             entity.HasIndex(u => u.StudentId).IsUnique();
+            entity.Property(u => u.IdentityDisabled).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<User>()

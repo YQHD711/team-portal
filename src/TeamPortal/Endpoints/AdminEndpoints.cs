@@ -55,7 +55,7 @@ public static class AdminEndpoints
         {
             var (role, dept, actorId) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
-            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId, req.StudentId);
+            var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId, req.StudentId, req.IdentityDisabled);
             if (ok)
             {
                 var changes = new List<string>();
@@ -315,7 +315,7 @@ public static class AdminEndpoints
 }
 
 public record CreateUserReq(string Username, string Password, string? Role, int? DepartmentId, string? StudentId = null);
-public record UpdateUserReq(string? Role, int? DepartmentId, string? Password, string? Username = null, string? StudentId = null);
+public record UpdateUserReq(string? Role, int? DepartmentId, string? Password, string? Username = null, string? StudentId = null, bool? IdentityDisabled = null);
 public record CreateDeptReq(string Name, string? Description);
 public record UpdateDeptReq(string Name, string? Description);
 public record KnowledgeWriteReq(string Path, string? Content);

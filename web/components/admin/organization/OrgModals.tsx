@@ -46,6 +46,7 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
     role: user?.role || "member",
     departmentId: user?.departmentId ?? 0,
     studentId: user?.studentId || "",
+    identityDisabled: user?.identityDisabled || false,
   });
 
   // 非 admin:不可“添加队员”，也不可编辑 admin
@@ -58,6 +59,7 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
         role: form.role, departmentId: form.departmentId || null, password: form.password || null,
         // 学号仅 admin 可改（设备认人身份标识）；部长不传 = 不改
         studentId: isAdmin ? form.studentId.trim() || "" : undefined,
+        identityDisabled: isAdmin ? form.identityDisabled : undefined,
       });
     } else {
       await api.post("/api/admin/users", { ...form, studentId: form.studentId.trim() || null });
@@ -81,6 +83,16 @@ export function UserFormModal({ user, depts, isAdmin = true, onClose, onSaved }:
               <input value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })} className={inputCls} placeholder="柜边终端认人用，如 20240001" />
               <p className="text-xs text-faint mt-1">全队唯一；设备借还按学号认人（仅管理员可改）</p>
             </div>
+          )}
+          {isAdmin && user && (
+            <label className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2">
+              <input type="checkbox" checked={!!user.identityDisabled}
+                onChange={e => setForm({ ...form, identityDisabled: e.target.checked })} />
+              <span className="text-sm">
+                <span className="font-medium text-danger">身份挂失</span>
+                <span className="text-xs text-faint"> — 学号/密码登录全部停用（学号泄露防冒名）</span>
+              </span>
+            </label>
           )}
           <div><label className="block text-sm font-medium mb-1">角色</label>
             <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className={inputCls}>

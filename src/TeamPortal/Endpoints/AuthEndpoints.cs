@@ -128,7 +128,19 @@ public static class AuthEndpoints
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
                 return Results.Problem("Username and password are required", statusCode: 400);
 
-            var token = await auth.Login(req.Username, req.Password);
+            string? token;
+            try
+            {
+                token = await auth.Login(req.Username, req.Password);
+            }
+            catch (AuthService.IdentityDisabledException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 403);
+            }
+            catch (AuthService.LoginLockedException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 429);
+            }
             if (token is null)
             {
                 log.Audit("login", req.Username, targetType: "user", data: new { success = false, error = "用户名或密码错误" },

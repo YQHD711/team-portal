@@ -1544,6 +1544,11 @@ namespace TeamPortal.Migrations
                     b.Property<string>("DisplayName")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IdentityDisabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<int?>("InvitedByUserId")
                         .HasColumnType("INTEGER");
 

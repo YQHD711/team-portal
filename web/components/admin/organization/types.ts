@@ -6,6 +6,8 @@ export interface OrgUser {
   displayName?: string | null;
   /** 学号（设备终端认人用），可空 */
   studentId?: string | null;
+  /** 身份挂失：学号/密码登录全部停用 */
+  identityDisabled?: boolean;
   department: string | null; departmentId: number | null; createdAt: string;
 }
 

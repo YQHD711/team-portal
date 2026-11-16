@@ -840,6 +840,9 @@ static void MigrateExistingTables(AppDbContext db)
         MigrateSql(conn, "ALTER TABLE Users ADD COLUMN StudentId TEXT",
             "duplicate column");
         MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_StudentId ON Users (StudentId)");
+        // IdentityDisabled — 身份挂失（堵学号冒名）
+        MigrateSql(conn, "ALTER TABLE Users ADD COLUMN IdentityDisabled INTEGER NOT NULL DEFAULT 0",
+            "duplicate column");
 
         // ── 设备内用户会话（设备登录后借还，不复用用户 JWT）
         MigrateSql(conn, """
