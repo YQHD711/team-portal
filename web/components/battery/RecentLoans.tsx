@@ -23,6 +23,9 @@ export function RecentLoans({ loans }: Props) {
               <span className="text-muted">借用人</span>
               <span className="font-medium">{borrower}</span>
               <span className="text-faint">{formatTime(l.borrowedAt)}</span>
+              {l.authMethod === "idcode" && (
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" title="输学号免密认定，追责时注意甄别">⚠免密</span>
+              )}
               {l.returnedAt ? (
                 <>
                   <span className="text-faint">→</span>

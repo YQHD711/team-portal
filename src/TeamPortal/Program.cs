@@ -861,6 +861,11 @@ static void MigrateExistingTables(AppDbContext db)
         // UserTokenVersion — 会话绑定用户 TokenVersion（改密/改角色后旧会话作废）
         MigrateSql(conn, "ALTER TABLE DeviceSessions ADD COLUMN UserTokenVersion INTEGER NOT NULL DEFAULT 0",
             "duplicate column");
+        // Method — 认人方式（password/idcode），随借还流水标记弱认定
+        MigrateSql(conn, "ALTER TABLE DeviceSessions ADD COLUMN Method TEXT NOT NULL DEFAULT 'password'",
+            "duplicate column");
+        MigrateSql(conn, "ALTER TABLE BatteryLoans ADD COLUMN AuthMethod TEXT",
+            "duplicate column");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");

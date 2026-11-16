@@ -133,7 +133,7 @@ public static class BatteryEndpoints
                 return Results.Problem("借用人不存在", statusCode: 400);
             try
             {
-                var loan = await svc.BorrowAsync(id, borrowerId, req.Note);
+                var loan = await svc.BorrowAsync(id, borrowerId, req.Note, authMethod: "web");
                 log.Audit("borrow", user.Identity?.Name ?? "unknown", targetType: "battery",
                     targetId: id.ToString(),
                     data: new { loanId = loan.Id, borrowerId, note = req.Note },
@@ -154,7 +154,7 @@ public static class BatteryEndpoints
             if (operatorId is null) return Results.Problem("未登录", statusCode: 401);
             try
             {
-                var loan = await svc.ReturnAsync(id, operatorId.Value, req.Note);
+                var loan = await svc.ReturnAsync(id, operatorId.Value, req.Note, req.Health);
                 log.Audit("return", user.Identity?.Name ?? "unknown", targetType: "battery",
                     targetId: id.ToString(),
                     data: new { loanId = loan.Id, returnedAt = loan.ReturnedAt, note = req.Note },
@@ -193,4 +193,4 @@ public static class BatteryEndpoints
 public record CreateBatteryRequest(string? Code, string? Model, string? Health, string? Notes);
 public record UpdateBatteryRequest(string? Model, string? Status, string? Health, string? Notes, bool ClearModel = false);
 public record BorrowBatteryRequest(int? UserId, string? Note);
-public record ReturnBatteryRequest(string? Note);
+public record ReturnBatteryRequest(string? Note, string? Health = null);

@@ -14,6 +14,9 @@ namespace TeamPortal.Endpoints;
 public static class DeviceBatteryEndpoints
 {
     private static IResult Unauthorized() => Results.Problem("设备认证失败", statusCode: 401);
+
+    /// <summary>设备端归还体：Note 备注 + Health 归还健康检查（异常自动转维修）。</summary>
+    public record DeviceReturnRequest(string? Note, string? Health);
     private static IResult NoSession() =>
         Results.Problem("设备未登录用户或会话已过期，请先在设备上登录", statusCode: 401);
 
@@ -69,8 +72,10 @@ public static class DeviceBatteryEndpoints
             if (item is null) return Results.Problem("没有找到这个编码对应的电池", statusCode: 404);
             try
             {
-                var loan = await svc.BorrowAsync(item.Id, session!.UserId, null);
-                log.Audit("device-borrow", $"device:{device!.DeviceKey}", targetType: "battery",
+                var loan = await svc.BorrowAsync(item.Id, session!.UserId, null, authMethod: session.Method);
+                // 操作后立即结束会话：公用终端上长会话会让下一个人的操作记到上一个人头上（张冠李戴）
+                await auth.RevokeSessionAsync(ctx, device!);
+                log.Audit("device-borrow", $"device:{device.DeviceKey}", targetType: "battery",
                     targetId: item.Id.ToString(),
                     data: new { item.Code, borrowerId = session.UserId, loanId = loan.Id },
                     ipAddress: LogService.ClientIp(ctx));
@@ -87,7 +92,7 @@ public static class DeviceBatteryEndpoints
         });
 
         // 归还：操作人 = 当前设备会话登录的用户
-        group.MapPost("/{code}/return", async (string code, HttpContext ctx, DeviceAuthService auth,
+        group.MapPost("/{code}/return", async (string code, DeviceReturnRequest req, HttpContext ctx, DeviceAuthService auth,
             BatteryService svc, AppDbContext db, LogService log) =>
         {
             var (device, session, error) = await AuthAsync(ctx, auth);
@@ -97,8 +102,10 @@ public static class DeviceBatteryEndpoints
             if (item is null) return Results.Problem("没有找到这个编码对应的电池", statusCode: 404);
             try
             {
-                var loan = await svc.ReturnAsync(item.Id, session!.UserId, null);
-                log.Audit("device-return", $"device:{device!.DeviceKey}", targetType: "battery",
+                var loan = await svc.ReturnAsync(item.Id, session!.UserId, req?.Note, req?.Health);
+                // 归还同样立即结束会话（防张冠李戴）
+                await auth.RevokeSessionAsync(ctx, device!);
+                log.Audit("device-return", $"device:{device.DeviceKey}", targetType: "battery",
                     targetId: item.Id.ToString(),
                     data: new { item.Code, operatorId = session.UserId, loanId = loan.Id },
                     ipAddress: LogService.ClientIp(ctx));

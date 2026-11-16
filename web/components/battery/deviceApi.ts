@@ -136,8 +136,11 @@ export function deviceBorrow(code: string): Promise<{ loanId: number; code: stri
   return request(`/api/device/battery/${encodeURIComponent(code)}/borrow`, { method: "POST", body: "{}" });
 }
 
-export function deviceReturn(code: string): Promise<{ loanId: number; code: string }> {
-  return request(`/api/device/battery/${encodeURIComponent(code)}/return`, { method: "POST", body: "{}" });
+export function deviceReturn(code: string, health?: string): Promise<{ loanId: number; code: string }> {
+  return request(`/api/device/battery/${encodeURIComponent(code)}/return`, {
+    method: "POST",
+    body: JSON.stringify(health ? { health } : {}),
+  });
 }
 
 export function deviceMine(): Promise<Array<{ id: number; code: string; borrowedAt: string }>> {

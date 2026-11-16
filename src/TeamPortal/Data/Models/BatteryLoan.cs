@@ -24,5 +24,11 @@ public class BatteryLoan
     public int? ReturnedByUserId { get; set; }
     public User? ReturnedBy { get; set; }
 
+    /// <summary>
+    /// 借出时的认定方式：web（网页登录）/ password（设备账号密码）/ idcode（输学号免密）。
+    /// idcode 是弱认定（知道学号即可冒名），流水里标记出来供追责甄别。
+    /// </summary>
+    public string? AuthMethod { get; set; }
+
     public string? Note { get; set; }
 }

@@ -29,6 +29,12 @@ public class DeviceSession
     /// </summary>
     public int UserTokenVersion { get; set; }
 
+    /// <summary>
+    /// 认人方式：password（账号密码）/ idcode（输学号免密）。
+    /// 会随之记入借还流水的 AuthMethod —— 免密认定的借出对管理员可见（弱认证标记）。
+    /// </summary>
+    public string Method { get; set; } = "password";
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime ExpiresAt { get; set; }

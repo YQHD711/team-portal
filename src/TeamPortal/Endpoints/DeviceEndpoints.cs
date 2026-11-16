@@ -76,7 +76,7 @@ public static class DeviceEndpoints
                 return Results.Problem("用户名或密码错误", statusCode: 401);
             }
 
-            var (session, token) = await auth.CreateSessionAsync(device, user, ctx);
+            var (session, token) = await auth.CreateSessionAsync(device, user, ctx, method: "password");
             log.Audit("device-login", $"device:{device.DeviceKey}", targetType: "user",
                 targetId: user.Id.ToString(),
                 data: new { username = user.Username, sessionId = session.Id, expiresAt = session.ExpiresAt },
@@ -118,7 +118,7 @@ public static class DeviceEndpoints
             }
 
             DeviceAuthService.ClearIdLoginFailures(device.Id);
-            var (session, token) = await auth.CreateSessionAsync(device, user, ctx);
+            var (session, token) = await auth.CreateSessionAsync(device, user, ctx, method: "idcode");
             log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "user",
                 targetId: user.Id.ToString(),
                 data: new { identifier, username = user.Username, sessionId = session.Id },
