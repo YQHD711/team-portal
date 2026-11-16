@@ -854,6 +854,9 @@ static void MigrateExistingTables(AppDbContext db)
         """);
         MigrateSql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS IX_DeviceSessions_TokenHash ON DeviceSessions (TokenHash)");
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_DeviceSessions_ExpiresAt ON DeviceSessions (ExpiresAt)");
+        // UserTokenVersion — 会话绑定用户 TokenVersion（改密/改角色后旧会话作废）
+        MigrateSql(conn, "ALTER TABLE DeviceSessions ADD COLUMN UserTokenVersion INTEGER NOT NULL DEFAULT 0",
+            "duplicate column");
 
         // ── SystemLogs 索引(性能 #2:管理页查询全表扫描→索引查找)──
         MigrateSql(conn, "CREATE INDEX IF NOT EXISTS IX_SystemLogs_Level_CreatedAt ON SystemLogs (Level, CreatedAt)", "duplicate");

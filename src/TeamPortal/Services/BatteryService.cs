@@ -19,8 +19,12 @@ public partial class BatteryService
     public const int CodeMaxLength = 50;
     public const int ModelMaxLength = 100;
     public const int NotesMaxLength = 500;
+    public const int HealthMaxLength = 20;
 
     private static readonly string[] BorrowableStatuses = { StatusInStock };
+
+    /// <summary>管理员可直接设置的状态（借出只能走借出接口，故不含 borrowed）。</summary>
+    private static readonly string[] AllowedAdminStatuses = { StatusInStock, "charging", "repair", "retired" };
 
     private readonly AppDbContext _db;
     private readonly LogService _log;
@@ -88,6 +92,7 @@ public partial class BatteryService
         if (normalized.Length > CodeMaxLength)
             throw new InvalidOperationException($"编码不能超过 {CodeMaxLength} 个字符");
         EnsureLength(model, ModelMaxLength, "型号");
+        EnsureLength(health, HealthMaxLength, "健康度");
         EnsureLength(notes, NotesMaxLength, "备注");
 
         var item = new BatteryItem
@@ -111,20 +116,29 @@ public partial class BatteryService
         if (item is null) return null;
 
         EnsureLength(model, ModelMaxLength, "型号");
+        EnsureLength(health, HealthMaxLength, "健康度");
         EnsureLength(notes, NotesMaxLength, "备注");
         if (model is not null) item.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         if (clearModel) item.Model = null;
-        if (health is not null) item.Health = health;
-        if (notes is not null) item.Notes = notes;
+        if (health is not null) item.Health = string.IsNullOrWhiteSpace(health) ? null : health.Trim();
+        // 空串 = 清空备注（与 model 语义一致）
+        if (notes is not null) item.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
         if (status is not null)
         {
+            // 状态白名单：防 garbage 等非法值把电池写成永久不可借
+            if (!AllowedAdminStatuses.Contains(status))
+                throw new InvalidOperationException("非法状态，可选：in_stock / charging / repair / retired");
             // 借出/归还必须走借还接口；管理员只允许把电池手工置为不可借状态（或强制回库）
             if (status == StatusBorrowed)
                 throw new InvalidOperationException("「借出」状态只能通过借出操作产生");
-            if (status == StatusInStock && item.Status == StatusBorrowed)
+            if (item.Status == StatusBorrowed)
             {
-                // 强制回库：先把未归还流水补上，避免"在借但没记录"
-                await CloseOpenLoanAsync(id, null, "管理员强制回库");
+                // 从 borrowed 转出（含强制回库）：先关全部未归还流水并清借用字段，
+                // 否则产生"流水未关但电池非借出"的悬空台账
+                await CloseOpenLoansAsync(id, null,
+                    status == StatusInStock ? "管理员强制回库" : "管理员改为「" + StatusText(status) + "」");
+                item.CurrentBorrowerId = null;
+                item.BorrowedAt = null;
             }
             item.Status = status;
         }
@@ -134,15 +148,31 @@ public partial class BatteryService
         return item;
     }
 
-    /// <summary>借出：电池必须可用；返回新建的流水。</summary>
+    /// <summary>
+    /// 借出：电池必须可用；返回新建的流水。
+    ///
+    /// 并发防护：用**条件更新抢占**（UPDATE ... WHERE Status='in_stock'），
+    /// 抢不到的请求直接 409 —— 两个并发请求只会有一个成功，杜绝双借双流水。
+    /// </summary>
     public async Task<BatteryLoan> BorrowAsync(int batteryId, int borrowerId, string? note)
     {
-        var item = await _db.BatteryItems.FindAsync(batteryId)
-            ?? throw new InvalidOperationException("电池不存在");
-        if (!BorrowableStatuses.Contains(item.Status))
-            throw new InvalidOperationException($"电池当前状态为「{StatusText(item.Status)}」，不能借出");
-
+        EnsureLength(note, NotesMaxLength, "备注");
         var now = DateTime.UtcNow;
+
+        var affected = await _db.BatteryItems
+            .Where(b => b.Id == batteryId && b.Status == StatusInStock)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(b => b.Status, StatusBorrowed)
+                .SetProperty(b => b.CurrentBorrowerId, borrowerId)
+                .SetProperty(b => b.BorrowedAt, now)
+                .SetProperty(b => b.UpdatedAt, now));
+        if (affected == 0)
+        {
+            var current = await _db.BatteryItems.FindAsync(batteryId)
+                ?? throw new InvalidOperationException("电池不存在");
+            throw new InvalidOperationException($"电池当前状态为「{StatusText(current.Status)}」，不能借出");
+        }
+
         var loan = new BatteryLoan
         {
             BatteryId = batteryId,
@@ -150,14 +180,10 @@ public partial class BatteryService
             BorrowedAt = now,
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
         };
-        item.Status = StatusBorrowed;
-        item.CurrentBorrowerId = borrowerId;
-        item.BorrowedAt = now;
-        item.UpdatedAt = now;
         _db.BatteryLoans.Add(loan);
         await _db.SaveChangesAsync();
 
-        _log.Info("battery", $"Battery borrowed: {item.Code} -> user#{borrowerId}");
+        _log.Info("battery", $"Battery borrowed: #{batteryId} -> user#{borrowerId}");
         await SyncInventoryCountAsync();
         return loan;
     }
@@ -249,20 +275,28 @@ public partial class BatteryService
             throw new InvalidOperationException($"{fieldName}不能超过 {max} 个字符");
     }
 
-    private async Task CloseOpenLoanAsync(int batteryId, int? operatorId, string note)
+    /// <summary>关闭该电池**全部**未归还流水（不止最新一条——并发/历史悬空都要清干净）。</summary>
+    private async Task CloseOpenLoansAsync(int batteryId, int? operatorId, string note)
     {
-        var loan = await _db.BatteryLoans
+        var loans = await _db.BatteryLoans
             .Where(l => l.BatteryId == batteryId && l.ReturnedAt == null)
-            .OrderByDescending(l => l.BorrowedAt)
-            .FirstOrDefaultAsync();
-        if (loan is not null) CloseLoan(loan, operatorId, note);
+            .ToListAsync();
+        foreach (var loan in loans) CloseLoan(loan, operatorId, note);
     }
 
     private static void CloseLoan(BatteryLoan loan, int? operatorId, string? note)
     {
         loan.ReturnedAt = DateTime.UtcNow;
         loan.ReturnedByUserId = operatorId;
-        if (!string.IsNullOrWhiteSpace(note)) loan.Note = note.Trim();
+        // 备注**追加**而非覆盖：强制回库等操作不应抹掉原始借出备注
+        var addition = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (addition is not null)
+        {
+            EnsureLength(addition, NotesMaxLength, "备注");
+            loan.Note = string.IsNullOrWhiteSpace(loan.Note)
+                ? addition
+                : loan.Note + " | " + addition;
+        }
     }
 
     public static string StatusText(string status) => status switch
