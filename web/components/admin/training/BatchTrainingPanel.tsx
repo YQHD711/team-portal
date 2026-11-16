@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, GraduationCap, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { todayLocal } from "@/lib/date";
 
 interface UserInfo { id: number; username: string; }
 
@@ -17,7 +18,7 @@ export default function BatchTrainingPanel({ users, onSaved }: Props) {
   const [open, setOpen] = useState(false);
   const [selUsers, setSelUsers] = useState<Set<number>>(new Set());
   const [courseName, setCourseName] = useState("");
-  const [examDate, setExamDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [examDate, setExamDate] = useState(() => todayLocal());
   const [score, setScore] = useState("");
   const [examiner, setExaminer] = useState("");
   const [notes, setNotes] = useState("");

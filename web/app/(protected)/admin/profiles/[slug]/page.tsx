@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { todayLocal } from "@/lib/date";
 import { useCurrentUser } from "@/lib/hooks";
 import { ArrowLeft, User, GraduationCap, Trophy, Loader2, BadgeCheck, History } from "lucide-react";
 import { CertificationPanel, ExamPassView } from "@/components/profile/CertificationPanel";
@@ -53,7 +54,7 @@ export default function AdminProfileDetailPage() {
   const [showTrainingForm, setShowTrainingForm] = useState(false);
   const [trainCourse, setTrainCourse] = useState("");
   const [trainScore, setTrainScore] = useState("");
-  const [trainDate, setTrainDate] = useState(new Date().toISOString().slice(0, 10));
+  const [trainDate, setTrainDate] = useState(todayLocal());
   const [trainExaminer, setTrainExaminer] = useState("");
   const [trainNotes, setTrainNotes] = useState("");
   const [editTrainId, setEditTrainId] = useState<number | null>(null);
@@ -61,7 +62,7 @@ export default function AdminProfileDetailPage() {
   // Competition form
   const [showCompForm, setShowCompForm] = useState(false);
   const [compName, setCompName] = useState("");
-  const [compDate, setCompDate] = useState(new Date().toISOString().slice(0, 10));
+  const [compDate, setCompDate] = useState(todayLocal());
   const [compEvent, setCompEvent] = useState("");
   const [compRanking, setCompRanking] = useState("");
   const [compCert, setCompCert] = useState("");
