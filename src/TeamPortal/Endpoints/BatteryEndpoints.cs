@@ -188,6 +188,21 @@ public static class BatteryEndpoints
             }
         });
 
+        // ── 导出（期末对账）：台账 / 流水 CSV ──
+        group.MapGet("/export", async (string? status, BatteryService svc) =>
+        {
+            var csv = await svc.ExportItemsCsvAsync(status);
+            return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
+                $"battery-items-{DateTime.UtcNow:yyyyMMdd}.csv");
+        });
+
+        group.MapGet("/loans/export", async (int? take, BatteryService svc) =>
+        {
+            var csv = await svc.ExportLoansCsvAsync(take ?? 5000);
+            return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
+                $"battery-loans-{DateTime.UtcNow:yyyyMMdd}.csv");
+        });
+
         // ── 流水 ──
         group.MapGet("/loans", async (int? batteryId, int? userId, bool? activeOnly, int? take,
             BatteryService svc) =>
