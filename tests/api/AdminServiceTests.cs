@@ -42,14 +42,15 @@ public class AdminServiceTests
     }
 
     [Fact]
-    public async Task Leader_CanPromoteOwnDeptMember_ToLeader()
+    public async Task Leader_CannotPromoteMember_ToLeader()
     {
+        // 安全收紧（审计）：角色变更仅 admin —— 部长可授予"部长"会让权力自我增殖
         var db = CreateContext();
         var svc = CreateService(db);
 
-        var ok = await svc.UpdateUser(4, "部长", 1, null, null, "部长", "飞训部", 1);
-        Assert.True(ok);
-        Assert.Equal("部长", (await db.Users.FindAsync(4))!.Role);
+        var ok = await svc.UpdateUser(4, "部长", null, null, null, "部长", "飞训部", 1);
+        Assert.False(ok);
+        Assert.Equal("member", (await db.Users.FindAsync(4))!.Role);
     }
 
     [Fact]
@@ -90,14 +91,25 @@ public class AdminServiceTests
     }
 
     [Fact]
-    public async Task Leader_CanMoveOwnMember_ToAnotherDept()
+    public async Task Leader_CannotMoveMember_ToAnotherDept()
     {
+        // 安全收紧（审计）：部门变更仅 admin —— 部长自调部门即获他部门管理权
         var db = CreateContext();
         var svc = CreateService(db);
-        // 可把本部门成员调到其它部门/未分配
         var ok = await svc.UpdateUser(4, null, 2, null, null, "部长", "飞训部", 1);
-        Assert.True(ok);
-        Assert.Equal(2, (await db.Users.FindAsync(4))!.DepartmentId);
+        Assert.False(ok);
+        Assert.Equal(1, (await db.Users.FindAsync(4))!.DepartmentId);
+    }
+
+    [Fact]
+    public async Task Leader_CannotMoveSelf_ToAnotherDept()
+    {
+        // 攻击路径：部长把自己调进他部门 → 成为他部门事实部长。必须拒绝。
+        var db = CreateContext();
+        var svc = CreateService(db);
+        var ok = await svc.UpdateUser(1, null, 2, null, null, "部长", "飞训部", 1);
+        Assert.False(ok);
+        Assert.Equal(1, (await db.Users.FindAsync(1))!.DepartmentId);
     }
 
     [Fact]

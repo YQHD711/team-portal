@@ -56,15 +56,21 @@ public class AdminService
         var user = await _db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return false;
 
-        // 部长在“本部门内”最大自主:可编辑自己或本部门任意非 admin(含同部门其他部长、可授予部长、可调部门);
-        // 但永不触碰 admin,永不授予 admin,不能编辑他部门成员。
+        // 部长在“本部门内”有限自主：可编辑本部门非 admin 成员的姓名/备注类字段。
+        // 越权收口（安全审计发现的三条横向接管路径，一律仅 admin）：
+        // ① 改部门——部长把自己调入他部门即获他部门管理权；
+        // ② 改角色——部长可授予“部长”使权力自我增殖；
+        // ③ 重置其他部长的密码——顶号接管同部门部长账号。
         if (currentRole != "admin")
         {
             if (user.Role == "admin") return false;                     // 不可操作 admin
             var actorSelf = currentUserId == id;
             var sameDept = user.Department?.Name == currentDept;
             if (!actorSelf && !sameDept) return false;                  // 部长只能动自己或本部门成员
-            if (userRole is not null && userRole == "admin") return false; // 不可授予 admin
+            if (userRole is not null) return false;                     // 角色变更仅 admin
+            if (deptId.HasValue) return false;                          // 部门变更仅 admin（防自调部门越权）
+            if (!string.IsNullOrWhiteSpace(password) && user.Role == "部长" && !actorSelf)
+                return false;                                           // 不可重置其他部长密码
         }
 
         var changes = new List<string>();

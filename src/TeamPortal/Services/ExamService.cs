@@ -124,9 +124,29 @@ public class ExamService
             .ToListAsync<object>();
     }
 
-    /// <summary>批量录入结果;同一 (ExamId, UserId) 重复录入时更新原记录(唯一索引)。</summary>
-    public async Task<List<DepartmentExamResult>> AddResults(int examId, List<ExamResultInput> inputs)
+    /// <summary>
+    /// 批量录入结果;同一 (ExamId, UserId) 重复录入时更新原记录(唯一索引)。
+    ///
+    /// 防作弊约束（此前可给自己/他部门任意人写 passed=true 直接产生认证）：
+    /// ① 目标用户必须属于该考试的部门；② 禁止给自己录入（自评）；③ 分数 0~1000 区间。
+    /// </summary>
+    public async Task<List<DepartmentExamResult>> AddResults(int examId, int operatorUserId, List<ExamResultInput> inputs)
     {
+        var exam = await _db.DepartmentExams.FindAsync(examId)
+            ?? throw new InvalidOperationException("考试不存在");
+
+        foreach (var input in inputs)
+        {
+            if (input.UserId == operatorUserId)
+                throw new InvalidOperationException("不能给自己录入成绩");
+            if (input.Score is < 0 or > 1000)
+                throw new InvalidOperationException("分数必须在 0~1000 之间");
+            var userDept = await _db.Users.Where(u => u.Id == input.UserId)
+                .Select(u => u.DepartmentId).FirstOrDefaultAsync();
+            if (userDept is null || userDept != exam.DepartmentId)
+                throw new InvalidOperationException("目标用户不属于该考试的部门");
+        }
+
         var results = new List<DepartmentExamResult>();
         foreach (var input in inputs)
         {
@@ -155,9 +175,14 @@ public class ExamService
         return results;
     }
 
-    public async Task<bool> DeleteResult(int id)
+    /// <summary>
+    /// 删除成绩：必须校验 resultId 属于该 examId（否则用自己部门的 examId + 枚举 resultId
+    /// 就能删他部门的考核记录——IDOR）。
+    /// </summary>
+    public async Task<bool> DeleteResult(int examId, int id)
     {
-        var result = await _db.DepartmentExamResults.FindAsync(id);
+        var result = await _db.DepartmentExamResults
+            .FirstOrDefaultAsync(r => r.Id == id && r.ExamId == examId);
         if (result is null) return false;
         _db.DepartmentExamResults.Remove(result);
         await _db.SaveChangesAsync();

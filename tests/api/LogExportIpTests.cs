@@ -68,10 +68,10 @@ public class LogExportIpTests : IDisposable
 
         // 表头最后一列是 IP
         Assert.StartsWith("时间,操作人,操作类型,目标类型,目标,数据,IP", lines[0]);
-        // 有 IP 的行落在最后一列
-        Assert.Contains(lines, l => l.Contains("alice") && l.EndsWith(",203.0.113.7"));
+        // 有 IP 的行落在最后一列（全字段 CsvField 引号包裹 + 公式转义）
+        Assert.Contains(lines, l => l.Contains("alice") && l.EndsWith(",\"203.0.113.7\""));
         // 未采集到 IP 的行保留空列，不能少一个逗号导致后续列错位
-        Assert.Contains(lines, l => l.Contains("bob") && l.EndsWith(","));
+        Assert.Contains(lines, l => l.Contains("bob") && l.EndsWith(",\"\""));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class LogExportIpTests : IDisposable
 
             var lines = CsvLines(await File.ReadAllTextAsync(path));
             Assert.StartsWith("时间,操作人,操作类型,目标类型,目标,数据,IP", lines[0]);
-            Assert.Contains(lines, l => l.Contains("carol") && l.EndsWith(",198.51.100.42"));
+            Assert.Contains(lines, l => l.Contains("carol") && l.EndsWith(",\"198.51.100.42\""));
         }
         finally
         {

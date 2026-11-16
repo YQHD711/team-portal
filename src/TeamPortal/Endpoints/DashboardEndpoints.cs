@@ -29,7 +29,9 @@ public static class DashboardEndpoints
             var uid = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
             // 缓存键: staff/member + user id (普通成员缓存各自可见的事故子集)
-            var cacheKey = isStaff ? "staff" : $"member-{uid}";
+            // 缓存键按用户隔离：此前 staff 共享一个键，而 recentIncidents 按请求者部门过滤——
+        // 部长命中缓存会看到别部门的事故记录（数据可见性故障）。每人一键，15s TTL 成本可忽略。
+        var cacheKey = $"user-{uid}";
 
             // 命中未过期缓存:直接返回(零 DB 查询)
             if (_cache.TryGetValue(cacheKey, out var entry) && entry.Valid)

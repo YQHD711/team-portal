@@ -13,7 +13,17 @@ public partial class LogService
     public const int ArchiveRowLimit = 200_000;
     private const int ArchivePageSize = 5_000;
 
-    private static string CsvField(string? v) => $"\"{(v ?? "").Replace("\"", "\"\"")}\"";
+    /// <summary>
+    /// CSV 字段转义：引号包裹 + **公式注入防护**。
+    /// 以 = + - @ 制表符/回车开头的字段会被 Excel 当公式执行（日志可被匿名 client-logs 写入
+    /// =HYPERLINK(...) 等载荷，admin 导出打开即触发）——前置单引号强制按文本处理。
+    /// </summary>
+    private static string CsvField(string? v)
+    {
+        var s = v ?? "";
+        if (s.Length > 0 && "=+-@\t\r".IndexOf(s[0]) >= 0) s = "'" + s;
+        return $"\"{s.Replace("\"", "\"\"")}\"";
+    }
 
     /// <summary>操作日志 CSV 导出(时间,操作人,操作类型,目标类型,目标,数据,IP)</summary>
     public async Task<string> ExportOperationsCsv(string? user = null, string? action = null,
@@ -31,7 +41,11 @@ public partial class LogService
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("时间,操作人,操作类型,目标类型,目标,数据,IP");
         foreach (var o in logs)
-            sb.AppendLine($"{o.CreatedAt:yyyy-MM-dd HH:mm:ss},{o.UserName},{o.Action},{o.TargetType ?? ""},{o.TargetId ?? ""},{CsvField(o.Data)},{o.IpAddress ?? ""}");
+            sb.AppendLine(string.Join(",",
+                CsvField(o.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+                CsvField(o.UserName), CsvField(o.Action),
+                CsvField(o.TargetType), CsvField(o.TargetId),
+                CsvField(o.Data), CsvField(o.IpAddress)));
         return sb.ToString();
     }
 
@@ -48,7 +62,10 @@ public partial class LogService
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("时间,级别,分类,消息,用户");
         foreach (var l in logs)
-            sb.AppendLine($"{l.CreatedAt:yyyy-MM-dd HH:mm:ss},{l.Level},{l.Category},{CsvField(l.Message)},{l.UserName ?? ""}");
+            sb.AppendLine(string.Join(",",
+            CsvField(l.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+            CsvField(l.Level), CsvField(l.Category),
+            CsvField(l.Message), CsvField(l.UserName)));
         return sb.ToString();
     }
 
@@ -114,7 +131,11 @@ public partial class LogService
                 foreach (var o in batch)
                 {
                     written++;
-                    yield return $"{o.CreatedAt:yyyy-MM-dd HH:mm:ss},{o.UserName},{o.Action},{o.TargetType ?? ""},{o.TargetId ?? ""},{CsvField(o.Data)},{o.IpAddress ?? ""}";
+                    yield return string.Join(",",
+                        CsvField(o.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+                        CsvField(o.UserName), CsvField(o.Action),
+                        CsvField(o.TargetType), CsvField(o.TargetId),
+                        CsvField(o.Data), CsvField(o.IpAddress));
                 }
                 lastId = batch[^1].Id;
                 maxId = lastId;
