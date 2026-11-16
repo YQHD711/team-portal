@@ -48,6 +48,7 @@ export default function ProfilesTab({ users, depts, isAdmin, skillsByUser, slugB
 
   const filtered = users.filter(u =>
     !search || u.username.toLowerCase().includes(search.toLowerCase()) ||
+    (u.displayName?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
     (u.department && u.department.includes(search))
   );
   const groups = depts.map(d => ({ dept: d.name, members: filtered.filter(u => u.departmentId === d.id) }))
@@ -92,14 +93,15 @@ export default function ProfilesTab({ users, depts, isAdmin, skillsByUser, slugB
                   className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">
-                      {u.username[0]?.toUpperCase() || "?"}
+                      {(u.displayName?.trim() || u.username)[0]?.toUpperCase() || "?"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{u.username}</div>
+                      <div className="font-medium truncate">{u.displayName?.trim() || u.username}</div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_BADGE[u.role] || ROLE_BADGE.member}`}>
                           {u.role === "admin" ? "管理员" : u.role === "部长" ? "部长" : "成员"}
                         </span>
+                        {u.displayName?.trim() && <span className="truncate text-[11px] text-faint">{u.username}</span>}
                       </div>
                     </div>
                   </div>

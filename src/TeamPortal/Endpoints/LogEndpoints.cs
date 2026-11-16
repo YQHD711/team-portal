@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using TeamPortal.Data;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -30,16 +32,33 @@ public static class LogEndpoints
         // ── 操作日志(业务审计,与请求日志分离)──
 
         // 分页查询操作日志:操作人/操作人ID/动作/目标类型+ID/data 关键词/时间范围筛选
-        log.MapGet("/operations", async (int? page, int? size, string? user, int? userId, string? action, string? targetType, string? targetId, string? q, DateTime? from, DateTime? to, LogService svc) =>
+        log.MapGet("/operations", async (int? page, int? size, string? user, int? userId, string? action, string? targetType, string? targetId, string? q, DateTime? from, DateTime? to, LogService svc, AppDbContext db) =>
         {
             var p = Math.Max(1, page ?? 1);
             var (items, total) = await svc.GetOperations(user, userId, action, targetType, targetId, q, from, to, p, size ?? 50);
+            // 操作人显示姓名（Users.DisplayName）：日志里留 UserName 快照，展示用当前显示姓名。
+            // UserId 优先；早年审计行（如登录）没记 UserId，按 UserName 回退匹配。
+            var ids = items.Where(o => o.UserId.HasValue).Select(o => o.UserId!.Value).Distinct().ToList();
+            var names = items.Where(o => !o.UserId.HasValue && !string.IsNullOrEmpty(o.UserName))
+                .Select(o => o.UserName).Distinct().ToList();
+            var byId = ids.Count == 0
+                ? new Dictionary<int, string?>()
+                : await db.Users.Where(u => ids.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => u.DisplayName);
+            var byName = names.Count == 0
+                ? new Dictionary<string, string?>()
+                : await db.Users.Where(u => names.Contains(u.Username))
+                    .ToDictionaryAsync(u => u.Username, u => u.DisplayName);
             return Results.Ok(new
             {
                 total,
                 items = items.Select(o => new
                 {
-                    o.Id, o.UserId, o.UserName, o.Action, o.TargetType, o.TargetId, o.Data, o.IpAddress, o.CreatedAt
+                    o.Id, o.UserId, o.UserName,
+                    displayName = o.UserId.HasValue
+                        ? (byId.TryGetValue(o.UserId.Value, out var dn) ? dn : null)
+                        : (byName.TryGetValue(o.UserName, out var dn2) ? dn2 : null),
+                    o.Action, o.TargetType, o.TargetId, o.Data, o.IpAddress, o.CreatedAt
                 })
             });
         });

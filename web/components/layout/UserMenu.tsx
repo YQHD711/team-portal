@@ -72,13 +72,13 @@ export function UserMenu() {
     <div ref={ref} className="relative flex items-center gap-2 pl-2 border-l border-border">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-2 hover:bg-surface-hover rounded-lg px-2 py-1 transition-colors">
         <User className="h-5 w-5 text-muted" />
-        <span className="text-sm hidden sm:block">{user.username}</span>
+        <span className="text-sm hidden sm:block">{user.displayName?.trim() || user.username}</span>
       </button>
 
       {open && (
         <div className="absolute right-0 top-10 w-64 rounded-2xl border border-border bg-surface shadow-2xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <div className="font-medium text-sm">{user.username}</div>
+            <div className="font-medium text-sm">{user.displayName?.trim() || user.username}</div>
             <div className="text-xs text-muted">{user.role === "admin" ? "管理员" : user.role === "部长" ? "部长" : "成员"}</div>
           </div>
 
