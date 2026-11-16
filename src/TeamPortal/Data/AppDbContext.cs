@@ -118,10 +118,11 @@ public class AppDbContext : DbContext
             entity.HasIndex(t => t.CreatedAt);
             entity.Property(t => t.Type).IsRequired().HasMaxLength(20);
             entity.Property(t => t.UserName).IsRequired().HasMaxLength(50);
+            // Restrict：删物料不许抹掉对账流水（Quantity 与流水将永久对不上）
             entity.HasOne(t => t.Item)
                 .WithMany()
                 .HasForeignKey(t => t.InventoryItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PilotProfile>(entity =>
@@ -230,14 +231,15 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Status).HasMaxLength(20);
             entity.Property(c => c.Note).HasMaxLength(500);
             entity.Property(c => c.RejectReason).HasMaxLength(500);
+            // Restrict：领用单/借用人是责任证据，删物料/删用户都不许抹掉
             entity.HasOne(c => c.Item)
                 .WithMany()
                 .HasForeignKey(c => c.InventoryItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(c => c.Requester)
                 .WithMany()
                 .HasForeignKey(c => c.RequesterUserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(c => c.DeptApprover)
                 .WithMany()
                 .HasForeignKey(c => c.DeptApproverUserId)
@@ -286,7 +288,7 @@ public class AppDbContext : DbContext
             entity.HasOne(s => s.InventoryItem)
                 .WithMany()
                 .HasForeignKey(s => s.InventoryItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(s => s.CheckedBy)
                 .WithMany()
                 .HasForeignKey(s => s.CheckedByUserId)
@@ -300,14 +302,15 @@ public class AppDbContext : DbContext
             entity.Property(d => d.Description).IsRequired();
             entity.Property(d => d.Liability).HasMaxLength(20);
             entity.Property(d => d.Resolution).HasMaxLength(1000);
+            // Restrict：报损记录是定责证据，删除不联动
             entity.HasOne(d => d.Item)
                 .WithMany()
                 .HasForeignKey(d => d.InventoryItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(d => d.User)
                 .WithMany()
                 .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<StorageLayout>(entity =>
@@ -456,10 +459,11 @@ public class AppDbContext : DbContext
             entity.HasIndex(l => l.BatteryId);
             entity.HasIndex(l => new { l.UserId, l.ReturnedAt });
             entity.HasIndex(l => l.BorrowedAt);
+            // Restrict：删电池不许抹掉借还历史（追责记录）；有流水的电池只能退役不能删除
             entity.HasOne(l => l.Battery)
                 .WithMany()
                 .HasForeignKey(l => l.BatteryId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(l => l.User)
                 .WithMany()
                 .HasForeignKey(l => l.UserId)
