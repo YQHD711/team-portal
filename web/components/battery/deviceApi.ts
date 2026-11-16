@@ -9,6 +9,8 @@ export interface DeviceUser {
   id: number;
   username: string;
   role: string;
+  /** 显示姓名（用户自改）；为空回落 username。 */
+  displayName?: string | null;
 }
 
 export interface DeviceLoginResult {
@@ -96,6 +98,20 @@ export async function deviceLogin(username: string, password: string): Promise<D
   const result = await request<DeviceLoginResult>("/api/device/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
+  });
+  localStorage.setItem(K_SESSION, result.sessionToken);
+  localStorage.setItem(K_USER, JSON.stringify(result.user));
+  return result;
+}
+
+/**
+ * 设备终端现场认人（扫身份码 / 输入学号）：免密。
+ * identifier 支持身份码内容（/u/{slug}）、纯 slug 或学号/用户名。
+ */
+export async function deviceLoginById(identifier: string): Promise<DeviceLoginResult> {
+  const result = await request<DeviceLoginResult>("/api/device/login-by-id", {
+    method: "POST",
+    body: JSON.stringify({ identifier }),
   });
   localStorage.setItem(K_SESSION, result.sessionToken);
   localStorage.setItem(K_USER, JSON.stringify(result.user));

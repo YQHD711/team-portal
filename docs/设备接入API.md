@@ -291,7 +291,27 @@ Content-Type: application/problem+json
 
 > 注意：设备流水和人工领用流水共用一张表，前端「物料交易记录」会同时显示 `device_in/device_out`。
 
-### 5.5 设备内用户登录（电池借还用）
+### 5.4b 设备终端现场认人（扫身份码 / 输学号，免密）
+
+`POST /api/device/login-by-id`
+
+**请求头**：`X-Device-Key` + `X-Device-Secret`
+
+**请求体**：
+
+```json
+{ "identifier": "https://team.example.com/u/u_b34a0763" }
+```
+
+`identifier` 接受三种形态：身份码完整短链 `/u/{slug}`、纯 slug、纯学号/用户名。
+找不到用户 → **404**。
+
+**响应 200**：与 `/api/device/login` 相同（`sessionToken` + `user`）。
+
+- 信任模型：设备凭据（柜边终端）+ 身份标识；审计动作 `device-login-noauth`（无密码认定，留痕）
+- 与密码登录（5.5）并存：现场快线走这个，严格场景走密码
+
+### 5.5 设备内用户登录（密码）
 
 电池借还要求"人"的身份，但设备端不应复用用户 JWT。设备先用凭据登录，再在设备上让使用人登录：
 

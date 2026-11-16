@@ -153,7 +153,16 @@ public static class AuthEndpoints
             var department = u?.Department?.Name;
             var invitedBy = u?.InvitedByUser?.Username;
 
-            return Results.Ok(new { Id = int.Parse(idClaim), Username = username, Role = role, Department = department, DepartmentId = u?.DepartmentId, InvitedBy = invitedBy });
+            return Results.Ok(new
+            {
+                Id = int.Parse(idClaim),
+                Username = username,
+                DisplayName = u?.DisplayName,
+                Role = role,
+                Department = department,
+                DepartmentId = u?.DepartmentId,
+                InvitedBy = invitedBy
+            });
         }).RequireAuthorization();
 
         app.MapPut("/api/auth/change-password", async (ChangePasswordRequest? req, ClaimsPrincipal user, AuthService auth, NotificationService notify, LogService log, HttpContext ctx) =>

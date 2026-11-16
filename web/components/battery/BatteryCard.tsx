@@ -1,18 +1,25 @@
 "use client";
 
-import { Loader2, RotateCcw, ScanLine, Undo2 } from "lucide-react";
-import { formatTime, isOverdue, OVERDUE_HOURS, statusMeta, type BatteryItem } from "./batteryTypes";
+import { Loader2, QrCode, RotateCcw, ScanLine, Undo2 } from "lucide-react";
+import { displayName, formatTime, isOverdue, OVERDUE_HOURS, statusMeta, type BatteryItem } from "./batteryTypes";
 
 interface Props {
   battery: BatteryItem;
   busy: boolean;
-  onBorrow: (b: BatteryItem) => void;
-  onReturn: (b: BatteryItem) => void;
+  /** true = 只读台账（普通队员视角）：不放借出/归还按钮，提示到柜前扫码借还。 */
+  readOnly?: boolean;
+  onBorrow?: (b: BatteryItem) => void;
+  onReturn?: (b: BatteryItem) => void;
   onEdit?: (b: BatteryItem) => void;
 }
 
-/** 台账里的单块电池卡片：状态 + 当前借用人 + 借出/归还按钮。 */
-export function BatteryCard({ battery, busy, onBorrow, onReturn, onEdit }: Props) {
+/**
+ * 台账里的单块电池卡片：状态 + 当前借用人 + 借出/归还按钮。
+ *
+ * 借出/归还必须现场完成（柜前扫码/设备终端），所以普通队员视角 readOnly=true
+ * ——按钮收口是**软约束**（后端接口保持通用，扫码页/设备终端走同一套）。
+ */
+export function BatteryCard({ battery, busy, readOnly, onBorrow, onReturn, onEdit }: Props) {
   const meta = statusMeta(battery.status);
   const overdue = isOverdue(battery);
   const canBorrow = battery.status === "in_stock";
@@ -32,7 +39,7 @@ export function BatteryCard({ battery, busy, onBorrow, onReturn, onEdit }: Props
         {battery.status === "borrowed" ? (
           <div className="flex items-center gap-1.5">
             <Undo2 className="h-3.5 w-3.5 text-muted" />
-            <span>{battery.currentBorrower?.username ?? `用户 #${battery.currentBorrowerId}`}</span>
+            <span>{displayName(battery.currentBorrower) || `用户 #${battery.currentBorrowerId}`}</span>
             <span className="text-faint">· {formatTime(battery.borrowedAt)}</span>
           </div>
         ) : (
@@ -46,25 +53,37 @@ export function BatteryCard({ battery, busy, onBorrow, onReturn, onEdit }: Props
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        {canBorrow && (
-          <button
-            onClick={() => onBorrow(battery)}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}
-            借出
-          </button>
-        )}
-        {canReturn && (
-          <button
-            onClick={() => onReturn(battery)}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            归还
-          </button>
+        {readOnly ? (
+          // 软约束收口：普通队员不放借出/归还按钮 —— 借还必须现场完成（柜前扫码/设备终端）
+          (canBorrow || canReturn) && (
+            <div className="flex items-center gap-1.5 text-xs text-faint">
+              <QrCode className="h-3.5 w-3.5" />
+              到电池柜扫{canBorrow ? "码借出" : "码归还"}，或用柜边终端
+            </div>
+          )
+        ) : (
+          <>
+            {canBorrow && onBorrow && (
+              <button
+                onClick={() => onBorrow(battery)}
+                disabled={busy}
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}
+                借出
+              </button>
+            )}
+            {canReturn && onReturn && (
+              <button
+                onClick={() => onReturn(battery)}
+                disabled={busy}
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                归还
+              </button>
+            )}
+          </>
         )}
         {onEdit && (
           <button onClick={() => onEdit(battery)} className="ml-auto text-xs text-sky-600">

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BatteryCharging, KeyRound, Loader2, LogOut, RotateCcw, ScanLine, Settings2, UserRound } from "lucide-react";
 import { DeviceCameraScanner } from "@/components/battery/DeviceCameraScanner";
-import { extractBatteryCode } from "@/components/battery/batteryCode";
+import { extractBatteryCode, extractUserIdentity } from "@/components/battery/batteryCode";
 import {
-  clearDeviceConfig, deviceBorrow, deviceGetBattery, deviceLogin, deviceLogout, deviceReturn,
+  clearDeviceConfig, deviceBorrow, deviceGetBattery, deviceLogin, deviceLoginById, deviceLogout, deviceReturn,
   getDeviceConfig, getDeviceSession, saveDeviceConfig,
   type DeviceBattery, type DeviceConfig, type DeviceUser,
 } from "@/components/battery/deviceApi";
@@ -23,6 +23,8 @@ export default function DeviceTerminalPage() {
   const [secretInput, setSecretInput] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [identity, setIdentity] = useState("");
+  const [showPasswordLogin, setShowPasswordLogin] = useState(false);
   const [code, setCode] = useState("");
   const [battery, setBattery] = useState<DeviceBattery | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,6 +60,23 @@ export default function DeviceTerminalPage() {
       setPassword("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "登录失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 现场认人：扫身份码 / 输学号（免密），责任记到识别出的用户
+  const identify = async (raw: string) => {
+    const identifier = extractUserIdentity(raw);
+    if (!identifier) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await deviceLoginById(identifier);
+      setUser(result.user);
+      setIdentity("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "识别失败");
     } finally {
       setBusy(false);
     }
@@ -137,22 +156,41 @@ export default function DeviceTerminalPage() {
 
       {config && !user && (
         <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
-          <div className="flex items-center gap-2 text-sm font-medium"><UserRound className="h-4 w-4" />使用人登录</div>
-          <p className="text-xs text-faint">登录后，接下来的借还都会记录到这个账号名下。</p>
-          <label className="block text-xs font-medium">
-            用户名
-            <input value={username} onChange={e => setUsername(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-xs font-medium">
-            密码
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-              onKeyDown={e => { if (e.key === "Enter") login(); }}
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-          </label>
-          <button onClick={login} disabled={busy} className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white disabled:opacity-50">
-            {busy ? "登录中…" : "登录"}
+          <div className="flex items-center gap-2 text-sm font-medium"><UserRound className="h-4 w-4" />识别使用人</div>
+          <p className="text-xs text-faint">扫工牌身份码或输入学号（回车），借还都会记录到这个人名下。</p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+              <input autoFocus value={identity} onChange={e => setIdentity(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") identify(identity); }}
+                className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 font-mono text-sm"
+                placeholder="扫身份码 / 输入学号后回车" />
+            </div>
+            <button onClick={() => identify(identity)} disabled={busy}
+              className="rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">识别</button>
+          </div>
+          <DeviceCameraScanner onScan={identify} disabled={busy} />
+          <button onClick={() => setShowPasswordLogin(v => !v)} className="text-xs text-muted underline">
+            {showPasswordLogin ? "收起账号密码登录" : "改用账号密码登录"}
           </button>
+          {showPasswordLogin && (
+            <div className="space-y-3 rounded-lg border border-border-subtle p-3">
+              <label className="block text-xs font-medium">
+                用户名
+                <input value={username} onChange={e => setUsername(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-medium">
+                密码
+                <input value={password} onChange={e => setPassword(e.target.value)} type="password"
+                  onKeyDown={e => { if (e.key === "Enter") login(); }}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+              </label>
+              <button onClick={login} disabled={busy} className="w-full rounded-lg bg-primary py-2 text-sm font-medium text-white disabled:opacity-50">
+                {busy ? "登录中…" : "登录"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -161,7 +199,7 @@ export default function DeviceTerminalPage() {
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
             <div className="flex items-center gap-2 text-sm">
               <UserRound className="h-4 w-4 text-muted" />
-              当前使用人：<span className="font-medium">{user.username}</span>
+              当前使用人：<span className="font-medium">{user.displayName?.trim() || user.username}</span>
             </div>
             <button onClick={logout} className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground">
               <LogOut className="h-3.5 w-3.5" />登出

@@ -11,6 +11,7 @@ public partial class BatteryService
         var query = _db.BatteryLoans
             .Include(l => l.Battery)
             .Include(l => l.User)
+            .Include(l => l.ReturnedBy)
             .AsQueryable();
         if (batteryId.HasValue) query = query.Where(l => l.BatteryId == batteryId.Value);
         if (userId.HasValue) query = query.Where(l => l.UserId == userId.Value);

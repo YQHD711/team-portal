@@ -3,6 +3,13 @@
 export interface BatteryBorrower {
   id: number;
   username: string;
+  /** 显示姓名（用户自改）；为空回落 username（登录名/学号）。 */
+  displayName?: string | null;
+}
+
+/** 展示名：优先显示姓名，回落登录名。 */
+export function displayName(u?: BatteryBorrower | null): string {
+  return u?.displayName?.trim() || u?.username || "";
 }
 
 export interface BatteryItem {
@@ -28,6 +35,8 @@ export interface BatteryLoan {
   borrowedAt: string;
   returnedAt: string | null;
   returnedByUserId: number | null;
+  /** 归还操作人（代还时与借用人不同）；null = 未归还或本人归还。 */
+  returnedBy: BatteryBorrower | null;
   note: string | null;
 }
 
