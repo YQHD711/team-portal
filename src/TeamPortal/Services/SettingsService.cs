@@ -94,11 +94,13 @@ public class SettingsService
                 setting = new SystemSetting { Key = key };
                 db.SystemSettings.Add(setting);
             }
-            setting.Value = value;
+            setting.Value = value.Length > 2000 ? value[..2000] : value;
             setting.UpdatedAt = DateTime.UtcNow;
-            _cache[key] = value;
         }
+        // 先库后缓存（与 Set() 一致）：若先写缓存，SaveChanges 失败会留下永久脏缓存
         await db.SaveChangesAsync();
+        foreach (var (key, value) in updates)
+            _cache[key] = value.Length > 2000 ? value[..2000] : value;
     }
 
     /// <summary>

@@ -100,17 +100,23 @@ public static class DeviceEndpoints
             if (string.IsNullOrWhiteSpace(identifier) || identifier.Length > 60)
                 return Results.Problem("身份标识不能为空且不超过 60 字符", statusCode: 400);
 
+            // 免密认人必须防枚举：连续失败 5 次锁 5 分钟（per device）
+            if (DeviceAuthService.IsIdLoginLocked(device.Id))
+                return Results.Problem("认人尝试过于频繁，请稍后再试", statusCode: 429);
+
             // 身份码内容是 /u/{slug}；扫码枪也可能是纯 slug 或学号/用户名
             var slug = ExtractSlug(identifier);
             var user = await db.Users.FirstOrDefaultAsync(u => u.Slug == slug || u.Username == identifier);
             if (user is null)
             {
+                DeviceAuthService.RegisterIdLoginFailure(device.Id);
                 log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "device",
                     targetId: device.Id.ToString(),
                     data: new { identifier, success = false }, ipAddress: LogService.ClientIp(ctx));
                 return Results.Problem("没有找到该身份标识对应的用户", statusCode: 404);
             }
 
+            DeviceAuthService.ClearIdLoginFailures(device.Id);
             var (session, token) = await auth.CreateSessionAsync(device, user, ctx);
             log.Audit("device-login-noauth", $"device:{device.DeviceKey}", targetType: "user",
                 targetId: user.Id.ToString(),
@@ -178,6 +184,9 @@ public static class DeviceEndpoints
             var device = await auth.AuthenticateAsync(ctx);
             if (device is null) return Unauthorized();
             if (req.Delta == 0) return Results.Problem("Delta 不能为 0", statusCode: 400);
+            // clamp：防 int.MinValue 时 Math.Abs 溢出（500），也防异常大的单次上报
+            if (req.Delta > 1_000_000 || req.Delta < -1_000_000)
+                return Results.Problem("Delta 超出允许范围（±1000000）", statusCode: 400);
 
             var found = await db.InventoryItems
                 .FirstOrDefaultAsync(i => i.Code != null && i.Code == code.ToUpperInvariant());
