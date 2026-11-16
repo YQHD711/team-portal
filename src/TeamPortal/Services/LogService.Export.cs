@@ -131,7 +131,11 @@ public partial class LogService
                 foreach (var o in batch)
                 {
                     written++;
-                    yield return $"{o.CreatedAt:yyyy-MM-dd HH:mm:ss},{o.UserName},{o.Action},{o.TargetType ?? ""},{o.TargetId ?? ""},{CsvField(o.Data)},{o.IpAddress ?? ""}";
+                    yield return string.Join(",",
+                        CsvField(o.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")),
+                        CsvField(o.UserName), CsvField(o.Action),
+                        CsvField(o.TargetType), CsvField(o.TargetId),
+                        CsvField(o.Data), CsvField(o.IpAddress));
                 }
                 lastId = batch[^1].Id;
                 maxId = lastId;
