@@ -87,12 +87,16 @@ public class SettingsService
         foreach (var (key, value) in updates)
         {
             var setting = await db.SystemSettings.FindAsync(key);
-            if (setting is not null)
+            if (setting is null)
             {
-                setting.Value = value;
-                setting.UpdatedAt = DateTime.UtcNow;
-                _cache[key] = value;
+                // 新键必须创建：此前只更新已存在的键，新增键被静默丢弃——
+                // API 返回 success 但库里没写（Battery:InventoryItemCode 等新键全部踩过这个坑）。
+                setting = new SystemSetting { Key = key };
+                db.SystemSettings.Add(setting);
             }
+            setting.Value = value;
+            setting.UpdatedAt = DateTime.UtcNow;
+            _cache[key] = value;
         }
         await db.SaveChangesAsync();
     }

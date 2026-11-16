@@ -108,21 +108,22 @@ public static class ProfileEndpoints
             var userId = GetUserId(user);
             if (userId is null) return Results.Problem("未登录", statusCode: 401);
 
+            // 空值 = 清空（回落登录名显示），非空则校验长度与非法字符
             var name = req.DisplayName?.Trim();
-            if (string.IsNullOrWhiteSpace(name) || name.Length > 50)
-                return Results.Problem("显示姓名不能为空且不超过 50 字符", statusCode: 400);
+            if (name is { Length: > 50 })
+                return Results.Problem("显示姓名不超过 50 字符", statusCode: 400);
             if (InputSanitizer.HasUnsafeFragment(name))
                 return Results.Problem("字段包含非法字符", statusCode: 400);
 
             var u = await db.Users.FindAsync(userId.Value);
             if (u is null) return Results.Problem("用户不存在", statusCode: 404);
-            u.DisplayName = name;
+            u.DisplayName = string.IsNullOrEmpty(name) ? null : name;
             await db.SaveChangesAsync();
 
             log.Audit("profile", u.Username, "user", userId.Value.ToString(),
-                data: new { action = "display-name.update", displayName = name },
+                data: new { action = "display-name.update", displayName = u.DisplayName },
                 ipAddress: LogService.ClientIp(ctx), userId: userId);
-            return Results.Ok(new { displayName = name });
+            return Results.Ok(new { displayName = u.DisplayName });
         });
 
         profileGroup.MapGet("/training", async (ClaimsPrincipal user, ProfileService svc) =>

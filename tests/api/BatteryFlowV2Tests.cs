@@ -211,4 +211,47 @@ public class BatteryFlowV2Tests : IClassFixture<WebApplicationFactory<Program>>
         }
         finally { try { File.Delete(dbPath); } catch { } }
     }
+    [Fact]
+    public async Task DisplayName_Clear_FallsBackToUsername()
+    {
+        var dbPath = NewDbPath();
+        try
+        {
+            var client = NewClient(dbPath);
+            var token = await LoginTokenAsync(client, dbPath, "v2clear", "member");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            Assert.Equal(HttpStatusCode.OK,
+                (await client.PutAsJsonAsync("/api/profile/display-name", new { displayName = "张三" })).StatusCode);
+
+            // 空值 = 清空（不是 400）
+            var clear = await client.PutAsJsonAsync("/api/profile/display-name", new { displayName = "" });
+            Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+
+            var me = await client.GetFromJsonAsync<MeResp>("/api/auth/me");
+            Assert.Null(me!.DisplayName);
+        }
+        finally { try { File.Delete(dbPath); } catch { } }
+    }
+
+    [Fact]
+    public async Task BatchUpdate_NewKey_PersistsAndReadable()
+    {
+        var dbPath = NewDbPath();
+        try
+        {
+            var client = NewClient(dbPath);
+            var token = await LoginTokenAsync(client, dbPath, "v2settings", "admin");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            // 从未存在过的新键：BatchUpdate 必须创建（此前静默丢弃 → 假成功）
+            var put = await client.PutAsJsonAsync("/api/admin/settings",
+                new Dictionary<string, string> { ["Battery:InventoryItemCode"] = "NEWKEY-001" });
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+            var got = await client.GetFromJsonAsync<Dictionary<string, string>>("/api/admin/settings/Battery:InventoryItemCode");
+            Assert.Equal("NEWKEY-001", got!["value"]);
+        }
+        finally { try { File.Delete(dbPath); } catch { } }
+    }
 }
