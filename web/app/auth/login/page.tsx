@@ -211,6 +211,9 @@ export default function LoginPage() {
               立即注册
             </Link>
           </p>
+          <p className="text-xs text-faint">
+            忘记密码？联系部长或管理员在「组织架构 → 编辑队员」重置
+          </p>
           <p className="text-xs text-muted">
             {teamName}
             {teamSubtitle} · 内部系统
