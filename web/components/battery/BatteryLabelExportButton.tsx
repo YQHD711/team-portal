@@ -6,10 +6,9 @@ import { Loader2, Printer } from "lucide-react";
 import type { LabelTemplate } from "@/lib/labelTemplate";
 import { DEFAULT_TEMPLATE } from "@/lib/labelTemplate";
 import { unwrapTemplates, type LabelTemplatesResponse } from "@/lib/labelSuitability";
-import { downloadPdf, progressText } from "@/lib/locationLabelPdf";
-import {
-  batteryLabelFileName, buildBatteryLabelsPdf, pickMaterialTemplate, type BatteryLabelSource,
-} from "@/lib/batteryLabelPdf";
+import { progressText } from "@/lib/locationLabelPdf";
+import { exportLabelsPdf, pickMaterialTemplate } from "@/lib/printService";
+import { toBatteryLabelData, type BatteryLabelSource } from "@/lib/batteryLabelPdf";
 
 interface Props {
   /** 要导出标签的电池（通常是当前筛选结果） */
@@ -40,11 +39,11 @@ export function BatteryLabelExportButton({ batteries, template: override }: Prop
         }
       }
       const origin = typeof window === "undefined" ? "" : window.location.origin;
-      const bytes = await buildBatteryLabelsPdf(batteries, origin, template ?? DEFAULT_TEMPLATE, {
+      const dataList = batteries.map(b => toBatteryLabelData(b, origin));
+      await exportLabelsPdf("battery", dataList, template ?? DEFAULT_TEMPLATE, {
         onProgress: (done, total) => setMsg(progressText(done, total)),
       });
-      downloadPdf(bytes, batteryLabelFileName());
-      setMsg(`已导出 ${batteries.length} 张电池标签`);
+      setMsg("已导出 " + batteries.length + " 张电池标签");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "导出失败");
     } finally {
