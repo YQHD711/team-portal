@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ArrowLeft, BatteryCharging, Loader2, QrCode } from "lucide-react";
-import { statusMeta, formatTime, isOverdue, type BatteryItem } from "@/components/battery/batteryTypes";
+import { displayName, statusMeta, formatTime, isOverdue, type BatteryItem } from "@/components/battery/batteryTypes";
 
 /**
  * 电池扫码落地页：/b/<电池编码>。
@@ -91,7 +91,7 @@ export default function BatteryByCodePage() {
           {battery.status === "borrowed" ? (
             <div>
               <span className="text-muted">当前借用人：</span>
-              <span className="font-medium">{battery.currentBorrower?.username ?? `用户 #${battery.currentBorrowerId}`}</span>
+              <span className="font-medium">{displayName(battery.currentBorrower) || `用户 #${battery.currentBorrowerId}`}</span>
               <span className="ml-2 text-faint">借出于 {formatTime(battery.borrowedAt)}</span>
             </div>
           ) : (
