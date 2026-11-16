@@ -78,15 +78,20 @@ export default function BatteriesPage() {
     } finally { setBusyId(null); }
   };
 
-  const createBattery = async (form: { code: string; model: string; health: string; notes: string }) => {
+  const createBattery = async (form: { code: string; model: string; health: string; notes: string; count: number }) => {
     setActionError(null);
     try {
-      await api.post("/api/battery", {
-        code: form.code.trim() || null,
+      const payload = {
         model: form.model.trim() || null,
         health: form.health,
         notes: form.notes.trim() || null,
-      });
+      };
+      if (form.count > 1) {
+        // 批量：连续编码、同型号（编码字段忽略）
+        await api.post("/api/battery/batch", { count: form.count, ...payload });
+      } else {
+        await api.post("/api/battery", { code: form.code.trim() || null, ...payload });
+      }
       setShowForm(false);
       fetchAll();
     } catch (e) {

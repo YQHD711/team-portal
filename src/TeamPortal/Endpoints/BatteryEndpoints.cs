@@ -78,6 +78,27 @@ public static class BatteryEndpoints
             }
         });
 
+        // ── 批量录入（staff）：一次建 N 块连续编码，同型号 ──
+        group.MapPost("/batch", async (CreateBatteryBatchRequest req, ClaimsPrincipal user, BatteryService svc,
+            LogService log, HttpContext ctx) =>
+        {
+            if (!IsStaff(user)) return Results.Problem("仅管理员和部长可新增电池", statusCode: 403);
+            if (HasUnsafe(req.Model, req.Notes))
+                return Results.Problem("字段包含非法字符", statusCode: 400);
+            try
+            {
+                var created = await svc.CreateBatchAsync(req.Count, req.Model, req.Health, req.Notes);
+                log.Audit("create", user.Identity?.Name ?? "unknown", targetType: "battery",
+                    data: new { batch = created.Count, model = req.Model, first = created[0].Code, last = created[^1].Code },
+                    ipAddress: LogService.ClientIp(ctx));
+                return Results.Ok(created);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
+        });
+
         // ── 编辑 ──
         group.MapPut("/{id:int}", async (int id, UpdateBatteryRequest req, ClaimsPrincipal user,
             BatteryService svc, LogService log, HttpContext ctx) =>
@@ -191,6 +212,7 @@ public static class BatteryEndpoints
 }
 
 public record CreateBatteryRequest(string? Code, string? Model, string? Health, string? Notes);
+public record CreateBatteryBatchRequest(int Count, string? Model, string? Health, string? Notes);
 public record UpdateBatteryRequest(string? Model, string? Status, string? Health, string? Notes, bool ClearModel = false);
 public record BorrowBatteryRequest(int? UserId, string? Note);
 public record ReturnBatteryRequest(string? Note, string? Health = null);
