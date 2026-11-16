@@ -147,7 +147,7 @@ public class DeviceAuthService
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     /// <summary>为设备上的用户创建会话；返回明文 token（只此一次）。</summary>
-    public async Task<(DeviceSession Session, string Token)> CreateSessionAsync(Device device, User user, HttpContext ctx)
+    public async Task<(DeviceSession Session, string Token)> CreateSessionAsync(Device device, User user, HttpContext ctx, string method = "password")
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         var now = DateTime.UtcNow;
@@ -156,6 +156,7 @@ public class DeviceAuthService
             DeviceId = device.Id,
             UserId = user.Id,
             TokenHash = HashToken(token),
+            Method = method,
             UserTokenVersion = user.TokenVersion,
             CreatedAt = now,
             ExpiresAt = now.Add(SessionTtl),

@@ -73,6 +73,9 @@ namespace TeamPortal.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AuthMethod")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("BatteryId")
                         .HasColumnType("INTEGER");
 
@@ -537,6 +540,10 @@ namespace TeamPortal.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("RevokedAt")

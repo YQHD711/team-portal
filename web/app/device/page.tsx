@@ -7,7 +7,7 @@ import { DeviceCameraScanner } from "@/components/battery/DeviceCameraScanner";
 import { extractBatteryCode, extractUserIdentity } from "@/components/battery/batteryCode";
 import { statusMeta } from "@/components/battery/batteryTypes";
 import {
-  clearDeviceConfig, deviceBorrow, deviceGetBattery, deviceLogin, deviceLoginById, deviceLogout, deviceReturn,
+  clearDeviceConfig, clearDeviceSession, deviceBorrow, deviceGetBattery, deviceLogin, deviceLoginById, deviceLogout, deviceReturn,
   getDeviceConfig, getDeviceSession, saveDeviceConfig,
   type DeviceBattery, type DeviceConfig, type DeviceUser,
 } from "@/components/battery/deviceApi";
@@ -30,6 +30,8 @@ export default function DeviceTerminalPage() {
   const [battery, setBattery] = useState<DeviceBattery | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [showReturnHealth, setShowReturnHealth] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -110,14 +112,18 @@ export default function DeviceTerminalPage() {
     }
   }, []);
 
-  const act = async (kind: "borrow" | "return") => {
+  const act = async (kind: "borrow" | "return", health?: string) => {
     if (!battery) return;
     setBusy(true);
     setError(null);
     try {
       if (kind === "borrow") await deviceBorrow(battery.code);
-      else await deviceReturn(battery.code);
-      setBattery(await deviceGetBattery(battery.code));
+      else await deviceReturn(battery.code, health);
+      // 一次认人一次操作：后端已撤销会话，前端同步清掉 —— 防下一个人的操作记到上一个人头上
+      clearDeviceSession();
+      setUser(null);
+      setBattery(null);
+      setMsg(kind === "borrow" ? "借出完成，请下一位输入学号" : "归还完成，请下一位输入学号");
     } catch (e) {
       setError(e instanceof Error ? e.message : "操作失败");
     } finally {
@@ -142,6 +148,7 @@ export default function DeviceTerminalPage() {
       </div>
 
       {error && <div className="rounded-lg bg-danger/10 p-3 text-sm text-danger">{error}</div>}
+      {msg && <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{msg}</div>}
 
       {!config && (
         <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
@@ -246,11 +253,25 @@ export default function DeviceTerminalPage() {
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BatteryCharging className="h-4 w-4" />}借出
                   </button>
                 )}
-                {battery.status === "borrowed" && (
-                  <button onClick={() => act("return")} disabled={busy}
+                {battery.status === "borrowed" && !showReturnHealth && (
+                  <button onClick={() => setShowReturnHealth(true)} disabled={busy}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 text-sm font-medium disabled:opacity-50">
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}归还
                   </button>
+                )}
+                {battery.status === "borrowed" && showReturnHealth && (
+                  <div className="rounded-xl border border-border p-3">
+                    <div className="text-sm font-medium">归还前确认电池状态</div>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {["正常", "鼓包", "漏液", "过放", "报废"].map(h => (
+                        <button key={h} onClick={() => act("return", h)} disabled={busy}
+                          className={`rounded-lg border px-2 py-2 text-sm disabled:opacity-50 ${h === "正常" ? "border-emerald-400 text-emerald-700" : "border-danger/50 text-danger"}`}>
+                          {h}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-faint">异常会自动转维修禁借并通知管理员</p>
+                  </div>
                 )}
               </div>
             </div>

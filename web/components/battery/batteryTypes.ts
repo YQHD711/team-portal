@@ -37,6 +37,8 @@ export interface BatteryLoan {
   returnedByUserId: number | null;
   /** 归还操作人（代还时与借用人不同）；null = 未归还或本人归还。 */
   returnedBy: BatteryBorrower | null;
+  /** 借出认定方式：web/password/idcode（idcode 为免密弱认定） */
+  authMethod?: string | null;
   note: string | null;
 }
 

@@ -26,15 +26,23 @@ public partial class BatteryService
     /// <summary>管理员可直接设置的状态（借出只能走借出接口，故不含 borrowed）。</summary>
     private static readonly string[] AllowedAdminStatuses = { StatusInStock, "charging", "repair", "retired" };
 
+    /// <summary>禁止借出的健康度：热失控前兆/已损坏，任何状态都不可借。</summary>
+    public static readonly string[] UnsafeHealths = { "鼓包", "漏液", "报废" };
+
+    /// <summary>归还时声明的异常健康度：回库即转维修（含过放——回充检查后再上机）。</summary>
+    public static readonly string[] AbnormalHealths = { "鼓包", "漏液", "过放", "报废" };
+
     private readonly AppDbContext _db;
     private readonly LogService _log;
     private readonly SettingsService _settings;
+    private readonly NotificationService? _notify;
 
-    public BatteryService(AppDbContext db, LogService log, SettingsService settings)
+    public BatteryService(AppDbContext db, LogService log, SettingsService settings, NotificationService? notify = null)
     {
         _db = db;
         _log = log;
         _settings = settings;
+        _notify = notify;
     }
 
     /// <summary>超时阈值（小时）：设置页 Battery:OverdueHours，兜底 24。</summary>
@@ -154,13 +162,16 @@ public partial class BatteryService
     /// 并发防护：用**条件更新抢占**（UPDATE ... WHERE Status='in_stock'），
     /// 抢不到的请求直接 409 —— 两个并发请求只会有一个成功，杜绝双借双流水。
     /// </summary>
-    public async Task<BatteryLoan> BorrowAsync(int batteryId, int borrowerId, string? note)
+    public async Task<BatteryLoan> BorrowAsync(int batteryId, int borrowerId, string? note, string? authMethod = null)
     {
         EnsureLength(note, NotesMaxLength, "备注");
         var now = DateTime.UtcNow;
 
+        // 健康度禁借：鼓包/漏液/报废是热失控前兆，任何状态都不该进飞机 ——
+        // 写进条件更新的 WHERE（原子拦截），与状态检查同一道闸
         var affected = await _db.BatteryItems
-            .Where(b => b.Id == batteryId && b.Status == StatusInStock)
+            .Where(b => b.Id == batteryId && b.Status == StatusInStock
+                && (b.Health == null || !UnsafeHealths.Contains(b.Health)))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(b => b.Status, StatusBorrowed)
                 .SetProperty(b => b.CurrentBorrowerId, borrowerId)
@@ -170,6 +181,8 @@ public partial class BatteryService
         {
             var current = await _db.BatteryItems.FindAsync(batteryId)
                 ?? throw new InvalidOperationException("电池不存在");
+            if (current.Health != null && UnsafeHealths.Contains(current.Health))
+                throw new InvalidOperationException($"电池健康度为「{current.Health}」，禁止借出（请送检或退役）");
             throw new InvalidOperationException($"电池当前状态为「{StatusText(current.Status)}」，不能借出");
         }
 
@@ -178,6 +191,7 @@ public partial class BatteryService
             BatteryId = batteryId,
             UserId = borrowerId,
             BorrowedAt = now,
+            AuthMethod = authMethod,
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
         };
         _db.BatteryLoans.Add(loan);
@@ -188,8 +202,13 @@ public partial class BatteryService
         return loan;
     }
 
-    /// <summary>归还：电池必须处于借出状态；关闭未归还流水。</summary>
-    public async Task<BatteryLoan> ReturnAsync(int batteryId, int operatorId, string? note)
+    /// <summary>
+    /// 归还：电池必须处于借出状态；关闭未归还流水。
+    ///
+    /// 归还健康检查（补责任链断点）：归还时声明健康度，异常（鼓包/漏液/过放/报废）
+    /// 自动转维修禁借并通知管理员 —— 坏电池不再静默回库。
+    /// </summary>
+    public async Task<BatteryLoan> ReturnAsync(int batteryId, int operatorId, string? note, string? health = null)
     {
         var item = await _db.BatteryItems.FindAsync(batteryId)
             ?? throw new InvalidOperationException("电池不存在");
@@ -203,13 +222,19 @@ public partial class BatteryService
             ?? throw new InvalidOperationException("找不到未归还的借出记录，请先核对台账");
 
         CloseLoan(loan, operatorId, note);
-        item.Status = StatusInStock;
+        var abnormal = !string.IsNullOrWhiteSpace(health) && AbnormalHealths.Contains(health.Trim());
+        item.Health = string.IsNullOrWhiteSpace(health) ? item.Health : health.Trim();
+        item.Status = abnormal ? "repair" : StatusInStock;
         item.CurrentBorrowerId = null;
         item.BorrowedAt = null;
         item.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        _log.Info("battery", $"Battery returned: {item.Code} by user#{operatorId}");
+        if (abnormal)
+            _notify?.Notify("电池归还异常",
+                $"「{item.Code}」归还时健康度为「{item.Health}」，已自动转维修禁借，请尽快检查",
+                "/batteries", targetRole: "staff", level: "warning");
+        _log.Info("battery", $"Battery returned: {item.Code} by user#{operatorId} (health={item.Health}, status={item.Status})");
         await SyncInventoryCountAsync();
         return loan;
     }
