@@ -85,7 +85,7 @@ export default function IncidentsPage() {
           {showBatForm && (
             <div className="rounded-xl border p-4 bg-surface space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium mb-1">电池编号</label><input value={bNum} onChange={e=>setBNum(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="如 BAT-001"/></div>
+                <div><label className="block text-xs font-medium mb-1">电池编号</label><input value={bNum} onChange={e=>setBNum(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="如 BAT-0001（填台账编码可与借还关联）"/></div>
                 <div><label className="block text-xs font-medium mb-1">状态</label><select value={bHealth} onChange={e=>setBHealth(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">{BATTERY_HEALTH.map(h=><option key={h}>{h}</option>)}</select></div>
                 <div><label className="block text-xs font-medium mb-1">日期</label><input type="date" value={bDate} onChange={e=>setBDate(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm"/></div>
               </div>
