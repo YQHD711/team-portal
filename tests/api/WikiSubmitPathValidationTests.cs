@@ -57,7 +57,8 @@ public class WikiSubmitPathValidationTests : WikiDocApiTestBase
             Status = "completed",
             Visibility = "public",
         };
-        var client = await LoginAsync(NewDbPath(), NewKbRoot(), "boss", "部长", task);
+        // 归属收紧后（CanManageTask）：公共任务的删除归 admin/创建者，这里用 admin 验证删任务清临时包
+        var client = await LoginAsync(NewDbPath(), NewKbRoot(), "boss", "admin", task);
 
         var resp = await client.DeleteAsync($"/api/wiki/tasks/{task.Id}");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
