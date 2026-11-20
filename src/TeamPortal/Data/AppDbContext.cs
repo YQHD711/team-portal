@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<SiteText> SiteTexts => Set<SiteText>();
     public DbSet<GuideContent> GuideContents => Set<GuideContent>();
     public DbSet<UserTourProgress> UserTourProgresses => Set<UserTourProgress>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -514,6 +515,14 @@ public class AppDbContext : DbContext
             entity.Property(g => g.TourKey).HasMaxLength(60);
             entity.Property(g => g.Title).HasMaxLength(200);
             entity.Property(g => g.StepsJson).IsRequired();
+        });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            // 一个角色对一个权限只有一条覆盖；没这条 = 用 PermissionCatalog 的默认值
+            entity.HasKey(r => new { r.Role, r.Permission });
+            entity.Property(r => r.Role).HasMaxLength(20);
+            entity.Property(r => r.Permission).HasMaxLength(80);
         });
 
         modelBuilder.Entity<UserTourProgress>(entity =>

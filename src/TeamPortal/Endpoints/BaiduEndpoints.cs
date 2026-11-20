@@ -23,7 +23,7 @@ public static class BaiduEndpoints
 
     public static void MapBaiduEndpoints(this WebApplication app)
     {
-        var baidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("AdminOnly");
+        var baidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("perm:admin.cloud.manage");
 
         // Public cloud file view — authenticated users can view/download cloud files
         // Use /api/baidu/view/{fsId} as embeddable link in knowledge base, inventory, etc.
@@ -110,7 +110,7 @@ public static class BaiduEndpoints
             }
         });
 
-        var adminBaidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("AdminOnly");
+        var adminBaidu = app.MapGroup("/api/admin/baidu").RequireAuthorization("perm:admin.cloud.manage");
 
         // Get authorization URL
         adminBaidu.MapGet("/auth-url", async (BaiduNetdiskService svc) =>

@@ -28,7 +28,7 @@ public static partial class AiEndpoints
         // 为什么要它：模型名以前是硬编码的，官方一换名（deepseek-chat → deepseek-flash /
         // deepseek-v4-pro）配置就悄悄失效，而界面上看不出来。改成一键拉取现行列表，
         // 顺带把上下文长度、最大输出、思考档位这些元信息也显示出来。
-        var admin = app.MapGroup("/api/admin/ai").RequireAuthorization("AdminOnly");
+        var admin = app.MapGroup("/api/admin/ai").RequireAuthorization("perm:admin.settings.manage");
 
         // 内置默认提示词：设置页要能看见它 —— 否则「留空 = 使用内置默认」就是一句
         // 无法核对的承诺，管理员改提示词时并不知道自己在覆盖什么。

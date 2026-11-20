@@ -76,7 +76,7 @@ public static class KnowledgeEndpoints
         }).RequireAuthorization();
 
         // Write/delete — staff only
-        var kbWrite = app.MapGroup("/api/knowledge").RequireAuthorization("StaffOnly");
+        var kbWrite = app.MapGroup("/api/knowledge").RequireAuthorization("perm:content.knowledge.edit");
         kbWrite.MapDelete("/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, HttpContext ctx) =>
         {
             if (string.IsNullOrWhiteSpace(path)) return Results.Problem("Path required", statusCode: 400);

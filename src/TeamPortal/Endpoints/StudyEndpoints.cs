@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -28,8 +29,10 @@ public static class StudyEndpoints
         var group = app.MapGroup("/api/study").RequireAuthorization();
 
         group.MapGet("/library", async (ClaimsPrincipal user, KnowledgeService knowledge,
-            StudyProgressService progress, AppDbContext db) =>
+            StudyProgressService progress, AppDbContext db, PermissionService perms) =>
         {
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "content.study.view"))
+                return Results.Problem("没有查看学习库的权限", statusCode: 403);
             var (role, dept, uid) = await GetUserCtx(user, db);
             var completed = await progress.GetCompletedPaths(uid);
             var tree = knowledge.GetTree(role, dept, uid);

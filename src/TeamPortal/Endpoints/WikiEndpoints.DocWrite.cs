@@ -57,7 +57,7 @@ public static partial class WikiEndpoints
             log.Audit("edit-doc", actor, targetType: "wiki-doc", targetId: $"{task.Id}:{lang}:{req.Path}",
                 data: new { taskId = task.Id, path = req.Path, lang }, ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return Results.Ok(new { ok = true, savedAt, path = req.Path, lang, marked = true });
-        }).RequireAuthorization("StaffOnly");
+        }).RequireAuthorization("perm:content.wiki.manage");
 
         // 人工修改标记列表：前端在「检查修正」之前先问一下，有标记就弹确认框
         wiki.MapGet("/tasks/{id}/edits", async (string id, WikiGeneratorService generator) =>
@@ -66,7 +66,7 @@ public static partial class WikiEndpoints
             if (task is null) return Results.Problem("Not found", statusCode: 404);
             var edits = await generator.GetEditMarks(id);
             return Results.Ok(new { count = edits.Count, paths = edits.Select(e => e.Path).Distinct().ToList(), edits });
-        }).RequireAuthorization("StaffOnly");
+        }).RequireAuthorization("perm:content.wiki.manage");
     }
 }
 

@@ -43,7 +43,7 @@ public static class CertificationEndpoints
             var (role, _, deptId) = await GetUserCtx(user, db);
             if (!IsStaff(role)) return Results.Problem("仅管理员和部长可查看", statusCode: 403);
             return Results.Ok(await svc.ListAllCertifications(role == "admin" ? null : deptId));
-        }).RequireAuthorization("StaffOnly");
+        }).RequireAuthorization("perm:team.profile.manage");
 
         // ── 管理端:按队员查看认证(只读) ──
         var adminGroup = app.MapGroup("/api/admin/profiles").RequireAuthorization();

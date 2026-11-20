@@ -41,7 +41,7 @@ public static class ExamEndpoints
     public static void MapExamEndpoints(this WebApplication app)
     {
         // 部门考核管理(StaffOnly)
-        var group = app.MapGroup("/api/admin/exams").RequireAuthorization("StaffOnly");
+        var group = app.MapGroup("/api/admin/exams").RequireAuthorization("perm:admin.exams.manage");
 
         group.MapGet("/", async (int? departmentId, ClaimsPrincipal user, AppDbContext db, ExamService svc) =>
         {

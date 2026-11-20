@@ -151,6 +151,8 @@ export async function mockApi(
       return json({});
     }
     if (path === "/api/auth/me") return json({ id: 1, username: "e2e-" + role, role, department: null });
+    // 权限：E2E 用通配符放行，避免每个用例都维护一份权限清单（真实接口返回显式列表）
+    if (path === "/api/me/permissions") return json({ role, permissions: ["*"] });
     if (path.startsWith("/api/notifications")) return json([]);
     if (path === "/api/public/brand") return json(brand);
     if (path === "/api/dashboard") return json(dashData);

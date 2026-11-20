@@ -19,7 +19,7 @@ public static class SystemAgentEndpoints
 
     public static void MapSystemAgentEndpoints(this WebApplication app)
     {
-        var agent = app.MapGroup("/api/admin/agent").RequireAuthorization("AdminOnly");
+        var agent = app.MapGroup("/api/admin/agent").RequireAuthorization("perm:admin.ai.use");
 
         // Run AI analysis — single-threaded to prevent concurrent tool execution conflicts
         agent.MapPost("/analyze", async (AgentRequest req, ClaimsPrincipal user, SystemAgentService svc, ConversationService conv) =>

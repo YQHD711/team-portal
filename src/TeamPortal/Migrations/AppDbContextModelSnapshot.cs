@@ -1184,6 +1184,30 @@ namespace TeamPortal.Migrations
                     b.ToTable("PurchaseRequests");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.RolePermission", b =>
+                {
+                    b.Property<string>("Role")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Permission")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Allowed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Role", "Permission");
+
+                    b.ToTable("RolePermissions");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.SharedFile", b =>
                 {
                     b.Property<int>("Id")

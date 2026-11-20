@@ -7,7 +7,7 @@ public static class BackupEndpoints
 {
     public static void MapBackupEndpoints(this WebApplication app)
     {
-        var backup = app.MapGroup("/api/admin/backup").RequireAuthorization("AdminOnly");
+        var backup = app.MapGroup("/api/admin/backup").RequireAuthorization("perm:admin.backup.manage");
 
         // Trigger manual backup now
         backup.MapPost("/", async (BackupService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>

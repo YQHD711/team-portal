@@ -276,7 +276,7 @@ public static class ProfileEndpoints
                 data: new { imported, skippedCount = skipped.Count, skipped = skipped.Take(20).Select(s => $"{s.Username}:{s.Reason}").ToList() },
                 ipAddress: LogService.ClientIp(ctx), userId: GetUserId(user));
             return Results.Ok(new { imported, skipped, message = $"成功导入 {imported} 条" + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 条" : "") });
-        }).RequireAuthorization("AdminOnly").DisableAntiforgery();
+        }).RequireAuthorization("perm:team.profile.manage").DisableAntiforgery();
     }
 }
 
