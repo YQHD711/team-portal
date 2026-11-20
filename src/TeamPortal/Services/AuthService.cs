@@ -374,6 +374,14 @@ public class AuthService
         if (user is null || !BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
             return false;
 
+        // 安全修复：改密必须与注册走同一套强度校验。
+        // 此前只有注册校验最小长度,改密可以设回任意短口令（甚至一串空格），等于绕过了整个密码策略。
+        // 复用同一设置项保证口径一致；先 Trim 再判长度，避免用纯空白字符蒙混过关。
+        var minLen = await _settings.GetInt("Auth:PasswordMinLength", 6);
+        var trimmedNewPassword = newPassword.Trim();
+        if (trimmedNewPassword.Length < minLen)
+            throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
+
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
         // 改密码 → 让本人其它已签发 token 立即失效（改密码本就该把别处的登录踢下线）
         user.TokenVersion++;

@@ -143,8 +143,11 @@ jobs:
   # ── 告警：任何环节失败都推飞书群（需配置 secret FEISHU_WEBHOOK_URL，未配置则静默跳过）──
   notify:
     name: Notify (Feishu)
-    needs: [test-csharp, test-web, lint-web, e2e-smoke, build-push]
-    if: failure()
+    # build-push 只在 main push 跑，PR 时会被 skip；若把它列进 needs，
+    # 被 skip 的依赖会让 notify 也连带 skip，PR 上的失败就永远发不出告警。
+    needs: [test-csharp, test-web, lint-web, e2e-smoke]
+    # always() 保证即使上游被 skip 也会评估 failure()；只写 failure() 时整条 workflow 被取消/跳过就不触发
+    if: always() && failure()
     runs-on: ubuntu-latest
     steps:
       - name: 发送飞书告警
