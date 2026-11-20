@@ -63,6 +63,8 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const tours = useTourDefs();
   const [progress, setProgress] = useState<Record<string, TourProgress>>({});
   const [ready, setReady] = useState(false);
+  /** 服务端进度是否成功加载：拿不到就不自动弹（手动重看不受影响） */
+  const [remoteOk, setRemoteOk] = useState(false);
   const [active, setActive] = useState<ActiveTour | null>(null);
   const autoStarted = useRef<Set<string>>(new Set());
 
@@ -78,8 +80,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       .then((remote) => {
         setProgress(remote);
         writeCache(user.id, remote);
+        setRemoteOk(true);
       })
-      .catch(() => { /* 离线/后端抖动：沿用本地缓存 */ })
+      .catch(() => { /* 离线/接口异常：沿用本地缓存，但不自动弹引导 */ })
       .finally(() => setReady(true));
   }, [user]);
 
@@ -148,7 +151,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   // 自动触发：延迟 600ms，给页面数据与骨架屏留出渲染时间
   useEffect(() => {
-    if (loading || !ready || !user || active) return;
+    if (loading || !ready || !remoteOk || !user || active) return;
     const timer = setTimeout(() => {
       const def = tourForPath(pathname, user.role, tours);
       if (!def || autoStarted.current.has(def.key)) return;
@@ -161,7 +164,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       setActive({ tour: def, steps, index: resume });
     }, 600);
     return () => clearTimeout(timer);
-  }, [loading, ready, user, pathname, tours, progress, active]);
+  }, [loading, ready, remoteOk, user, pathname, tours, progress, active]);
 
   return (
     <TourContext.Provider value={{ active, start, stop, reset, progress }}>

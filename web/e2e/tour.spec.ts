@@ -39,6 +39,12 @@ test.describe("使用引导", () => {
     await page.addInitScript((token) => localStorage.setItem("token", token), makeToken("member"));
     await page.goto("/");
 
+    // 先把自动弹出的 welcome 引导跳掉，否则遮罩会挡住顶栏按钮
+    const bubble = page.getByRole("dialog", { name: "功能都在左侧" });
+    await expect(bubble).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "跳过不再提示" }).click();
+    await expect(bubble).toBeHidden();
+
     await page.getByRole("button", { name: /e2e-member/ }).click();
     await page.getByRole("button", { name: "功能引导" }).click();
     await expect(page.getByText("欢迎与全局导航")).toBeVisible();

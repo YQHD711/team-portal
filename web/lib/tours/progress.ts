@@ -48,9 +48,17 @@ function isProgressMap(value: unknown): value is ProgressMap {
   return true;
 }
 
-/** 拉服务端进度（真源）；失败返回空对象，调用方可用本地缓存继续 */
+/**
+ * 拉服务端进度（真源）。
+ *
+ * 形状不对（代理/自定义 mock 返回对象而非数组）也按失败处理：
+ * 调用方据此判断"拿不到进度"，从而不自动弹引导——宁可少弹一次，也不要在
+ * 接口异常时把遮罩糊到用户脸上。
+ */
 export async function fetchRemote(): Promise<ProgressMap> {
-  const rows = await api.get<{ tourKey: string; status: TourStatus; stepIndex: number; version: number }[]>("/api/me/tours");
+  const data: unknown = await api.get("/api/me/tours");
+  if (!Array.isArray(data)) throw new Error("unexpected /api/me/tours response");
+  const rows = data as { tourKey: string; status: TourStatus; stepIndex: number; version: number }[];
   const map: ProgressMap = {};
   for (const row of rows) {
     map[row.tourKey] = { status: row.status, stepIndex: row.stepIndex, version: row.version };
