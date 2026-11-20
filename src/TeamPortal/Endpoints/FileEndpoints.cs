@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -59,8 +60,10 @@ public static class FileEndpoints
         var g = app.MapGroup("/api/files").RequireAuthorization();
 
         // List files — filtered by visibility
-        g.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+        g.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, PermissionService perms) =>
         {
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "content.files.view"))
+                return Results.Problem("没有查看共享文件的权限", statusCode: 403);
             var (role, dept, _) = await GetCtx(user, db);
             var query = db.SharedFiles.AsQueryable();
             if (role != "admin" && role != "部长")

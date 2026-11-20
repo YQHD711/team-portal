@@ -20,7 +20,7 @@ public static class AdminContentEndpoints
 
     public static void MapAdminContentEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/admin/content").RequireAuthorization("AdminOnly");
+        var group = app.MapGroup("/api/admin/content").RequireAuthorization("perm:admin.content.manage");
 
         group.MapGet("/texts", async (AppDbContext db) =>
         {

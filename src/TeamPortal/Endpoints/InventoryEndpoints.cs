@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -86,8 +87,12 @@ public static class InventoryEndpoints
             });
         });
 
-        group.MapGet("/", async (string? search, string? category, InventoryService svc) =>
+        group.MapGet("/", async (string? search, string? category, InventoryService svc,
+            ClaimsPrincipal user, PermissionService perms) =>
         {
+            // 查看权限可被管理员关掉（角色 × 权限矩阵）；关掉后接口也不能返回数据
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.inventory.view"))
+                return Results.Problem("没有查看库存的权限", statusCode: 403);
             var items = await svc.GetAll(search, category);
             return Results.Ok(items);
         });

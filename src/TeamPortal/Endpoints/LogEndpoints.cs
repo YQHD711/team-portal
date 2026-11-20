@@ -9,7 +9,7 @@ public static class LogEndpoints
 {
     public static void MapLogEndpoints(this WebApplication app)
     {
-        var log = app.MapGroup("/api/admin/logs").RequireAuthorization("AdminOnly");
+        var log = app.MapGroup("/api/admin/logs").RequireAuthorization("perm:admin.logs.view");
 
         // List logs with optional date range filter + keyword search
         log.MapGet("/", async (string? level, string? category, int? page, int? size, DateTime? from, DateTime? to, string? keyword, LogService svc) =>

@@ -7,7 +7,7 @@ public static class SettingsEndpoints
 {
     public static void MapSettingsEndpoints(this WebApplication app)
     {
-        var settings = app.MapGroup("/api/admin/settings").RequireAuthorization("AdminOnly");
+        var settings = app.MapGroup("/api/admin/settings").RequireAuthorization("perm:admin.settings.manage");
 
         // Get all settings grouped by category
         settings.MapGet("/", async (SettingsService svc) =>

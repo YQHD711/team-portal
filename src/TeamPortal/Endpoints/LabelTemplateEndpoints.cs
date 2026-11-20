@@ -22,7 +22,7 @@ public static class LabelTemplateEndpoints
         app.MapGet("/api/label-templates", async (LabelTemplateService svc) =>
             Results.Ok(new { templates = await svc.ListAsync() })).RequireAuthorization();
 
-        var admin = app.MapGroup("/api/label-templates").RequireAuthorization("AdminOnly");
+        var admin = app.MapGroup("/api/label-templates").RequireAuthorization("perm:admin.settings.manage");
 
         admin.MapPost("/", async (LabelTemplateDto req, LabelTemplateService svc, ClaimsPrincipal user, LogService log, HttpContext ctx) =>
         {

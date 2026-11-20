@@ -15,7 +15,7 @@ public static class DeviceAdminEndpoints
 
     public static void MapDeviceAdminEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/admin/devices").RequireAuthorization("AdminOnly");
+        var group = app.MapGroup("/api/admin/devices").RequireAuthorization("perm:admin.devices.manage");
 
         group.MapGet("/", async (AppDbContext db) =>
         {

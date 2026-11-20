@@ -59,7 +59,7 @@ public static class AdminEndpoints
                     data: new { username = req.Username, success = false, error = "用户名已存在或权限不足" }, ipAddress: LogService.ClientIp(ctx));
             }
             return u is not null ? Results.Ok(u) : Results.Problem("用户名已存在或权限不足", statusCode: 400);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("perm:admin.users.manage");
 
         admin.MapPut("/users/{id:int}", async (int id, UpdateUserReq req, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -100,7 +100,7 @@ public static class AdminEndpoints
                 notify.Notify("队员已删除", $"{actor} 删除了「{targetName}」", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("无法删除", statusCode: 400);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("perm:admin.users.manage");
 
         // ── Departments ──
         admin.MapGet("/departments", async (AdminService svc) => Results.Ok(await svc.ListDepartments()));
@@ -114,7 +114,7 @@ public static class AdminEndpoints
                 data: new { name = req.Name }, ipAddress: LogService.ClientIp(ctx));
             notify.Notify("新部门创建", $"{actor} 创建了部门「{dept.Name}」", "/admin/organization", targetRole: "staff");
             return Results.Ok(dept);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("perm:admin.users.manage");
 
         admin.MapPut("/departments/{id:int}", async (int id, UpdateDeptReq req, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -128,7 +128,7 @@ public static class AdminEndpoints
                 notify.Notify("部门信息更新", $"{actor} 更新了部门信息", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("perm:admin.users.manage");
 
         admin.MapDelete("/departments/{id:int}", async (int id, AdminService svc, ClaimsPrincipal user, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -142,7 +142,7 @@ public static class AdminEndpoints
                 notify.Notify("部门已删除", $"{actor} 删除了一个部门", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("部门不存在", statusCode: 404);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization("perm:admin.users.manage");
 
         // ── Knowledge ──
         // 图片上传：文档里的 `![](图.png)` 需要一张真图存进知识库。

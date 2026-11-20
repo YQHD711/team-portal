@@ -14,6 +14,8 @@ using ModelContextProtocol.AspNetCore;
 using TeamPortal.Endpoints;
 using TeamPortal.Middleware;
 using TeamPortal.Services;
+using TeamPortal.Services.Permissions;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -107,6 +109,10 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", p => p.RequireRole("admin"));
     options.AddPolicy("StaffOnly", p => p.RequireRole("admin", "部长"));
+    // 每个权限点注册一个策略：端点写 RequireAuthorization("perm:material.inventory.manage")
+    // 即可；管理员在 /admin/permissions 调整矩阵后立即生效（PermissionService 内存矩阵）。
+    foreach (var permission in PermissionCatalog.All)
+        options.AddPolicy("perm:" + permission.Key, p => p.Requirements.Add(new PermissionRequirement(permission.Key)));
 });
 
 // ── CORS (restrict in production) ──
@@ -237,6 +243,8 @@ builder.Services.AddSingleton<LogService>();
 builder.Services.AddScoped<LogArchiver>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<SettingsService>();
+builder.Services.AddSingleton<PermissionService>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 builder.Services.AddSingleton<ConversationService>();
 // Wiki 生成进度：进程内存单例（并行生成文档时不能并发写同一个 scoped DbContext）
 builder.Services.AddSingleton<WikiProgressTracker>();
@@ -284,6 +292,8 @@ using (var scope = app.Services.CreateScope())
     var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
     await auth.SeedAdmin();
     await settings.SeedDefaults();
+    // 权限矩阵：默认 + 数据库覆盖加载进内存（授权处理器同步读取）
+    await scope.ServiceProvider.GetRequiredService<PermissionService>().ReloadAsync();
 
     // 标签模板种子：库里一个模板都没有时建内置默认版式（幂等；响应导出的兜底）
     await scope.ServiceProvider.GetRequiredService<LabelTemplateService>().SeedDefaultIfEmptyAsync();
@@ -444,6 +454,7 @@ app.MapDownloadEndpoints();
 app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
 app.MapContentEndpoints();
+app.MapPermissionEndpoints();
 app.MapAdminContentEndpoints();
 app.MapChatEndpoints();
 app.MapProfileEndpoints();

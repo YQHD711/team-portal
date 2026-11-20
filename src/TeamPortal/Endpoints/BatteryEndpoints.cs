@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -35,8 +36,11 @@ public static class BatteryEndpoints
         var group = app.MapGroup("/api/battery").RequireAuthorization();
 
         // 台账列表（状态/关键字筛选）
-        group.MapGet("/", async (string? status, string? search, BatteryService svc) =>
-            Results.Ok(await svc.GetAllAsync(status, search)));
+        group.MapGet("/", async (string? status, string? search, BatteryService svc,
+            ClaimsPrincipal user, PermissionService perms) =>
+            !perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.battery.view")
+                ? Results.Problem("没有查看电池的权限", statusCode: 403)
+                : Results.Ok(await svc.GetAllAsync(status, search)));
 
         // 新增电池时的下一个码预览
         group.MapGet("/next-code", async (BatteryService svc) =>
