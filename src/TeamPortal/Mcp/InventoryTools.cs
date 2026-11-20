@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using ModelContextProtocol.Server;
 using TeamPortal.Services;
+using TeamPortal.Services.Permissions;
 
 namespace TeamPortal.Mcp;
 
@@ -14,15 +16,26 @@ public class InventoryTools
     private readonly InventoryService _inv;
     private readonly IHttpContextAccessor _http;
     private readonly LogService? _log;
-    public InventoryTools(InventoryService inv, IHttpContextAccessor http, LogService? log = null)
-    { _inv = inv; _http = http; _log = log; }
+    private readonly PermissionService? _perms;
+    public InventoryTools(InventoryService inv, IHttpContextAccessor http, LogService? log = null,
+        PermissionService? perms = null)
+    { _inv = inv; _http = http; _log = log; _perms = perms; }
 
     private void Audit(string action, int id, object data)
         => _log?.Audit(action, McpAuth.UserName(_http), targetType: "item", targetId: id.ToString(),
             data: data, ipAddress: McpAuth.ClientIp(_http), userId: McpAuth.UserId(_http));
 
     [McpServerTool(Name = "inventory_list")]
-    public async Task<object> List(string? search = null, string? category = null) => await _inv.GetAll(search, category);
+    public async Task<object> List(string? search = null, string? category = null)
+    {
+        // 与 HTTP 列表同一套等级过滤：AI 工具不能成为绕过权限的旁路
+        var role = _http.HttpContext?.User.FindFirstValue(ClaimTypes.Role);
+        var perms = _perms;
+        var grades = new[] { "A", "B", "C" }
+            .Where(g => perms is null || perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
+            .ToList();
+        return await _inv.GetAll(search, category, grades);
+    }
 
     [McpServerTool(Name = "inventory_get")]
     public async Task<object?> Get(int id) => await _inv.GetById(id);

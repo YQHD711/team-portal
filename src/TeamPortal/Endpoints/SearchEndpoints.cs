@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Services;
+using TeamPortal.Services.Permissions;
 
 namespace TeamPortal.Endpoints;
 
@@ -9,7 +10,8 @@ public static class SearchEndpoints
 {
     public static void MapSearchEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/search", async (string q, ClaimsPrincipal user, AppDbContext db, KnowledgeSearchService ks, KnowledgeService knowledge) =>
+        app.MapGet("/api/search", async (string q, ClaimsPrincipal user, AppDbContext db, KnowledgeSearchService ks,
+            KnowledgeService knowledge, PermissionService perms) =>
         {
             if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
                 return Results.Ok(new { knowledge = Array.Empty<object>(), inventory = Array.Empty<object>(), wiki = Array.Empty<object>(), files = Array.Empty<object>() });
@@ -66,7 +68,12 @@ public static class SearchEndpoints
                 .ToList();
 
             // Inventory
+            // 物料按等级分级：搜不到没权限看的那几档（否则搜索结果会泄露名称/库存）
+            var invGrades = new[] { "A", "B", "C" }
+                .Where(g => perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
+                .ToList();
             var items = await db.InventoryItems
+                .Where(i => invGrades.Contains(i.Grade))
                 .Where(i => i.Name.ToLower().Contains(keyword) || (i.Category != null && i.Category.ToLower().Contains(keyword)))
                 .Take(5).Select(i => new { type = "inventory", title = i.Name, snippet = $"库存: {i.Quantity} · {i.Category} · {i.LocationCode ?? ""}", path = $"/inventory?id={i.Id}" })
                 .ToListAsync();

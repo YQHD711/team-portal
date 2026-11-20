@@ -29,6 +29,9 @@ public static class PermissionCatalog
 
         // ── 物料 ──
         new("material.inventory.view", "物料", "查看零件库存"),
+        new("material.inventory.view.a", "物料", "查看 A 级物料", "关键件（单价 ≥1000）"),
+        new("material.inventory.view.b", "物料", "查看 B 级物料", "常规件（100–999）"),
+        new("material.inventory.view.c", "物料", "查看 C 级物料", "耗材（<100）"),
         new("material.inventory.manage", "物料", "新增/编辑/删除零件", "含导入 Excel"),
         new("material.inventory.export", "物料", "导出库存与标签"),
         new("material.checkout.apply", "物料", "领用申请"),
@@ -73,7 +76,8 @@ public static class PermissionCatalog
         var member = Set(
             "content.knowledge.view", "content.wiki.view", "content.study.view",
             "content.files.view", "content.files.upload",
-            "material.inventory.view", "material.checkout.apply", "material.stocktake.execute",
+            "material.inventory.view", "material.inventory.view.a", "material.inventory.view.b", "material.inventory.view.c",
+            "material.checkout.apply", "material.stocktake.execute",
             "material.finance.apply", "material.layout.view",
             "material.battery.view", "material.battery.borrow",
             "team.incidents.view", "team.incidents.report", "team.profile.self");
