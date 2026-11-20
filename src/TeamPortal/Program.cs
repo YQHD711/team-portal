@@ -28,16 +28,19 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1024L * 1024
 // 不再使用任何硬编码可猜字符串。随机密钥重启后失效(已签发 token 全部作废),见启动 WARN 日志。
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtKeyGenerated = false;
-if (string.IsNullOrEmpty(jwtKey))
+// 安全修复(条件性 P0):占位密钥 / 生产环境缺密钥都必须拒绝启动。
+// 规则抽成 Program.ValidateJwtKey 纯函数便于单测覆盖(见 tests/api/JwtKeyValidationTests.cs)。
+var jwtKeyError = Program.ValidateJwtKey(jwtKey, builder.Environment.IsProduction());
+if (jwtKeyError is not null)
+    throw new InvalidOperationException(jwtKeyError);
+if (string.IsNullOrWhiteSpace(jwtKey))
 {
+    // 只有非生产环境会走到这里:生产缺密钥已在上面 fail fast,不再随机生成——
+    // 随机密钥每次重启都变,会让全员已签发 token 失效,属于"能跑但不对"。
     jwtKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
     jwtKeyGenerated = true;
     // 写回配置:AuthService 等后续通过 IConfiguration 读 Jwt:Key 的地方必须拿到同一密钥
     builder.Configuration["Jwt:Key"] = jwtKey;
-}
-else if (jwtKey.Length < 32)
-{
-    throw new InvalidOperationException("Jwt:Key 长度不足32字符，请在环境变量 JWT__KEY 中设置");
 }
 
 var adminUser = builder.Configuration["Admin:Username"];
@@ -1023,4 +1026,38 @@ static string DefaultRoomLayoutJson(string roomCode) => $$"""
     """;
 
 // 供集成测试(WebApplicationFactory<Program>)引用的入口标记
-public partial class Program { }
+public partial class Program
+{
+    /// <summary>
+    /// JWT 签名密钥的启动校验（纯函数，无副作用，便于单测）。
+    /// 返回 null = 通过；返回非 null = 拒绝启动的中文原因。
+    ///
+    /// 为什么必须拒绝占位密钥：.env.example 里的
+    /// "change-me-to-a-random-string-at-least-32-chars" 有 45 字符，
+    /// 能通过原来只校验"长度 ≥ 32"的逻辑；仓库是公开的，这个值等于公开密钥，
+    /// 任何人拿到它都能伪造 role=admin 的 JWT，线上若直接 cp .env.example 就会后台被接管。
+    ///
+    /// 为什么生产缺密钥不随机生成：随机密钥每次重启都变，已签发 token 全部失效，
+    /// 表现为全员反复掉线（"能跑但不对"）。生产应启动即失败，逼部署方显式配置。
+    /// </summary>
+    internal static string? ValidateJwtKey(string? key, bool isProduction)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return isProduction ? "生产环境必须配置 JWT__KEY（≥32 字符），拒绝以随机密钥启动" : null;
+
+        // 已知占位值（忽略大小写）。先判占位、再判长度：占位串通常够长，
+        // 反过来先判长度会让最危险的占位密钥被当成合法密钥放行。
+        var knownPlaceholders = new[] { "change-me", "changeme", "your-secret", "your_jwt" };
+        foreach (var placeholder in knownPlaceholders)
+        {
+            if (key.Contains(placeholder, StringComparison.OrdinalIgnoreCase))
+                return "检测到 JWT 占位密钥，必须替换为随机值（openssl rand -base64 48）";
+        }
+
+        // 保留原有文案，避免部署文档/运维习惯失效
+        if (key.Length < 32)
+            return "Jwt:Key 长度不足32字符，请在环境变量 JWT__KEY 中设置";
+
+        return null;
+    }
+}
