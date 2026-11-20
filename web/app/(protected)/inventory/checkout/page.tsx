@@ -155,11 +155,13 @@ export default function CheckoutPage() {
       </div>
 
       {/* 新建领用 */}
-      <CheckoutForm showNew={showNew} onOpen={() => setShowNew(true)} onClose={() => setShowNew(false)}
-        allItems={allItems} itemSearch={itemSearch} onItemSearch={setItemSearch}
-        newForm={newForm} setNewForm={setNewForm} onSubmit={submitNew} />
+      <div data-guide="checkout-new">
+        <CheckoutForm showNew={showNew} onOpen={() => setShowNew(true)} onClose={() => setShowNew(false)}
+          allItems={allItems} itemSearch={itemSearch} onItemSearch={setItemSearch}
+          newForm={newForm} setNewForm={setNewForm} onSubmit={submitNew} />
+      </div>
 
-      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1" data-guide="checkout-tabs">
         <button onClick={() => setTab("my")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${tab === "my" ? "bg-surface shadow-sm" : "text-muted"}`}>
           我的领用 ({my.length})
         </button>

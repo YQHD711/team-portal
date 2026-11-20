@@ -140,7 +140,7 @@ export default function StorageLayoutPage() {
         floors.map(floor => (
           <div key={floor}>
             <h2 className="mb-2 text-sm font-semibold text-muted">{floor}F</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-guide="layout-rooms">
               {layouts.filter(l => l.floor === floor).map(l => (
                 <RoomCard key={l.id} row={l} items={items} isStaff={isStaff} onOpen={() => setSelected(l)} />
               ))}

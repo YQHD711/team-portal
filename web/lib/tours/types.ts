@@ -26,7 +26,7 @@ export interface TourStep {
   body: string;
   placement?: Placement;
   /** 步骤级权限：缺省继承 tour 的 roles（用于同页不同权的步骤） */
-  roles?: Role[];
+  roles?: readonly Role[];
   /** 仅桌面端显示：移动端侧栏是抽屉，导航类目标不存在 */
   desktopOnly?: boolean;
   /** 可选「带我去试试」按钮 */

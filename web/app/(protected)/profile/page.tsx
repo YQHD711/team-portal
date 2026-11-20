@@ -133,7 +133,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1" data-guide="profile-tabs">
         {[
           { key: "info", label: "基本信息", icon: User },
           { key: "training", label: "培训记录", icon: GraduationCap },
@@ -149,7 +149,7 @@ export default function ProfilePage() {
 
       {/* Tab: Info */}
       {tab === "info" && (
-        <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
+        <div className="rounded-xl border border-border bg-surface p-6 space-y-4" data-guide="profile-info">
           {/* 显示姓名：独立于档案编辑模式，走 Users.DisplayName（登录名/学号不动） */}
           <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border-subtle p-3">
             <label className="block text-xs font-medium">

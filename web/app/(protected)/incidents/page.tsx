@@ -69,7 +69,7 @@ export default function IncidentsPage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <div><h1 data-guide="page-incidents" className="text-2xl font-bold">事故与安全</h1><p className="text-sm text-muted">电池事故记录、飞行事故记录</p></div>
 
-      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
+      <div className="flex gap-1 rounded-xl bg-surface-subtle p-1" data-guide="incidents-tabs">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-surface shadow-sm" : "text-muted hover:text-zinc-700"}`}>
@@ -81,7 +81,7 @@ export default function IncidentsPage() {
       {/* Battery Tab */}
       {tab === "battery" && (
         <div className="space-y-4">
-          {isStaff && <button onClick={()=>{resetBatForm();setShowBatForm(true);}} className="inline-flex items-center gap-1 text-sm text-sky-600 font-medium"><Plus className="h-4 w-4"/>记录电池事故</button>}
+          {isStaff && <button data-guide="incidents-actions" onClick={()=>{resetBatForm();setShowBatForm(true);}} className="inline-flex items-center gap-1 text-sm text-sky-600 font-medium"><Plus className="h-4 w-4"/>记录电池事故</button>}
           {showBatForm && (
             <div className="rounded-xl border p-4 bg-surface space-y-3">
               <div className="grid grid-cols-2 gap-3">

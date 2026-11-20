@@ -35,7 +35,7 @@ export default function WikiBrowsePage() {
           <p className="text-sm text-faint mt-1">管理员和部长可以提交代码仓库来生成文档</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2" data-guide="wiki-list">
           {projects.map(p => (
             <Link key={p.id} href={`/wiki/${p.id}`}
               className="group relative rounded-xl border border-border bg-surface p-5 hover:shadow-md hover:border-sky-300 dark:hover:border-sky-700 transition-all">
