@@ -10,6 +10,7 @@ import {
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
 import { useCurrentUser } from "@/lib/hooks";
+import { useCopy } from "@/components/content/ContentProvider";
 import { buildLabel } from "@/lib/build-info";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -86,9 +87,24 @@ function guideId(href: string): string {
   return href === "/" ? "nav-home" : "nav-" + href.replace(/^\//, "").replace(/\//g, "-");
 }
 
+/** 导航文案 key："/" → nav.dashboard，"/inventory/layout" → nav.layout */
+function copyKeyFor(href: string): string {
+  if (href === "/") return "nav.dashboard";
+  return "nav." + (href.split("/").filter(Boolean).pop() ?? "");
+}
+
+/** 分组标题的文案 key */
+const GROUP_KEYS: Record<string, string> = {
+  "总览": "nav.group.overview",
+  "资源": "nav.group.resources",
+  "团队": "nav.group.team",
+  "管理": "nav.group.admin",
+};
+
 /** 普通导航项 */
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {
   const pathname = usePathname();
+  const t = useCopy();
   const active = isActive(pathname, item.href);
   return (
     <Link
@@ -103,7 +119,7 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }
       )}
     >
       <item.icon className={cn("h-4.5 w-4.5 shrink-0", active ? "text-primary" : "opacity-75")} />
-      {item.label}
+      {t(copyKeyFor(item.href), item.label)}
     </Link>
   );
 }
@@ -119,6 +135,7 @@ function GroupHeading({ children }: { children: React.ReactNode }) {
 
 export function Sidebar() {
   const { teamName, teamSubtitle } = useBrand();
+  const t = useCopy();
   const { open, setOpen } = useSidebar();
   const [adminOpen, setAdminOpen] = useState(false);
   const [materialOpen, setMaterialOpen] = useState(false);
@@ -180,7 +197,7 @@ export function Sidebar() {
             <div className="font-semibold text-sm leading-tight truncate">{teamName}</div>
             <div className="text-[10px] text-faint leading-tight">{teamSubtitle}</div>
           </Link>
-          <button onClick={close} className="lg:hidden ml-auto p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-hover">
+          <button onClick={close} aria-label="关闭菜单" className="lg:hidden ml-auto p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-hover">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -189,7 +206,7 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-3 py-2" data-guide="sidebar-base">
           {baseGroups.map((group) => (
             <div key={group.heading}>
-              <GroupHeading>{group.heading}</GroupHeading>
+              <GroupHeading>{t(GROUP_KEYS[group.heading] ?? "", group.heading)}</GroupHeading>
               {group.items.map((item) => (
                 <NavLink key={item.href} item={item} onNavigate={close} />
               ))}
@@ -207,7 +224,7 @@ export function Sidebar() {
                     )}
                   >
                     <Package className={cn("h-4.5 w-4.5 shrink-0", isMaterialPath ? "text-primary" : "opacity-75")} />
-                    <span className="flex-1 text-left">物料管理</span>
+                    <span className="flex-1 text-left">{t("nav.group.materials", "物料管理")}</span>
                     <ChevronDown className={cn("h-3 w-3 transition-transform", materialOpen && "rotate-180")} />
                   </button>
                   {(materialOpen || isMaterialPath) && (
@@ -221,7 +238,7 @@ export function Sidebar() {
                               active ? "bg-primary/10 text-foreground" : "text-muted hover:text-foreground hover:bg-surface-hover"
                             )}>
                             <item.icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "opacity-75")} />
-                            {item.label}
+                            {t(copyKeyFor(item.href), item.label)}
                           </Link>
                         );
                       })}
@@ -246,7 +263,7 @@ export function Sidebar() {
                 )}
               >
                 <ChevronDown className={cn("h-3 w-3 transition-transform", adminOpen && "rotate-180")} />
-                管理
+                {t("nav.group.admin", "管理")}
               </button>
               {adminOpen && (
                 <div className="mt-0.5 space-y-0.5">
@@ -262,7 +279,7 @@ export function Sidebar() {
                           active ? "bg-primary/10 text-foreground" : "text-muted hover:text-foreground hover:bg-surface-hover"
                         )}>
                         <item.icon className={cn("h-4.5 w-4.5 shrink-0", active ? "text-primary" : "opacity-75")} />
-                        {item.label}
+                        {t(copyKeyFor(item.href), item.label)}
                       </Link>
                     );
                   })}
@@ -276,7 +293,7 @@ export function Sidebar() {
         <div className="px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-border-subtle">
           <div className="flex items-center gap-2 text-[10px] text-faint">
             <Sparkles className="h-3 w-3" />
-            <span>{teamName} © 2026 · 内部系统</span>
+            <span>{t("nav.footer", "{teamName} © 2026 · 内部系统").replace("{teamName}", teamName)}</span>
             {/* 构建版本：用来一眼确认线上跑的是哪个 commit（对照 CI/CD 运行编号） */}
             <span className="ml-auto font-mono" title={`构建版本 ${buildLabel}`}>{buildLabel}</span>
           </div>

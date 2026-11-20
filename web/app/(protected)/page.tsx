@@ -6,6 +6,7 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { api } from "@/lib/api";
 import { isStaff as checkIsStaff } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
+import { useCopy } from "@/components/content/ContentProvider";
 import { useLowStock } from "@/components/inventory/LowStockProvider";
 import { Users, Package, DollarSign, Receipt, Sparkles, ShieldAlert, AlertTriangle } from "lucide-react";
 
@@ -55,6 +56,7 @@ const Skeleton = ({ w = "w-16", h = "h-6" }: { w?: string; h?: string }) =>
 
 export default function Home() {
   const { teamName, teamSubtitle } = useBrand();
+  const t = useCopy();
   // 低库存阈值/等级由后端设置下发（与库存页、库存预警通知同源）
   const { threshold: lowThreshold } = useLowStock();
   const [data, setData] = useState<DashData | null>(null);
@@ -158,7 +160,7 @@ export default function Home() {
           <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
             <CategoryDonut data={donut} total={totalMaterial} />
             <div className="w-full sm:flex-1 space-y-2.5">
-              {donut.length === 0 && <div className="text-sm text-faint">{loaded ? "暂无物料数据" : <Skeleton />}</div>}
+              {donut.length === 0 && <div className="text-sm text-faint">{loaded ? t("empty.inventory.materials", "暂无物料数据") : <Skeleton />}</div>}
               {donut.map((d, i) => {
                 const pct = totalMaterial ? Math.round((d.value / totalMaterial) * 100) : 0;
                 const color = ["var(--accent)", "var(--success)", "var(--info)", "var(--warning)", "var(--danger)"][i % 5];
@@ -231,7 +233,7 @@ export default function Home() {
           ) : (
             <div className="flex items-start gap-3 px-2 py-2.5">
               <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-subtle border border-border-subtle text-sm shrink-0">✅</span>
-              <div><div className="text-[13px] text-foreground">暂无未处理事故</div><div className="text-[11px] text-faint mt-0.5">安全记录良好</div></div>
+              <div><div className="text-[13px] text-foreground">{t("empty.incidents.open", "暂无未处理事故")}</div><div className="text-[11px] text-faint mt-0.5">{t("empty.incidents.good", "安全记录良好")}</div></div>
             </div>
           )}
 

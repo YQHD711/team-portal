@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
+import { useCopy } from "@/components/content/ContentProvider";
 import { Plus, Check, X, ShoppingCart, PackageCheck, Loader2, TrendingUp, FileText, Trash2 } from "lucide-react";
 
 interface PurchaseReq { id: number; itemName: string; quantity: number; estimatedPrice: number; actualPrice: number | null; reason: string; status: string; requester: { username: string } | null; approver: { username: string } | null; approvedAt: string | null; purchasedAt: string | null; receivedAt: string | null; rejectReason: string | null; createdAt: string; }
@@ -16,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function FinancePage() {
+  const t = useCopy();
   const [tab, setTab] = useState<string>("my");
   const [requests, setRequests] = useState<PurchaseReq[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -135,7 +137,7 @@ export default function FinancePage() {
       {/* Requests list */}
       {tab !== "report" && (
         <div className="space-y-3">
-          {requests.length === 0 ? <div className="rounded-xl border bg-surface p-12 text-center text-faint">暂无采购申请</div> : requests.map(r => {
+          {requests.length === 0 ? <div className="rounded-xl border bg-surface p-12 text-center text-faint">{t("empty.finance.requests", "暂无采购申请")}</div> : requests.map(r => {
             const steps = ["pending", "approved", "purchased", "received"];
             const currentStep = r.status === "rejected" ? -1 : steps.indexOf(r.status);
             return (

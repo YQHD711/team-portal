@@ -10,6 +10,7 @@ import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { useSidebar } from "./SidebarContext";
 import { useBrand } from "@/lib/brand";
+import { useCopy } from "@/components/content/ContentProvider";
 import { DEFAULT_SCHEME, applyScheme, nextScheme, readStoredScheme, schemeLabel, type SchemePreference } from "@/lib/scheme";
 
 const pageTitles: Record<string, string> = {
@@ -19,6 +20,7 @@ const pageTitles: Record<string, string> = {
 export function Topbar() {
   const { setOpen } = useSidebar();
   const { teamName } = useBrand();
+  const t = useCopy();
   const pathname = usePathname();
   const title = pageTitles[pathname] || (pathname.startsWith("/admin/knowledge") ? "知识库" : null);
   // SSR 一致性:首帧不读 localStorage(否则服务端 null vs 客户端 "light" 引发表单错位)
@@ -41,7 +43,7 @@ export function Topbar() {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 border-b border-border-subtle glass">
       <div className="flex items-center gap-3">
-        <button onClick={() => setOpen(true)} className="rounded-xl p-2 hover:bg-surface-hover lg:hidden transition-colors" aria-label="打开菜单">
+        <button onClick={() => setOpen(true)} className="rounded-xl p-2 hover:bg-surface-hover lg:hidden transition-colors" aria-label={t("nav.menu.open", "打开菜单")}>
           <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="hidden lg:flex items-center gap-2">
