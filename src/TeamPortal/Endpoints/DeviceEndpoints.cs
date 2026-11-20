@@ -30,7 +30,9 @@ public static class DeviceEndpoints
 
     public static void MapDeviceEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/device");
+        // 设备端点只靠 X-Device-Key/Secret 认证，被拿到凭据或被滥用时会直接打数据库；
+        // 统一套用 Program.cs 里的 "default" 限流策略，防止单 IP 高频刷设备接口。
+        var group = app.MapGroup("/api/device").RequireRateLimiting("default");
 
         // 心跳：设备上线自检，顺带拿到自己的元信息与服务端时间
         group.MapGet("/ping", async (HttpContext ctx, DeviceAuthService auth) =>
@@ -197,12 +199,23 @@ public static class DeviceEndpoints
                 .FirstOrDefaultAsync(i => i.Code != null && i.Code == code.ToUpperInvariant());
             if (found is null) return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
 
-            var newQty = found.Quantity + req.Delta;
-            if (newQty < 0)
-                return Results.Problem($"库存不足：当前 {found.Quantity}，变更 {req.Delta}", statusCode: 400);
+            // 并发修复：原来是「读 Quantity → 算新值 → 写回」，两台设备同时上报会互相覆盖（丢失更新）。
+            // 改成条件 UPDATE，由数据库在单条语句内完成累加；WHERE 的 >= 0 同时兜住扣成负数的情况。
+            var now = DateTime.UtcNow;
+            var updated = await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE InventoryItems SET Quantity = Quantity + {req.Delta}, UpdatedAt = {now}
+WHERE Id = {found.Id} AND Quantity + {req.Delta} >= 0");
+            if (updated == 0)
+            {
+                // 0 行 = 条件不成立（库存不够扣）。重读当前值，错误信息仍带上"当前多少"，便于现场排查。
+                var currentQty = await db.InventoryItems.AsNoTracking()
+                    .Where(i => i.Id == found.Id).Select(i => i.Quantity).FirstOrDefaultAsync();
+                return Results.Problem($"库存不足：当前 {currentQty}，变更 {req.Delta}", statusCode: 400);
+            }
 
-            found.Quantity = newQty;
-            found.UpdatedAt = DateTime.UtcNow;
+            // 原生 UPDATE 绕过 EF 跟踪，内存里的 found 仍是旧 Quantity；
+            // 这里用 AsNoTracking 重查一次拿最新值返回，避免把过期数量报给设备。
+            var latest = await db.InventoryItems.AsNoTracking().FirstAsync(i => i.Id == found.Id);
             db.InventoryTransactions.Add(new InventoryTransaction
             {
                 InventoryItemId = found.Id,
@@ -215,10 +228,10 @@ public static class DeviceEndpoints
 
             log.Audit(req.Delta > 0 ? "device-stock-in" : "device-stock-out",
                 $"device:{device.DeviceKey}", targetType: "item", targetId: found.Id.ToString(),
-                data: new { item = found.Name, code = found.Code, delta = req.Delta, quantity = newQty, deviceId = device.Id },
+                data: new { item = found.Name, code = found.Code, delta = req.Delta, quantity = latest.Quantity, deviceId = device.Id },
                 ipAddress: LogService.ClientIp(ctx));
 
-            return Results.Ok(new { found.Id, found.Quantity, delta = req.Delta });
+            return Results.Ok(new { found.Id, latest.Quantity, delta = req.Delta });
         });
     }
 }
