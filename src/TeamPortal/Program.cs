@@ -200,9 +200,11 @@ builder.Services.AddScoped<AiSuggestionService>();
 // 前端最终只看到「AI 服务不可用」——这就是线上「AI 超时/出错」的根因之一。
 // AI 的超时改由 AI:RequestTimeoutSeconds 约束「等首字节」的时长；流一旦建立就不再限总时长
 // （否则长回答会被拦腰切断）。重试也不该有：一次流式请求重试等于重复计费。
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers 目前仍是实验性 API（.NET 10）。它是"移除默认 10s/30s 超时"最直接可靠的手段；若将来被移除，改回手工 AddResilienceHandler 覆盖配置即可。
 builder.Services.AddHttpClient<AiClient>()
     .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)
     .RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
 builder.Services.AddTransient<AiToolCaller>();   // 组合 AiClient（typed client=transient），故也 transient
 builder.Services.AddScoped<FlightDiagnosisService>();
 // 房间布局"谁在编辑"在线状态：内存态 + TTL 心跳（不上 WebSocket）
