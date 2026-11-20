@@ -153,7 +153,7 @@ export default function AdminDevicesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Cpu className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-bold">设备管理</h1>
+          <h1 data-guide="page-devices" className="text-xl font-bold">设备管理</h1>
           <span className="text-xs text-faint">ESP32 / 扫码终端接入</span>
         </div>
         <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white">

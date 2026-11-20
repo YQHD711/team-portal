@@ -289,7 +289,7 @@ export default function KnowledgeAdminPage() {
 
   const previewHtml = useMemo(() => {
     let html = content
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/^# (.+)$/gm, '<h1 data-guide="page-knowledge">$1</h1>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')

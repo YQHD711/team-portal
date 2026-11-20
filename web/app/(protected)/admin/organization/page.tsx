@@ -90,7 +90,7 @@ export default function OrganizationPage() {
     <div className="space-y-4 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">组织架构</h1>
+          <h1 data-guide="page-organization" className="text-2xl font-bold tracking-tight">组织架构</h1>
           <p className="text-sm text-muted">{isAdmin ? "部门与队员统一管理 · 按部门展示队员技能与认证" : "本部门队员管理 · 技能与认证"}</p>
         </div>
       </div>

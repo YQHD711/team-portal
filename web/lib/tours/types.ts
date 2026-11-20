@@ -9,6 +9,10 @@
 export type Role = "member" | "部长" | "admin";
 
 export const ALL_ROLES: readonly Role[] = ["member", "部长", "admin"];
+/** 部长与管理员可见（管理类功能） */
+export const STAFF_ROLES: readonly Role[] = ["部长", "admin"];
+/** 仅系统管理员可见 */
+export const ADMIN_ROLES: readonly Role[] = ["admin"];
 
 /** 气泡相对目标元素的位置；auto = 按视口空间自动翻转 */
 export type Placement = "top" | "bottom" | "left" | "right" | "auto";

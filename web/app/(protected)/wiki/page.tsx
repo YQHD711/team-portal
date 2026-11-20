@@ -24,7 +24,7 @@ export default function WikiBrowsePage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Wiki 文档</h1>
+        <h1 data-guide="page-wiki" className="text-2xl font-bold tracking-tight">Wiki 文档</h1>
         <p className="text-sm text-muted mt-1">查看 AI 生成的代码项目文档</p>
       </div>
 

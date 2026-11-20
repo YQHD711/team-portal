@@ -117,7 +117,7 @@ export default function ProfilePage() {
           <User className="h-8 w-8" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">我的档案</h1>
+          <h1 data-guide="page-profile" className="text-2xl font-bold">我的档案</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-sm text-muted">{profile?.department || "未分配部门"}</span>
             {showFlightData && (

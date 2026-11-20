@@ -36,7 +36,7 @@ export function TourCenter({ open, onClose }: { open: boolean; onClose: () => vo
           const saved = progress[tour.key];
           const updated = saved?.status === "done" && saved.version < tour.version;
           return (
-            <div key={tour.key} className="flex items-center gap-2 rounded-xl border border-border p-3">
+            <div key={tour.key} data-tour={tour.key} className="flex items-center gap-2 rounded-xl border border-border p-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{tour.title}</div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">

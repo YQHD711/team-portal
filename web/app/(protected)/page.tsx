@@ -128,7 +128,7 @@ export default function Home() {
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{greeting ? `${greeting}，${teamName}` : teamName}</h1>
+        <h1 data-guide="page-dashboard" className="text-2xl font-bold tracking-tight">{greeting ? `${greeting}，${teamName}` : teamName}</h1>
         <p className="text-sm text-muted mt-1">航模队运行总览 · 数据实时同步</p>
       </div>
 

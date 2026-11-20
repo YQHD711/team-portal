@@ -88,7 +88,7 @@ export default function BackupPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">备份恢复</h1>
+          <h1 data-guide="page-backup" className="text-2xl font-bold">备份恢复</h1>
           <p className="text-sm text-muted">数据库自动备份与灾难恢复管理</p>
         </div>
         <div className="flex gap-2">

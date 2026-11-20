@@ -265,6 +265,10 @@ export async function mockApi(
     // 列表类接口：页面直接 .map/.length，返回 {} 会渲染崩溃（移动端回归里会跑到这两页）
     if (path === "/api/files") return json([]);
     if (path === "/api/incidents" || path === "/api/batteries") return json([]);
+    // 电池页用的是单数 /api/battery（列表 / 在借 / 逾期 / 流水），漏掉会让页面 .map 崩掉
+    if (path === "/api/battery" && method === "GET") return json([]);
+    if (path === "/api/battery/mine" || path === "/api/battery/overdue" || path === "/api/battery/loans") return json([]);
+    if (path.startsWith("/api/battery/")) return json({});
     // 领用 / 盘点：页面把响应当数组直接 .map，默认的 {} 会让整页掉进错误边界
     if (path.startsWith("/api/material/")) return json([]);
     if (path === "/api/admin/users") {

@@ -125,7 +125,7 @@ export default function AIAdminPage() {
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 data-guide="page-ai-admin" className="text-2xl font-bold flex items-center gap-2">
           <Brain className="h-6 w-6 text-purple-500" />
           AI 系统管理员
         </h1>

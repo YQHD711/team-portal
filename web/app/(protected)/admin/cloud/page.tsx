@@ -213,7 +213,7 @@ export default function CloudPage() {
   return (
     <div className="space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold flex items-center gap-2"><Cloud className="h-6 w-6 text-sky-500" />云存储</h1><p className="text-sm text-muted mt-1">百度网盘 — 大文件云端存储</p></div>
+        <div><h1 data-guide="page-cloud" className="text-2xl font-bold flex items-center gap-2"><Cloud className="h-6 w-6 text-sky-500" />云存储</h1><p className="text-sm text-muted mt-1">百度网盘 — 大文件云端存储</p></div>
         {authed && (
           <div className="flex gap-2">
             <label className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover cursor-pointer shadow-sm">
