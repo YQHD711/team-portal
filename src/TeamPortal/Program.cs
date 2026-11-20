@@ -444,6 +444,7 @@ app.MapDownloadEndpoints();
 app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
 app.MapContentEndpoints();
+app.MapAdminContentEndpoints();
 app.MapChatEndpoints();
 app.MapProfileEndpoints();
 app.MapCertificationEndpoints();

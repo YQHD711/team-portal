@@ -42,6 +42,7 @@ export const NAV_COPY: Record<string, CopyEntry> = {
   "nav.cloud": { text: "云存储", group: "导航", desc: "管理 · 仅管理员", max: 12 },
   "nav.devices": { text: "设备管理", group: "导航", desc: "管理 · 仅管理员", max: 12 },
   "nav.ai-admin": { text: "AI 管理员", group: "导航", desc: "管理 · 仅管理员", max: 12 },
+  "nav.content": { text: "内容管理", group: "导航", desc: "管理 · 仅管理员", max: 12 },
 
   "nav.footer": { text: "{teamName} © 2026 · 内部系统", group: "导航", desc: "侧栏底部版权（{teamName} 由品牌设置注入）", max: 40 },
   "nav.menu.open": { text: "打开菜单", group: "导航", desc: "移动端汉堡按钮读屏文案", max: 12 },
