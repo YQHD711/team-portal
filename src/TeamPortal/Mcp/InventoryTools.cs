@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ModelContextProtocol.Server;
+using TeamPortal.Data.Models;
 using TeamPortal.Services;
 using TeamPortal.Services.Permissions;
 
@@ -28,17 +29,33 @@ public class InventoryTools
     [McpServerTool(Name = "inventory_list")]
     public async Task<object> List(string? search = null, string? category = null)
     {
-        // 与 HTTP 列表同一套等级过滤：AI 工具不能成为绕过权限的旁路
+        // 与 HTTP 列表同一套等级过滤：AI 工具不能成为绕过权限的旁路。
+        // perms 缺失时 fail-closed（返回空），不能 fail-open 把全部物料交出去。
         var role = _http.HttpContext?.User.FindFirstValue(ClaimTypes.Role);
         var perms = _perms;
-        var grades = new[] { "A", "B", "C" }
-            .Where(g => perms is null || perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
-            .ToList();
+        var grades = perms is null
+            ? new List<string>()
+            : new[] { "A", "B", "C" }
+                .Where(g => perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
+                .ToList();
         return await _inv.GetAll(search, category, grades);
     }
 
+    /// <summary>单条读取同样要过「查看库存 + 等级」，否则知道 id 就能绕过列表过滤。</summary>
+    private bool CanRead(InventoryItem? item)
+    {
+        if (item is null || _perms is null) return false;
+        var role = _http.HttpContext?.User.FindFirstValue(ClaimTypes.Role);
+        return _perms.Has(role, "material.inventory.view")
+            && _perms.Has(role, "material.inventory.view." + item.Grade.ToLowerInvariant());
+    }
+
     [McpServerTool(Name = "inventory_get")]
-    public async Task<object?> Get(int id) => await _inv.GetById(id);
+    public async Task<object?> Get(int id)
+    {
+        var item = await _inv.GetById(id);
+        return CanRead(item) ? item : null;
+    }
 
     [McpServerTool(Name = "inventory_create")]
     public async Task<object> Create(string name, string category, int quantity, string grade = "C", decimal unitPrice = 0, string? code = null, string? locationCode = null)
@@ -59,7 +76,11 @@ public class InventoryTools
     }
 
     [McpServerTool(Name = "inventory_get_by_code")]
-    public async Task<object?> GetByCode(string code) => await _inv.GetByCode(code);
+    public async Task<object?> GetByCode(string code)
+    {
+        var item = await _inv.GetByCode(code);
+        return CanRead(item) ? item : null;
+    }
 
     [McpServerTool(Name = "inventory_set_photo")]
     public async Task<object> SetPhoto(int id, string photoUrl)

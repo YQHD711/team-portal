@@ -48,7 +48,7 @@ public class LiveInventoryContextTests : IDisposable
     [Fact]
     public async Task RoomQuestion_InjectsRealRoomAndLayoutElements()
     {
-        var block = await LiveInventoryContext.BuildAsync("1030 库房的货架分布？", _db);
+        var block = await LiveInventoryContext.BuildAsync("1030 库房的货架分布？", _db, "admin", _ => true);
 
         Assert.NotNull(block);
         Assert.Contains(LiveInventoryContext.Header, block);
@@ -62,12 +62,12 @@ public class LiveInventoryContextTests : IDisposable
 
     [Fact]
     public async Task RoomQuestion_ByRoomName_AlsoWorks()
-        => Assert.Contains("1030", await LiveInventoryContext.BuildAsync("库房里都有些什么？", _db) ?? "");
+        => Assert.Contains("1030", await LiveInventoryContext.BuildAsync("库房里都有些什么？", _db, "admin", _ => true) ?? "");
 
     [Fact]
     public async Task ItemQuestion_ReturnsLiveQuantity_AndFollowsDbChanges()
     {
-        var first = await LiveInventoryContext.BuildAsync("碳纤维管还剩多少？", _db);
+        var first = await LiveInventoryContext.BuildAsync("碳纤维管还剩多少？", _db, "admin", _ => true);
         Assert.NotNull(first);
         Assert.Contains("碳纤维管", first);
         Assert.Contains("当前可用数量 7", first);
@@ -79,7 +79,7 @@ public class LiveInventoryContextTests : IDisposable
         item.LocationCode = "1030-A-2-03";
         await _db.SaveChangesAsync();
 
-        var second = await LiveInventoryContext.BuildAsync("碳纤维管还剩多少？", _db);
+        var second = await LiveInventoryContext.BuildAsync("碳纤维管还剩多少？", _db, "admin", _ => true);
         Assert.NotNull(second);
         Assert.Contains("当前可用数量 2", second);
         Assert.DoesNotContain("当前可用数量 7", second);
@@ -89,17 +89,17 @@ public class LiveInventoryContextTests : IDisposable
     [Fact]
     public async Task ItemQuestion_MatchesByCodePrefix()
     {
-        var block = await LiveInventoryContext.BuildAsync("EL-CFRP-2026 这个型号库存还有吗？", _db);
+        var block = await LiveInventoryContext.BuildAsync("EL-CFRP-2026 这个型号库存还有吗？", _db, "admin", _ => true);
         Assert.Contains("碳纤维管", block ?? "");
     }
 
     [Fact]
     public async Task UnknownItemOrUnrelatedQuestion_ProducesNoBlock()
     {
-        Assert.Null(await LiveInventoryContext.BuildAsync("Ardupilot 的 RTL 模式怎么用？", _db));      // 与库存无关
-        Assert.Null(await LiveInventoryContext.BuildAsync("如何领用 B 级物料？", _db));               // 没有具体物料名 → 不猜
-        Assert.Null(await LiveInventoryContext.BuildAsync("EL-MOTOR-2026-9999 还有货吗？", _db));     // 编码不存在 → 不给别的物料
-        Assert.Null(await LiveInventoryContext.BuildAsync("双频段数传的波特率是多少？", _db));         // 库里没这个物料
+        Assert.Null(await LiveInventoryContext.BuildAsync("Ardupilot 的 RTL 模式怎么用？", _db, "admin", _ => true));      // 与库存无关
+        Assert.Null(await LiveInventoryContext.BuildAsync("如何领用 B 级物料？", _db, "admin", _ => true));               // 没有具体物料名 → 不猜
+        Assert.Null(await LiveInventoryContext.BuildAsync("EL-MOTOR-2026-9999 还有货吗？", _db, "admin", _ => true));     // 编码不存在 → 不给别的物料
+        Assert.Null(await LiveInventoryContext.BuildAsync("双频段数传的波特率是多少？", _db, "admin", _ => true));         // 库里没这个物料
     }
 
     [Fact]

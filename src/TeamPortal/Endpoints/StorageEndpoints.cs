@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
 using TeamPortal.Services;
+using TeamPortal.Services.Permissions;
 
 namespace TeamPortal.Endpoints;
 
@@ -168,10 +169,19 @@ public static class StorageEndpoints
         });
 
         // 某房间物料按库位分组（完整四段编码按编码分组，仅房间级/无编码归入 unlocated）
-        group.MapGet("/layouts/{roomCode}/items", async (string roomCode, AppDbContext db) =>
+        group.MapGet("/layouts/{roomCode}/items", async (string roomCode, AppDbContext db,
+            ClaimsPrincipal user, PermissionService perms) =>
         {
+            // 平面图能一次枚举整房间物料的精确库位：必须有布局查看权限，且只返回有权限的等级
+            var role = user.FindFirstValue(ClaimTypes.Role);
+            if (!perms.Has(role, "material.layout.view"))
+                return Results.Problem("没有查看物料布局的权限", statusCode: 403);
+            var grades = new[] { "A", "B", "C" }
+                .Where(g => perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
+                .ToList();
             var prefix = roomCode + "-";
             var items = await db.InventoryItems
+                .Where(i => grades.Contains(i.Grade))
                 .Where(i => i.LocationCode != null && (i.LocationCode == roomCode || i.LocationCode.StartsWith(prefix)))
                 .OrderBy(i => i.LocationCode).ThenBy(i => i.Name)
                 .ToListAsync();

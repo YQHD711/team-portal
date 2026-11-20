@@ -48,8 +48,11 @@ public partial class AiProxyService
     private async Task<string> ResolveSystemPrompt() =>
         SystemPromptOrDefault(await _settings.Get("AI:SystemPrompt"));
 
+    private readonly Permissions.PermissionService _permissions;
+
     public AiProxyService(AiClient ai, SettingsService settings, KnowledgeSearchService search,
-        KnowledgeService knowledge, LogService log, AppDbContext db)
+        KnowledgeService knowledge, LogService log, AppDbContext db,
+        Permissions.PermissionService permissions)
     {
         _ai = ai;
         _settings = settings;
@@ -57,6 +60,7 @@ public partial class AiProxyService
         _knowledge = knowledge;
         _log = log;
         _db = db;
+        _permissions = permissions;
     }
 
     /// <summary>调用者身份,用于把知识库检索限制在其有权查看的范围内(跨部门/他人私人 wiki 不参与检索)。</summary>

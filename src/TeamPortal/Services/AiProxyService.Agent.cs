@@ -42,7 +42,8 @@ public partial class AiProxyService
         _log.Info(RagLog.Category, RagLog.ContextLine(context.Length, relevant.Count));
 
         // 实时库存/货位：每次提问现查数据库（数量随时在变，写进索引会答过期数字）。不相关时返回 null。
-        var live = await LiveInventoryContext.BuildAsync(question, _db);
+        var live = await LiveInventoryContext.BuildAsync(question, _db, scope.Role,
+            p => _permissions.Has(scope.Role, p));
         if (live is not null) _log.Info(RagLog.Category, $"RAG live: chars={live.Length}");
 
         var messages = new List<object> { new { role = "system", content = await ResolveSystemPrompt() } };

@@ -173,10 +173,22 @@ public static class BatteryEndpoints
 
         // ── 归还（登录用户即可；代还时 ReturnedBy 记录操作人）──
         group.MapPost("/{id:int}/return", async (int id, ReturnBatteryRequest req, ClaimsPrincipal user,
-            BatteryService svc, LogService log, HttpContext ctx) =>
+            BatteryService svc, LogService log, PermissionService perms, HttpContext ctx) =>
         {
             var operatorId = GetUserId(user);
             if (operatorId is null) return Results.Problem("未登录", statusCode: 401);
+            var role = user.FindFirstValue(ClaimTypes.Role);
+            if (!perms.Has(role, "material.battery.borrow"))
+                return Results.Problem("没有借还电池的权限", statusCode: 403);
+            // 只能归还自己借出的电池；代还必须 staff（与代借规则对齐），否则可替人清掉超期记录
+            var battery = await svc.GetByIdAsync(id);
+            if (battery is null) return Results.Problem("电池不存在", statusCode: 404);
+            var isStaff = role is "admin" or "部长";
+            if (battery.CurrentBorrowerId != operatorId && !isStaff)
+                return Results.Problem("只能归还自己借出的电池", statusCode: 403);
+            // 健康状态会触发维修/报废，非 staff 不能随手改
+            if (!isStaff && !string.IsNullOrWhiteSpace(req.Health))
+                return Results.Problem("只有管理员和部长可以登记电池健康状态", statusCode: 403);
             try
             {
                 var loan = await svc.ReturnAsync(id, operatorId.Value, req.Note, req.Health);
@@ -193,15 +205,19 @@ public static class BatteryEndpoints
         });
 
         // ── 导出（期末对账）：台账 / 流水 CSV ──
-        group.MapGet("/export", async (string? status, BatteryService svc) =>
+        group.MapGet("/export", async (string? status, BatteryService svc, ClaimsPrincipal user, PermissionService perms) =>
         {
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.battery.manage"))
+                return Results.Problem("没有导出电池台账的权限", statusCode: 403);
             var csv = await svc.ExportItemsCsvAsync(status);
             return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
                 $"battery-items-{DateTime.UtcNow:yyyyMMdd}.csv");
         });
 
-        group.MapGet("/loans/export", async (int? take, BatteryService svc) =>
+        group.MapGet("/loans/export", async (int? take, BatteryService svc, ClaimsPrincipal user, PermissionService perms) =>
         {
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.battery.manage"))
+                return Results.Problem("没有导出借还流水的权限", statusCode: 403);
             var csv = await svc.ExportLoansCsvAsync(take ?? 5000);
             return Results.File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
                 $"battery-loans-{DateTime.UtcNow:yyyyMMdd}.csv");
@@ -209,8 +225,10 @@ public static class BatteryEndpoints
 
         // ── 流水 ──
         group.MapGet("/loans", async (int? batteryId, int? userId, bool? activeOnly, int? take,
-            BatteryService svc) =>
-            Results.Ok(await svc.GetLoansAsync(batteryId, userId, activeOnly ?? false, take ?? 100)));
+            BatteryService svc, ClaimsPrincipal user, PermissionService perms) =>
+            perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.battery.view")
+                ? Results.Ok(await svc.GetLoansAsync(batteryId, userId, activeOnly ?? false, take ?? 100))
+                : Results.Problem("没有查看电池流水的权限", statusCode: 403));
 
         // ── 我的在借 ──
         group.MapGet("/mine", async (ClaimsPrincipal user, BatteryService svc) =>
@@ -222,8 +240,10 @@ public static class BatteryEndpoints
         });
 
         // ── 超时未还 ──
-        group.MapGet("/overdue", async (int? hours, BatteryService svc) =>
+        group.MapGet("/overdue", async (int? hours, BatteryService svc, ClaimsPrincipal user, PermissionService perms) =>
         {
+            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.battery.view"))
+                return Results.Problem("没有查看电池流水的权限", statusCode: 403);
             var h = hours ?? await svc.GetOverdueHoursAsync();
             return Results.Ok(await svc.GetOverdueAsync(Math.Clamp(h, 1, 24 * 30)));
         });

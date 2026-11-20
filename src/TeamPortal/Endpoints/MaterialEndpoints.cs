@@ -430,9 +430,17 @@ public static class MaterialEndpoints
             return Results.Created($"/api/material/damage-report/{report.Id}", report);
         });
 
-        group.MapGet("/damage-report", async (int? itemId, MaterialService svc) =>
+        group.MapGet("/damage-report", async (int? itemId, MaterialService svc, ClaimsPrincipal user, AppDbContext db) =>
         {
-            return Results.Ok(await svc.GetDamageReports(itemId));
+            var (role, _, _, userId) = await GetCtx(user, db);
+            var list = await svc.GetDamageReports(itemId);
+            // 报损记录含赔偿金额与责任判定：成员只能看自己提交的，staff 才能看全部
+            if (!CurrentUser.IsStaffRole(role))
+            {
+                if (userId is null) return Results.Problem("未登录", statusCode: 401);
+                list = list.Where(d => d.UserId == userId.Value).ToList();
+            }
+            return Results.Ok(list);
         });
 
         group.MapPut("/damage-report/{id:int}/resolve", async (int id, ResolveDamageReq body, ClaimsPrincipal user, AppDbContext db, MaterialService svc, LogService log, HttpContext ctx) =>

@@ -9,7 +9,8 @@ public static partial class WikiEndpoints
 {
     public static void MapWikiEndpoints(this WebApplication app)
     {
-        var wiki = app.MapGroup("/api/wiki").RequireAuthorization().RequireRateLimiting("default");
+        // 读接口要求「阅读 Wiki」权限；写接口在此之上再加 perm:content.wiki.manage（不会放宽）
+        var wiki = app.MapGroup("/api/wiki").RequireAuthorization("perm:content.wiki.view").RequireRateLimiting("default");
 
         wiki.MapPost("/submit-git", async (GitSubmitRequest req, ClaimsPrincipal user, WikiGeneratorService generator, AppDbContext db, KnowledgeService knowledge, HttpContext ctx) =>
         {
@@ -334,17 +335,26 @@ public static partial class WikiEndpoints
         });
 
         // Serve wiki document content for viewer
-        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, string? lang, ClaimsPrincipal user, AppDbContext db, WikiGeneratorService generator, KnowledgeService knowledge) =>
+        wiki.MapGet("/tasks/{id}/doc", async (string id, string path, string? lang, ClaimsPrincipal user, AppDbContext db,
+            WikiGeneratorService generator, KnowledgeService knowledge, KnowledgeSearchService search) =>
         {
             var task = await generator.GetTask(id);
             if (task is null) return Results.Problem("Not found", statusCode: 404);
             var (role, dept) = await GetUserCtx(user, db);
             var uid = GetUserId(user);
             if (!CanViewTask(task, role, dept, uid)) return Results.Problem("Access denied", statusCode: 403);
+            // path 完全由客户端控制：先拒绝 .. / 绝对路径（DocKbPath 拼完再归一化会把 .. 消掉，
+            // 只靠 CanAccess 会出现"降级到公共前缀即放行"，等于能读同部门/公共下他人 personal 项目正文），
+            // 再校验 CAN 访问 + wiki 项目可见性（与 /api/knowledge/content 同款判据）。
+            if (string.IsNullOrWhiteSpace(path)
+                || path.Contains("..", StringComparison.Ordinal)
+                || path.StartsWith('/') || path.StartsWith('\\'))
+                return Results.Problem("文档不存在", statusCode: 404);
             // 与写接口共用 DocKbPath（见 WikiEndpoints.DocWrite.cs），保证读写的是同一份文件
             var kbPath = DocKbPath(task, path, lang);
-            // path 完全由客户端控制:必须过 CanAccess,否则可用 ../../../他部门/secret 读任意知识库文件
             if (!knowledge.CanAccess(kbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            if (!search.IsWikiProjectVisibleTo(kbPath, role, dept, uid))
+                return Results.Problem("Access denied", statusCode: 403);
             var content = knowledge.GetContent(kbPath);
             if (content is not null)
             {
@@ -372,6 +382,8 @@ public static partial class WikiEndpoints
             // Fallback: try the other language
             var fbPath = DocKbPath(task, path, lang == "en" ? "zh" : "en");
             if (!knowledge.CanAccess(fbPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
+            if (!search.IsWikiProjectVisibleTo(fbPath, role, dept, uid))
+                return Results.Problem("Access denied", statusCode: 403);
             var fbContent = knowledge.GetContent(fbPath);
             return fbContent is not null ? Results.Ok(new { path, content = fbContent }) : Results.Problem("Document not found", statusCode: 404);
         });
