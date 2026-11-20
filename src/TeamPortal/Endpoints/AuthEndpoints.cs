@@ -184,7 +184,17 @@ public static class AuthEndpoints
                 return Results.Problem("当前密码和新密码不能为空", statusCode: 400);
             var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
             if (id is null) return Results.Problem("Not authenticated", statusCode: 401);
-            var success = await auth.ChangePassword(int.Parse(id), req.CurrentPassword, req.NewPassword);
+            bool success;
+            try
+            {
+                success = await auth.ChangePassword(int.Parse(id), req.CurrentPassword, req.NewPassword);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 新密码不满足强度策略属于用户输入问题:必须回 400。
+                // 不在这里接住会落到全局异常处理，用户只会看到 500（且拿不到"最少几位"的提示）。
+                return Results.Problem(ex.Message, statusCode: 400);
+            }
             log.Audit("change-password", user.Identity?.Name ?? "unknown", targetType: "user", targetId: id,
                 data: new { success }, ipAddress: LogService.ClientIp(ctx), userId: int.Parse(id));
             if (success) notify.Notify("密码已修改", "你的账号密码刚刚被修改。如非本人操作，请联系管理员。", userId: int.Parse(id));
