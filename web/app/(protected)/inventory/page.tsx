@@ -262,7 +262,9 @@ export default function InventoryPage() {
         </div>
       )}
 
-      <InventoryFilters search={search} onSearch={setSearch} category={category} onCategory={setCategory} categories={categories} />
+      <div data-guide="inventory-toolbar">
+        <InventoryFilters search={search} onSearch={setSearch} category={category} onCategory={setCategory} categories={categories} />
+      </div>
 
       {/* 批量直连打印（仅 staff）：勾选后出现，打开批量弹窗 */}
       {isStaff && selectedIds.size > 0 && (
@@ -281,7 +283,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3" data-guide="inventory-table">
         <InventoryTable items={items} loading={loading} role={role}
           onTake={handleTake} onLabel={setLabelItem} onReturn={handleReturn} onHistory={fetchHistory} onEdit={openEdit} onDelete={handleDelete}
           selectable={isStaff} selectedIds={selectedIds} onToggleSelect={toggleSelect}

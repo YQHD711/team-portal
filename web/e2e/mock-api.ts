@@ -106,10 +106,26 @@ export const layoutRoom = {
   }),
 };
 
+/**
+ * 默认把三条引导标记为已完成：否则每个用例进页面 600ms 后都会弹出引导遮罩，
+ * 挡住后续点击。要测"首次自动引导"的用例显式传 tours: []。
+ */
+const DONE_TOURS = [
+  { tourKey: "welcome", status: "done", stepIndex: 0, version: 1 },
+  { tourKey: "inventory", status: "done", stepIndex: 0, version: 1 },
+  { tourKey: "battery", status: "done", stepIndex: 0, version: 1 },
+];
+
 /** 统一 mock 所有 /api/* 请求（按路径+方法分发） */
-export async function mockApi(page: Page, role: string, opts: { layouts?: unknown[]; items?: unknown[] } = {}) {
+export async function mockApi(
+  page: Page,
+  role: string,
+  opts: { layouts?: unknown[]; items?: unknown[]; tours?: { tourKey: string; status: string; stepIndex: number; version: number }[] } = {},
+) {
   const inventory = opts.items ?? items;
   const layouts = opts.layouts ?? [];
+  const tourMap = new Map<string, { tourKey: string; status: string; stepIndex: number; version: number }>();
+  for (const t of opts.tours ?? DONE_TOURS) tourMap.set(t.tourKey, t);
   await page.route("**/api/**", async (route: Route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
@@ -118,6 +134,24 @@ export async function mockApi(page: Page, role: string, opts: { layouts?: unknow
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
 
     if (path === "/api/auth/login" && method === "POST") return json({ token: makeToken(role) });
+    // 内容管理：默认无覆盖（前端用代码默认文案），引导覆盖为空
+    if (path === "/api/content/texts") return json({});
+    if (path === "/api/content/guides") return json([]);
+    if (path === "/api/me/tours" && method === "GET") return json([...tourMap.values()]);
+    if (path === "/api/me/tours" && method === "DELETE") {
+      tourMap.clear();
+      return json({});
+    }
+    if (path.startsWith("/api/me/tours/") && method === "PUT") {
+      const key = path.split("/").pop() ?? "";
+      const body = JSON.parse(req.postData() ?? "{}") as { status: string; stepIndex: number; version: number };
+      tourMap.set(key, { tourKey: key, ...body });
+      return json({});
+    }
+    if (path.startsWith("/api/me/tours/") && method === "DELETE") {
+      tourMap.delete(path.split("/").pop() ?? "");
+      return json({});
+    }
     if (path === "/api/auth/me") return json({ id: 1, username: "e2e-" + role, role, department: null });
     if (path.startsWith("/api/notifications")) return json([]);
     if (path === "/api/public/brand") return json(brand);

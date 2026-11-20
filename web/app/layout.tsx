@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { cookies } from "next/headers";
 import { BrandProvider } from "@/lib/brand";
+import { ContentProvider } from "@/components/content/ContentProvider";
 import ClientLogReporter from "@/components/ClientLogReporter";
 import { AUTO_SCHEME_SNIPPET, parseScheme, serverDarkClass } from "@/lib/scheme";
 
@@ -62,7 +63,9 @@ export default async function RootLayout({
       <body className="min-h-full bg-background text-foreground font-sans">
         {/* 全局未捕获错误上报（无 DOM 输出）；HTTPS 上线后多终端访问，浏览器侧异常需回传后端 */}
         <ClientLogReporter />
-        <BrandProvider>{children}</BrandProvider>
+        <BrandProvider>
+          <ContentProvider>{children}</ContentProvider>
+        </BrandProvider>
       </body>
     </html>
   );

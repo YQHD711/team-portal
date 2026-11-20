@@ -72,7 +72,7 @@ export function NotificationBell() {
   const badgeColor = topLevel === "critical" ? "bg-danger" : topLevel === "warning" ? "bg-warning" : topLevel === "success" ? "bg-success" : "bg-danger";
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" data-guide="topbar-notify">
       <button onClick={() => setOpen(!open)} className="relative p-2 rounded-xl hover:bg-surface-hover transition-colors">
         <Bell className="h-5 w-5" />
         {unread > 0 && (

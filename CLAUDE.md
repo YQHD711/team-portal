@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ 后端：ASP.NET Core 10 Minimal API（`src/TeamPortal/`）
 - ✅ 前端：Next.js 16 App Router（`web/`）
 - ✅ AI：DeepSeek 直连 + 解析器内置 C#（MiniExcel / PdfPig / OpenXML SDK）
-- ✅ 数据库：SQLite（EF Core，`EnsureCreated` 模式）
+- ✅ 数据库：SQLite（EF Core Migrations，2026-08 起；历史库见 `deploy/ef-baseline.sql`）
 - ✅ `Makefile` / `docker-compose.yml` / `.github/workflows/ci.yml`
 
 **运行方式**：

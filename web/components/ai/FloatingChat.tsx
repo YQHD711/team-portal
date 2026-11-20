@@ -125,6 +125,7 @@ export function FloatingChat() {
     <>
       <button
         onClick={() => setOpen(!open)}
+        data-guide="ai-fab"
         className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 sm:bottom-6 sm:right-6 z-50 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-accent-hover transition-all hover:scale-105"
         title="AI 助手"
         aria-label={open ? "收起 AI 助手" : "打开 AI 助手"}

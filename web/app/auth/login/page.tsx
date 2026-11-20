@@ -7,6 +7,7 @@ import { LogIn, Eye, EyeOff, User, Lock, AlertCircle, Loader2 } from "lucide-rea
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { useBrand } from "@/lib/brand";
+import { useCopy } from "@/components/content/ContentProvider";
 
 /**
  * 登录成功后该去哪：优先 AuthGuard 带过来的 `?next=`，否则首页。
@@ -23,7 +24,9 @@ export function loginTarget(): string {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { teamName, teamSubtitle } = useBrand();  const [username, setUsername] = useState("");
+  const { teamName, teamSubtitle } = useBrand();
+  const t = useCopy();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +41,7 @@ export default function LoginPage() {
       setToken(data.token);
       router.replace(loginTarget());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+      setError(err instanceof Error ? err.message : t("auth.failed", "登录失败"));
     } finally {
       setLoading(false);
     }
@@ -101,7 +104,7 @@ export default function LoginPage() {
             <img src="/logo.png" alt={teamName} className="relative z-10 h-11 w-11 object-contain drop-shadow" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">{teamName}</h1>
-          <p className="mt-1 text-sm text-muted">队员协作 · 知识共享 · 飞行分析</p>
+          <p className="mt-1 text-sm text-muted">{t("auth.tagline", "队员协作 · 知识共享 · 飞行分析")}</p>
         </div>
 
         {/* ───────── 登录卡片（毛玻璃） ───────── */}
@@ -130,7 +133,7 @@ export default function LoginPage() {
             {/* 用户名 */}
             <div className="space-y-1.5">
               <label htmlFor="login-username" className="block text-sm font-medium">
-                用户名
+                {t("auth.username", "用户名")}
               </label>
               <div className="group relative">
                 <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted transition-colors duration-300 group-focus-within:text-primary" />
@@ -139,7 +142,7 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="请输入用户名"
+                  placeholder={t("auth.username.placeholder", "请输入用户名")}
                   required
                   autoComplete="username"
                   className="w-full rounded-xl border border-border bg-surface-subtle py-2.5 pl-10 pr-4 text-sm transition-all duration-300 placeholder:text-muted hover:border-primary/40 focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
@@ -150,7 +153,7 @@ export default function LoginPage() {
             {/* 密码 */}
             <div className="space-y-1.5">
               <label htmlFor="login-password" className="block text-sm font-medium">
-                密码
+                {t("auth.password", "密码")}
               </label>
               <div className="group relative">
                 <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted transition-colors duration-300 group-focus-within:text-primary" />
@@ -159,7 +162,7 @@ export default function LoginPage() {
                   type={showPwd ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="请输入密码"
+                  placeholder={t("auth.password.placeholder", "请输入密码")}
                   required
                   autoComplete="current-password"
                   className="w-full rounded-xl border border-border bg-surface-subtle py-2.5 pl-10 pr-11 text-sm transition-all duration-300 placeholder:text-muted hover:border-primary/40 focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
@@ -187,12 +190,12 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    登录中…
+                    {t("auth.submitting", "登录中…")}
                   </>
                 ) : (
                   <>
                     <LogIn className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                    登录
+                    {t("auth.submit", "登录")}
                   </>
                 )}
               </span>
@@ -203,16 +206,16 @@ export default function LoginPage() {
         {/* ───────── 底部链接 ───────── */}
         <div className="mt-5 space-y-2 text-center">
           <p className="text-sm text-muted">
-            还没有账号？
+            {t("auth.no-account", "还没有账号？")}
             <Link
               href="/auth/register"
               className="ml-1 font-medium text-primary underline-offset-4 transition-colors hover:text-accent-hover hover:underline"
             >
-              立即注册
+              {t("auth.register", "立即注册")}
             </Link>
           </p>
           <p className="text-xs text-faint">
-            忘记密码？联系部长或管理员在「组织架构 → 编辑队员」重置
+            {t("auth.forgot", "忘记密码？联系部长或管理员在「组织架构 → 编辑队员」重置")}
           </p>
           <p className="text-xs text-muted">
             {teamName}

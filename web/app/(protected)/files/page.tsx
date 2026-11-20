@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
+import { useCopy } from "@/components/content/ContentProvider";
 import { Upload, Download, Trash2, File, Loader2, Globe, Building2 } from "lucide-react";
 
 interface SharedFile { id: number; originalName: string; contentType: string; size: number; visibility: string; department: string | null; uploaderName: string; createdAt: string; }
@@ -14,6 +15,7 @@ function formatSize(bytes: number) {
 }
 
 export default function FilesPage() {
+  const t = useCopy();
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [visibility, setVisibility] = useState("public");
@@ -75,7 +77,7 @@ export default function FilesPage() {
         {files.length === 0 ? (
           <div className="p-12 text-center text-faint">
             <File className="h-10 w-10 mx-auto mb-2 text-zinc-300" />
-            <p>暂无共享文件</p>
+            <p>{t("empty.files", "暂无共享文件")}</p>
           </div>
         ) : files.map(f => (
           <div key={f.id} className="flex items-center gap-3 p-4">
