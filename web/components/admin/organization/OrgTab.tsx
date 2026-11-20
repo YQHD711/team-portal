@@ -1,226 +1,248 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { api } from "@/lib/api";
-import { Plus, Pencil, Trash2, Building2, Users as UsersIcon, BadgeCheck, Tag, ClipboardCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Users as UsersIcon, Search, X } from "lucide-react";
 import { Dept, OrgUser, Certification, ExamBrief, ExamPass } from "./types";
 import { DeptFormModal, UserFormModal } from "./OrgModals";
+import { MemberCard, displayNameOf } from "./MemberCard";
 
 interface Props {
   users: OrgUser[];
   depts: Dept[];
   isAdmin: boolean;
-  /** 部长视角限定本部门;admin 为 null(全量) */
+  /** 部长视角限定本部门；admin 为 null（全量） */
   ownDeptId: number | null;
   passedCertsByUser: Map<number, Certification[]>;
   examPassesByUser: Map<number, ExamPass[]>;
   skillsByUser: Map<number, string | null>;
-  /** 档案页链接用公开 slug（不是自增 ID） */
+  /** 档案页链接用公开 slug（不是自增 ID）；缺失时卡片不可点 */
   slugByUser: Map<number, string | null>;
   examsByDept: Map<number, ExamBrief[]>;
   onChanged: () => void;
 }
 
-const ROLE_BADGE: Record<string, string> = {
-  admin: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
-  部长: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
-  member: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-};
+type DeptFilter = "all" | number;
 
-export function OrgTab({ users, depts, isAdmin, ownDeptId, passedCertsByUser, examPassesByUser, skillsByUser, slugByUser, examsByDept, onChanged }: Props) {
+/**
+ * 组织架构主视图。
+ *
+ * 布局从「部门卡片网格 + 队员分组」两套重复结构，改成「搜索 + 部门筛选条 + 成员网格」：
+ * 之前部门信息在一屏里出现两次、人员按部门分块但没法快速定位，人一多就很难用。
+ * 现在顶部一条筛选条统一切换部门，右侧只渲染成员；部门本身的增删改收进选中部门的管理条。
+ */
+export function OrgTab({
+  users, depts, isAdmin, ownDeptId,
+  passedCertsByUser, examPassesByUser, skillsByUser, slugByUser, onChanged,
+}: Props) {
   const [deptModal, setDeptModal] = useState<{ open: boolean; edit: Dept | null }>({ open: false, edit: null });
   const [userModal, setUserModal] = useState<{ open: boolean; edit: OrgUser | null }>({ open: false, edit: null });
+  const [keyword, setKeyword] = useState("");
+  const [deptFilter, setDeptFilter] = useState<DeptFilter>("all");
 
-  // 部长只看自己部门;admin 看全部(未分配仅 admin 展示)
-  const viewDepts = isAdmin ? depts : depts.filter(d => d.id === ownDeptId);
-  const groups = viewDepts.map(d => ({ dept: d, members: users.filter(u => u.departmentId === d.id) }));
-  const unassigned = isAdmin ? users.filter(u => !u.departmentId || !depts.some(d => d.id === u.departmentId)) : [];
+  // 部长只看自己部门；admin 看全部
+  const viewDepts = isAdmin ? depts : depts.filter((d) => d.id === ownDeptId);
+  const kw = keyword.trim().toLowerCase();
+
+  const matches = (u: OrgUser) =>
+    !kw ||
+    displayNameOf(u).toLowerCase().includes(kw) ||
+    u.username.toLowerCase().includes(kw) ||
+    (u.studentId ?? "").toLowerCase().includes(kw);
+
+  const filtered = users.filter(matches);
+  const membersOf = (deptId: number) => filtered.filter((u) => u.departmentId === deptId);
+  const unassigned = filtered.filter((u) => !u.departmentId || !depts.some((d) => d.id === u.departmentId));
+
+  const visibleGroups = viewDepts
+    .filter((d) => deptFilter === "all" || deptFilter === d.id)
+    .map((d) => ({ dept: d, members: membersOf(d.id) }))
+    .filter((g) => g.members.length > 0 || deptFilter !== "all");
+
+  const shownCount =
+    visibleGroups.reduce((n, g) => n + g.members.length, 0) +
+    (deptFilter === "all" ? unassigned.length : 0);
+
+  const activeDept = typeof deptFilter === "number" ? viewDepts.find((d) => d.id === deptFilter) : undefined;
 
   const deleteDept = async (d: Dept) => {
     if (!confirm(`确认删除部门 "${d.name}"？其队员将变为未分配`)) return;
-    try { await api.delete(`/api/admin/departments/${d.id}`); onChanged(); } catch { alert("删除失败"); }
+    try {
+      await api.delete(`/api/admin/departments/${d.id}`);
+      setDeptFilter("all");
+      onChanged();
+    } catch {
+      alert("删除失败");
+    }
   };
 
   const deleteUser = async (u: OrgUser) => {
-    if (!confirm(`确认删除队员 "${u.username}"？`)) return;
-    try { await api.delete(`/api/admin/users/${u.id}`); onChanged(); } catch { alert("无法删除管理员账号"); }
+    if (!confirm(`确认删除队员 "${displayNameOf(u)}"？`)) return;
+    try {
+      await api.delete(`/api/admin/users/${u.id}`);
+      onChanged();
+    } catch {
+      alert("无法删除管理员账号");
+    }
+  };
+
+  const renderGroup = (title: string, members: OrgUser[], key: string) => {
+    if (members.length === 0) return null;
+    return (
+      <section key={key}>
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <span className="text-xs text-faint">{members.length} 人</span>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          {members.map((u) => (
+            <MemberCard
+              key={u.id}
+              user={u}
+              slug={slugByUser.get(u.id) ?? null}
+              skills={(skillsByUser.get(u.id) || "").split(",").map((s) => s.trim()).filter(Boolean)}
+              certs={passedCertsByUser.get(u.id) ?? []}
+              examPasses={examPassesByUser.get(u.id) ?? []}
+              canEdit={isAdmin || u.role !== "admin"}
+              canDelete={isAdmin && u.role !== "admin" && u.role !== "部长"}
+              onEdit={() => setUserModal({ open: true, edit: u })}
+              onDelete={() => deleteUser(u)}
+            />
+          ))}
+        </div>
+      </section>
+    );
   };
 
   return (
-    <div className="space-y-8">
-      {/* ── 部门区(增删改仅 admin) ── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">部门</h2>
-          {isAdmin && (
-            <button onClick={() => setDeptModal({ open: true, edit: null })}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+    <div className="space-y-4">
+      {/* 工具栏：搜索 + 新增 */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜索真名 / 用户名 / 学号"
+            className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-8 text-sm outline-none focus:border-sky-400"
+            aria-label="搜索队员"
+          />
+          {keyword && (
+            <button
+              type="button"
+              onClick={() => setKeyword("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint hover:text-foreground"
+              title="清除搜索"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDeptModal({ open: true, edit: null })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-hover"
+            >
               <Plus className="h-4 w-4" />添加部门
             </button>
-          )}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {groups.map(({ dept, members }) => (
-            <div key={dept.id} className="rounded-xl border border-border bg-surface p-4 group hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600"><Building2 className="h-5 w-5" /></div>
-                  <div>
-                    <div className="font-medium">{dept.name}</div>
-                    <div className="text-xs text-muted mt-0.5 line-clamp-2">{dept.description || "暂无描述"}</div>
-                  </div>
-                </div>
-                {isAdmin && (
-                  <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
-                    <button onClick={() => setDeptModal({ open: true, edit: dept })} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => deleteDept(dept)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-4 mt-3 text-xs text-muted">
-                <span className="inline-flex items-center gap-1"><UsersIcon className="h-3.5 w-3.5" />{members.length} 人</span>
-                <span className="inline-flex items-center gap-1"><BadgeCheck className="h-3.5 w-3.5" />{examsByDept.get(dept.id)?.length || 0} 场考核</span>
-              </div>
-            </div>
-          ))}
-          {groups.length === 0 && (
-            <div className="sm:col-span-2 lg:col-span-3 text-center py-10 text-faint">
-              <Building2 className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无部门
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ── 队员区(添加/删除仅 admin;部长保留本部门账号编辑) ── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">队员</h2>
-          {isAdmin && (
-            <button onClick={() => setUserModal({ open: true, edit: null })}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+            <button
+              onClick={() => setUserModal({ open: true, edit: null })}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+            >
               <Plus className="h-4 w-4" />添加队员
             </button>
-          )}
-        </div>
-
-        {groups.map(({ dept, members }) => (
-          <MemberGroup key={dept.id} title={dept.name} members={members} isAdmin={isAdmin}
-            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser}
-            onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
-        ))}
-        {unassigned.length > 0 && (
-          <MemberGroup title="未分配" members={unassigned} isAdmin={isAdmin}
-            passedCertsByUser={passedCertsByUser} examPassesByUser={examPassesByUser} skillsByUser={skillsByUser} slugByUser={slugByUser}
-            onEdit={u => setUserModal({ open: true, edit: u })} onDelete={deleteUser} />
+          </div>
         )}
-        {users.length === 0 && (
-          <div className="text-center py-10 text-faint"><UsersIcon className="h-10 w-10 mx-auto mb-2 text-zinc-300" />暂无队员</div>
-        )}
-      </section>
-
-      {/* ── 弹窗 ── */}
-      {deptModal.open && isAdmin && (
-        <DeptFormModal dept={deptModal.edit} onClose={() => setDeptModal({ open: false, edit: null })}
-          onSaved={() => { setDeptModal({ open: false, edit: null }); onChanged(); }} />
-      )}
-      {userModal.open && (
-        <UserFormModal user={userModal.edit} depts={depts} isAdmin={isAdmin}
-          onClose={() => setUserModal({ open: false, edit: null })}
-          onSaved={() => { setUserModal({ open: false, edit: null }); onChanged(); }} />
-      )}
-    </div>
-  );
-}
-
-// ── 部门分组内的队员卡片 ──
-function MemberGroup({ title, members, isAdmin, passedCertsByUser, examPassesByUser, skillsByUser, slugByUser, onEdit, onDelete }: {
-  title: string; members: OrgUser[]; isAdmin: boolean;
-  passedCertsByUser: Map<number, Certification[]>;
-  examPassesByUser: Map<number, ExamPass[]>;
-  skillsByUser: Map<number, string | null>;
-  slugByUser: Map<number, string | null>;
-  onEdit: (u: OrgUser) => void; onDelete: (u: OrgUser) => void;
-}) {
-  if (members.length === 0) return null;
-  return (
-    <div className="mb-5">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-sm font-semibold">{title}</span>
-        <span className="text-xs text-faint">{members.length} 人</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {members.map(u => {
-          const skills = (skillsByUser.get(u.id) || "").split(",").map(s => s.trim()).filter(Boolean);
-          const certs = passedCertsByUser.get(u.id) || [];
-          const examPasses = examPassesByUser.get(u.id) || [];
-          const canEdit = isAdmin || u.role !== "admin"; // 部长可编辑本部门非 admin(含同部门部长/自己)
-          const canDelete = isAdmin && u.role !== "admin" && u.role !== "部长";
+
+      {/* 部门筛选条 */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <button
+          onClick={() => setDeptFilter("all")}
+          className={`shrink-0 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+            deptFilter === "all"
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-surface text-muted hover:bg-surface-hover"
+          }`}
+        >
+          全部 <span className="text-xs opacity-80">{users.length}</span>
+        </button>
+        {viewDepts.map((d) => {
+          const count = users.filter((u) => u.departmentId === d.id).length;
+          const active = deptFilter === d.id;
           return (
-            <Link key={u.id} href={`/admin/profiles/${slugByUser.get(u.id) ?? ""}`}
-              className="rounded-xl border border-border bg-surface p-4 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all group">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shrink-0">
-                  {(u.displayName?.trim() || u.username)[0]?.toUpperCase() || "?"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{u.displayName?.trim() || u.username}</div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_BADGE[u.role] || ROLE_BADGE.member}`}>
-                      {u.role === "admin" ? "管理员" : u.role === "部长" ? "部长" : "成员"}
-                    </span>
-                    {u.displayName?.trim() && <span className="truncate text-[11px] text-faint">{u.username}</span>}
-                    {u.studentId && <span className="truncate text-[11px] text-faint">学号 {u.studentId}</span>}
-                    {u.identityDisabled && <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] text-danger">已挂失</span>}
-                  </div>
-                </div>
-                <div className="flex gap-1 shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 transition-opacity">
-                  {canEdit && (
-                    <button onClick={e => { e.preventDefault(); onEdit(u); }} className="p-1.5 rounded hover:bg-surface-hover text-faint hover:text-sky-600" title="编辑"><Pencil className="h-4 w-4" /></button>
-                  )}
-                  {canDelete && (
-                    <button onClick={e => { e.preventDefault(); onDelete(u); }} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-danger/70 hover:text-danger" title="删除"><Trash2 className="h-4 w-4" /></button>
-                  )}
-                </div>
-              </div>
-              {skills.length > 0 && (
-                <div className="mt-3">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-faint mb-1"><Tag className="h-3 w-3" />技能</div>
-                  <div className="flex flex-wrap gap-1">
-                    {skills.slice(0, 3).map(s => (
-                      <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                        <Tag className="h-3 w-3 opacity-60" />{s}
-                      </span>
-                    ))}
-                    {skills.length > 3 && <span className="text-[11px] text-faint self-center">+{skills.length - 3}</span>}
-                  </div>
-                </div>
-              )}
-              {(certs.length > 0 || examPasses.length > 0) && (
-                <div className="mt-2">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-success/70 dark:text-green-400/70 mb-1"><BadgeCheck className="h-3 w-3" />团队认证</div>
-                  <div className="flex flex-wrap gap-1">
-                    {certs.slice(0, 2).map(c => (
-                      <span key={c.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">
-                        <BadgeCheck className="h-3 w-3" />{c.certName}{c.level && `·${c.level}`}
-                      </span>
-                    ))}
-                    {examPasses.slice(0, 2).map(p => (
-                      <span key={p.id} title={`${p.examTitle}${p.score != null ? ` ${p.score}分` : ""}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800">
-                        <ClipboardCheck className="h-3 w-3" />{p.examTitle}{p.score != null && `·${p.score}分`}
-                      </span>
-                    ))}
-                    {(certs.length + examPasses.length) > 4 && (
-                      <span className="text-[11px] text-faint self-center">+{certs.length + examPasses.length - 4}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </Link>
+            <button
+              key={d.id}
+              onClick={() => setDeptFilter(d.id)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                active
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-surface text-muted hover:bg-surface-hover"
+              }`}
+            >
+              {d.name} <span className="text-xs opacity-80">{count}</span>
+            </button>
           );
         })}
       </div>
+
+      {/* 选中部门的管理条（仅 admin）：部门的编辑/删除收在这里，不再和成员卡片混排 */}
+      {isAdmin && activeDept && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-subtle px-3 py-2">
+          <div className="min-w-0">
+            <span className="text-sm font-medium">{activeDept.name}</span>
+            <span className="ml-2 text-xs text-faint">{activeDept.description || "暂无描述"}</span>
+          </div>
+          <div className="flex shrink-0 gap-1">
+            <button
+              onClick={() => setDeptModal({ open: true, edit: activeDept })}
+              className="rounded-md p-1.5 text-faint hover:bg-surface-hover hover:text-sky-600"
+              title="编辑"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => deleteDept(activeDept)}
+              className="rounded-md p-1.5 text-danger/70 hover:bg-red-50 hover:text-danger dark:hover:bg-red-950"
+              title="删除"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 成员网格 */}
+      {shownCount === 0 ? (
+        <div className="py-16 text-center text-faint">
+          <UsersIcon className="mx-auto mb-2 h-10 w-10 text-zinc-300" />
+          {kw ? `没有匹配「${keyword.trim()}」的队员` : "暂无队员"}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {visibleGroups.map((g) => renderGroup(g.dept.name, g.members, `dept-${g.dept.id}`))}
+          {deptFilter === "all" && renderGroup("未分配", unassigned, "unassigned")}
+        </div>
+      )}
+
+      {/* 弹窗 */}
+      {deptModal.open && isAdmin && (
+        <DeptFormModal
+          dept={deptModal.edit}
+          onClose={() => setDeptModal({ open: false, edit: null })}
+          onSaved={() => { setDeptModal({ open: false, edit: null }); onChanged(); }}
+        />
+      )}
+      {userModal.open && (
+        <UserFormModal
+          user={userModal.edit}
+          depts={depts}
+          isAdmin={isAdmin}
+          onClose={() => setUserModal({ open: false, edit: null })}
+          onSaved={() => { setUserModal({ open: false, edit: null }); onChanged(); }}
+        />
+      )}
     </div>
   );
 }

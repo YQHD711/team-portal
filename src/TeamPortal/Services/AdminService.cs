@@ -24,8 +24,13 @@ public class AdminService
     {
         var query = _db.Users.Include(u => u.Department).AsQueryable();
         if (role == "部长") query = query.Where(u => u.Department!.Name == dept || u.Id == userId);
+        // DisplayName / StudentId / IdentityDisabled 必须一起返回：
+        // 前端组织页用 displayName ?? username 渲染真名、用 studentId 展示学号、
+        // 用 identityDisabled 标「已挂失」。此前只返回 Username，导致组织页永远显示
+        // 登录名而不是真名，学号与挂失状态也一直不显示（用户反馈「名字没有显示真名」的根因）。
         return await query.OrderBy(u => u.Id).Select(u => new {
-            u.Id, u.Username, u.Role, Department = u.Department != null ? u.Department.Name : null,
+            u.Id, u.Username, u.DisplayName, u.StudentId, u.IdentityDisabled,
+            u.Role, Department = u.Department != null ? u.Department.Name : null,
             u.DepartmentId, u.CreatedAt,
             InvitedBy = u.InvitedByUser != null ? u.InvitedByUser.Username : null
         }).ToListAsync<object>();
