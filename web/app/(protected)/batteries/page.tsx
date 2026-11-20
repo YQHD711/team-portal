@@ -121,7 +121,7 @@ export default function BatteriesPage() {
           <p className="text-sm text-muted">到电池柜扫码借出/归还（或用柜边终端），记录自动关联到本人</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/batteries/scan" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
+          <Link href="/batteries/scan" data-guide="battery-scan" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
             <ScanLine className="h-4 w-4" />扫码借还
           </Link>
           {isStaff && <BatteryLabelExportButton batteries={items} />}
@@ -160,7 +160,7 @@ export default function BatteriesPage() {
         <BatteryCreateForm onSubmit={createBattery} onCancel={() => setShowForm(false)} />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-guide="battery-active">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
           <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter") fetchAll(); }}
@@ -188,7 +188,7 @@ export default function BatteriesPage() {
           还没有电池。{isStaff ? "点右上角「新增电池」建第一块。" : "等管理员录入电池台账。"}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-guide="battery-actions">
           {items.map(b => (
             <BatteryCard key={b.id} battery={b} busy={busyId === b.id}
               readOnly={!isStaff}

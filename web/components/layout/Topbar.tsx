@@ -5,6 +5,7 @@ import { Menu, Sparkles, Sun, Moon, Monitor } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserMenu } from "./UserMenu";
+import { HelpButton } from "@/components/tour/HelpButton";
 import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { useSidebar } from "./SidebarContext";
@@ -66,6 +67,7 @@ export function Topbar() {
         </button>
         <GlobalSearch />
         <NotificationBell />
+        <HelpButton />
         <UserMenu />
       </div>
     </header>

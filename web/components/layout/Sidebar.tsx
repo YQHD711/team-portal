@@ -81,6 +81,11 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
+/** 导航项的引导锚点："/" → nav-home，"/inventory/layout" → nav-inventory-layout */
+function guideId(href: string): string {
+  return href === "/" ? "nav-home" : "nav-" + href.replace(/^\//, "").replace(/\//g, "-");
+}
+
 /** 普通导航项 */
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {
   const pathname = usePathname();
@@ -88,6 +93,7 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }
   return (
     <Link
       href={item.href}
+      data-guide={guideId(item.href)}
       onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors duration-150",
@@ -180,7 +186,7 @@ export function Sidebar() {
         </div>
 
         {/* 导航 */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
+        <nav className="flex-1 overflow-y-auto px-3 py-2" data-guide="sidebar-base">
           {baseGroups.map((group) => (
             <div key={group.heading}>
               <GroupHeading>{group.heading}</GroupHeading>
@@ -209,7 +215,7 @@ export function Sidebar() {
                       {materialNav.map((item) => {
                         const active = isActive(pathname, item.href);
                         return (
-                          <Link key={item.href} href={item.href} onClick={close}
+                          <Link key={item.href} href={item.href} onClick={close} data-guide={guideId(item.href)}
                             className={cn(
                               "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors duration-150",
                               active ? "bg-primary/10 text-foreground" : "text-muted hover:text-foreground hover:bg-surface-hover"
@@ -250,7 +256,7 @@ export function Sidebar() {
                   {[...adminNavStaff, ...(isAdmin ? adminNavOnly : [])].map((item) => {
                     const active = isActive(pathname, item.href);
                     return (
-                      <Link key={item.href} href={item.href} onClick={close}
+                      <Link key={item.href} href={item.href} onClick={close} data-guide={guideId(item.href)}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors duration-150",
                           active ? "bg-primary/10 text-foreground" : "text-muted hover:text-foreground hover:bg-surface-hover"

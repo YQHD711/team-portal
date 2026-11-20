@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Key, X } from "lucide-react";
+import { User, LogOut, Key, X, MessageSquareText } from "lucide-react";
+import { TourCenter } from "@/components/tour/TourCenter";
 import { removeToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/lib/hooks";
@@ -14,6 +15,7 @@ export function UserMenu() {
   const [showPwd, setShowPwd] = useState(false);
   const [pwd, setPwd] = useState({ currentPassword: "", newPassword: "" });
   const [pwdMsg, setPwdMsg] = useState("");
+  const [guideOpen, setGuideOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // 加载失败时按原逻辑清除 token（未登录时 removeToken 为无操作）
@@ -69,6 +71,7 @@ export function UserMenu() {
   }
 
   return (
+    <>
     <div ref={ref} className="relative flex items-center gap-2 pl-2 border-l border-border">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-2 hover:bg-surface-hover rounded-lg px-2 py-1 transition-colors">
         <User className="h-5 w-5 text-muted" />
@@ -86,6 +89,9 @@ export function UserMenu() {
             <div className="py-1">
               <button onClick={() => { setShowPwd(true); setPwdMsg(""); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors">
                 <Key className="h-4 w-4 text-muted" />修改密码
+              </button>
+              <button onClick={() => { setOpen(false); setGuideOpen(true); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors">
+                <MessageSquareText className="h-4 w-4 text-muted" />功能引导
               </button>
               <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-danger hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
                 <LogOut className="h-4 w-4" />退出登录
@@ -106,5 +112,7 @@ export function UserMenu() {
         </div>
       )}
     </div>
+    <TourCenter open={guideOpen} onClose={() => setGuideOpen(false)} />
+    </>
   );
 }

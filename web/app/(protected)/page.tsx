@@ -15,7 +15,6 @@ const CategoryDonut = dynamic(() => import("@/components/inventory/CategoryDonut
   loading: () => <div className="w-[160px] h-[150px] flex items-center justify-center text-faint text-sm">图表加载中...</div>,
 });
 import Link from "next/link";
-import { OnboardingCard } from "@/components/onboarding/OnboardingCard";
 
 interface DashData {
   users: number;
@@ -130,9 +129,6 @@ export default function Home() {
         <h1 className="text-2xl font-bold tracking-tight">{greeting ? `${greeting}，${teamName}` : teamName}</h1>
         <p className="text-sm text-muted mt-1">航模队运行总览 · 数据实时同步</p>
       </div>
-
-      {/* 初次使用引导：新队员第一次登录看到，点过即不再显示 */}
-      <OnboardingCard />
 
       {/* 统计卡 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

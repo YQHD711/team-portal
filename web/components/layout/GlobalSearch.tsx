@@ -65,7 +65,7 @@ export function GlobalSearch() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)}
+      <button onClick={() => setOpen(true)} data-guide="topbar-search"
         className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl text-sm text-muted bg-surface hover:bg-surface-hover border border-border-subtle transition-colors sm:min-w-[200px]">
         <Search className="h-4 w-4 shrink-0" />
         <span className="hidden sm:block flex-1 text-left">搜索...</span>
