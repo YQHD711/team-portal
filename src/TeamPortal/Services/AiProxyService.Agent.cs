@@ -65,7 +65,7 @@ public partial class AiProxyService
             : "若现有资料不足以回答问题（例如只覆盖了长文档的开头），请继续用工具检索或翻页，别急着下结论。");
 
     /// <summary>工具轮 + 最后一轮流式答案。任何工具轮异常都退化为"直接流式回答"，不影响可用性。</summary>
-    private async Task<Stream?> AgenticChatAsync(AiOptions opt, List<object> messages, SearchScope scope)
+    private async Task<Stream?> AgenticChatAsync(AiOptions opt, List<object> messages, SearchScope scope, CancellationToken ct)
     {
         var session = new KnowledgeToolSession(_search, _knowledge, scope.Role, scope.Department, scope.UserId);
         var maxRounds = Math.Clamp(await _settings.GetInt("AI:MaxToolRounds", DefaultMaxToolRounds), 1, MaxToolRoundsCap);
@@ -96,9 +96,50 @@ public partial class AiProxyService
         }
 
         var payload = _ai.BuildChatPayload(opt, messages, stream: true);
-        var response = await _ai.SendAsync(_ai.CreateChatRequest(opt, payload), HttpCompletionOption.ResponseHeadersRead);
+
+        // 首字节超时：只约束"等响应头"的时长，不约束整个流（长回答本来就要几十秒）。
+        // AI:RequestTimeoutSeconds 默认 300；下限 10 秒防误配置成 0 导致瞬间超时。
+        using var firstByteCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        firstByteCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(10, opt.RequestTimeoutSeconds)));
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _ai.SendAsync(_ai.CreateChatRequest(opt, payload),
+                HttpCompletionOption.ResponseHeadersRead, firstByteCts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 浏览器关页面/切走：Kestrel 取消 RequestAborted。这是正常场景，记 Info 不记 Warn。
+            _log.Info(RagLog.Category, "AI 流式请求被客户端取消（浏览器断开），已同步取消上游");
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Warn(RagLog.Category, $"AI 流式请求超时：等待首字节超过 {opt.RequestTimeoutSeconds}s（model={opt.Model}）");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(RagLog.Category, $"AI 流式请求失败：{ex.GetType().Name}: {ex.Message}（model={opt.Model}）");
+            return null;
+        }
+
         _log.Info(RagLog.Category, RagLog.ToolsLine(rounds, calls, session.SpentChars, names));
-        return response.IsSuccessStatusCode ? await response.Content.ReadAsStreamAsync() : null;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // 必须把上游响应体写进日志：DeepSeek 的 401/402/400 都在 body 里说明原因
+            // （Key 无效 / 余额不足 / 模型已下线），只记状态码排障时等于什么都没记。
+            var body = await ReadBodySafelyAsync(response);
+            _log.Warn(RagLog.Category, $"AI 流式请求返回 {(int)response.StatusCode}：{TruncateForLog(body, 300)}");
+            response.Dispose();
+            return null;
+        }
+
+        // 流要连同 HttpResponseMessage 一起持有：否则响应对象无人释放，
+        // 高频聊天/长连接下会累积连接句柄（ai-auditor 审查发现的 P2）。
+        return new ResponseOwnedStream(await response.Content.ReadAsStreamAsync(ct), response);
     }
 
     /// <summary>
@@ -185,4 +226,80 @@ public partial class AiProxyService
 
     private static string? ReadString(JsonElement element, string name)
         => element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>读上游错误响应体；读取本身失败不影响主流程（只用于日志）。</summary>
+    private static async Task<string> ReadBodySafelyAsync(HttpResponseMessage response)
+    {
+        try { return await response.Content.ReadAsStringAsync(); }
+        catch { return "(响应体读取失败)"; }
+    }
+
+    /// <summary>日志用的截断：上游错误体可能很长，只保留前若干字符。</summary>
+    private static string TruncateForLog(string text, int max)
+        => string.IsNullOrEmpty(text) ? "(空)" : (text.Length <= max ? text : text[..max] + "…");
+}
+
+/// <summary>
+/// 把 <see cref="HttpResponseMessage"/> 和它的响应流绑在一起释放。
+///
+/// 为什么需要：直接返回 <c>response.Content.ReadAsStream()</c> 时，HttpResponseMessage 自己
+/// 没有任何人 Dispose；聊天是长连接 + 高频场景，泄漏的响应对象会持续占用连接与句柄。
+/// 由本包装流在 Dispose/DisposeAsync 时一并释放，调用方（端点）只需要管流。
+/// </summary>
+internal sealed class ResponseOwnedStream : Stream
+{
+    private readonly Stream _inner;
+    private readonly HttpResponseMessage _response;
+    private bool _disposed;
+
+    public ResponseOwnedStream(Stream inner, HttpResponseMessage response)
+    {
+        _inner = inner;
+        _response = response;
+    }
+
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        => _inner.ReadAsync(buffer, cancellationToken);
+
+    public override void Flush() { }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !_disposed)
+        {
+            _disposed = true;
+            try { _inner.Dispose(); } catch { /* 上游已断开 */ }
+            _response.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            try { await _inner.DisposeAsync(); } catch { /* 上游已断开 */ }
+            _response.Dispose();
+        }
+        await base.DisposeAsync();
+    }
 }

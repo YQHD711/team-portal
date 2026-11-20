@@ -193,7 +193,16 @@ builder.Services.AddScoped<AiProxyService>();
 // 聊天空会话的建议问题（task-14）：doc/study/inventory 三类，纯本地查库+读文件，不调 AI
 builder.Services.AddScoped<AiSuggestionService>();
 // 统一的 AI 接入层：解析服务商/地址/密钥/模型，并按官方文档决定发哪些参数
-builder.Services.AddHttpClient<AiClient>();
+//
+// ⚠️ 这里必须**排除全局弹性策略**（ConfigureHttpClientDefaults 里的 AddStandardResilienceHandler）。
+// 它默认 AttemptTimeout=10s / TotalRequestTimeout=30s / 重试 3 次，对 AI 聊天是致命的：
+// 模型生成一段长回答本来就要 30–90s，10s 一到就被判失败、重试、再超时，
+// 前端最终只看到「AI 服务不可用」——这就是线上「AI 超时/出错」的根因之一。
+// AI 的超时改由 AI:RequestTimeoutSeconds 约束「等首字节」的时长；流一旦建立就不再限总时长
+// （否则长回答会被拦腰切断）。重试也不该有：一次流式请求重试等于重复计费。
+builder.Services.AddHttpClient<AiClient>()
+    .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)
+    .RemoveAllResilienceHandlers();
 builder.Services.AddTransient<AiToolCaller>();   // 组合 AiClient（typed client=transient），故也 transient
 builder.Services.AddScoped<FlightDiagnosisService>();
 // 房间布局"谁在编辑"在线状态：内存态 + TTL 心跳（不上 WebSocket）
