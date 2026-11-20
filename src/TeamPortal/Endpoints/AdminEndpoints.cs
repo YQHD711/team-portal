@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
+using TeamPortal.Data.Models;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -14,6 +15,15 @@ public static class AdminEndpoints
         var u = await db.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == int.Parse(idClaim));
         return u is null ? (null, null, 0) : (u.Role, u.Department?.Name, u.Id);
     }
+
+    /// <summary>
+    /// 通知文案里用「真名（登录名）」而不是内部自增 ID：队员看不懂 "用户 #30" 是谁，
+    /// 而且 ID 会随导库/重建变化，写在通知里既不友好也不稳定。
+    /// </summary>
+    private static string DisplayNameOf(User? u, int id) =>
+        u is null ? $"#{id}"
+        : string.IsNullOrWhiteSpace(u.DisplayName) ? u.Username
+        : $"{u.DisplayName}（{u.Username}）";
 
     public static void MapAdminEndpoints(this WebApplication app)
     {
@@ -55,6 +65,8 @@ public static class AdminEndpoints
         {
             var (role, dept, actorId) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
+            var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+            var targetName = DisplayNameOf(target, id);
             var ok = await svc.UpdateUser(id, req.Role, req.DepartmentId, req.Password, req.Username, role, dept, actorId, req.StudentId, req.IdentityDisabled);
             if (ok)
             {
@@ -66,7 +78,9 @@ public static class AdminEndpoints
                 log.Warn("admin", $"User #{id} updated by {actor}: {string.Join(", ", changes)}");
                 log.Audit("update", actor, targetType: "user", targetId: id.ToString(),
                     data: new { changes }, ipAddress: LogService.ClientIp(ctx));
-                notify.Notify("用户信息已更新", $"{actor} 修改了用户 #{id} 的信息", "/admin/organization", targetRole: "staff");
+                // 自己改自己的信息不用广播（本人知道）；改别人时用名字，别让队员对着 #30 猜是谁
+                if (actorId != id)
+                    notify.Notify("队员信息已更新", $"{actor} 修改了「{targetName}」的档案", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("权限不足或用户不存在", statusCode: 404);
         });
@@ -75,13 +89,15 @@ public static class AdminEndpoints
         {
             var (role, dept, _) = await GetUserCtx(user, db);
             var actor = user.Identity?.Name ?? "unknown";
+            var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+            var targetName = DisplayNameOf(target, id);
             var ok = await svc.DeleteUser(id, role, dept);
             if (ok)
             {
                 log.Warn("admin", $"User #{id} deleted by {actor}");
                 log.Audit("delete", actor, targetType: "user", targetId: id.ToString(),
                     data: new { success = true }, ipAddress: LogService.ClientIp(ctx));
-                notify.Notify("用户已删除", $"{actor} 删除了用户 #{id}", "/admin/organization", targetRole: "staff");
+                notify.Notify("队员已删除", $"{actor} 删除了「{targetName}」", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("无法删除", statusCode: 400);
         }).RequireAuthorization("AdminOnly");

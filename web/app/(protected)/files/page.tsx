@@ -51,7 +51,7 @@ export default function FilesPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div><h1 data-guide="page-files" className="text-2xl font-bold">资源共享</h1><p className="text-sm text-muted">上传和下载队内共享文件，支持任意格式（最大 1GB）</p></div>
 
-      <form onSubmit={handleUpload} className="rounded-xl border border-border bg-surface p-4 sm:p-5 space-y-3">
+      <form onSubmit={handleUpload} data-guide="files-upload" className="rounded-xl border border-border bg-surface p-4 sm:p-5 space-y-3">
         {/* 手机上文件选择器本身就很宽，让"选择文件"独占一行，可见范围+上传放到下一行 */}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="w-full min-w-0 flex-1 basis-full sm:basis-0 sm:min-w-[200px]">
@@ -73,7 +73,7 @@ export default function FilesPage() {
         {msg && <div className={`text-sm p-2 rounded-lg ${msg.startsWith("✅") ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>{msg}</div>}
       </form>
 
-      <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle">
+      <div className="rounded-xl border border-border bg-surface divide-y divide-border-subtle" data-guide="files-list">
         {files.length === 0 ? (
           <div className="p-12 text-center text-faint">
             <File className="h-10 w-10 mx-auto mb-2 text-zinc-300" />

@@ -86,7 +86,7 @@ export default function FinancePage() {
       <div className="flex items-center justify-between">
         <div><h1 data-guide="page-finance" className="text-2xl font-bold">采购申请</h1><p className="text-sm text-muted">申请 · 审批 · 购买 · 入库 · 报表</p></div>
         {/* 队员也可发起采购申请(审批仍为管理员) */}
-        <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"><Plus className="h-4 w-4"/>申请采购</button>
+        <button data-guide="finance-new" onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"><Plus className="h-4 w-4"/>申请采购</button>
       </div>
 
       {/* Stats(全队支出仅 staff) */}
@@ -136,7 +136,7 @@ export default function FinancePage() {
 
       {/* Requests list */}
       {tab !== "report" && (
-        <div className="space-y-3">
+        <div className="space-y-3" data-guide="finance-list">
           {requests.length === 0 ? <div className="rounded-xl border bg-surface p-12 text-center text-faint">{t("empty.finance.requests", "暂无采购申请")}</div> : requests.map(r => {
             const steps = ["pending", "approved", "purchased", "received"];
             const currentStep = r.status === "rejected" ? -1 : steps.indexOf(r.status);

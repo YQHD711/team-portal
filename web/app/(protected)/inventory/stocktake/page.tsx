@@ -125,7 +125,7 @@ export default function StocktakePage() {
   const gradeLabel = (g: string) => g === "A" ? "A级·关键" : g === "B" ? "B级·常规" : "C级·耗材";
 
   const tabBar = (
-    <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
+    <div className="flex gap-1 rounded-xl bg-surface-subtle p-1" data-guide="stocktake-tabs">
       <button onClick={() => setTab("my")}
         className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium flex items-center justify-center gap-2 ${tab === "my" ? "bg-surface shadow-sm" : "text-muted"}`}>
         <ListChecks className="h-4 w-4" />我的任务{myTasks.length > 0 && ` (${myTasks.length})`}

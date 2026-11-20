@@ -24,7 +24,7 @@ export default function FlightLogPage() {
         <p className="text-sm text-muted">飞控日志诊断与 ArduPilot / PX4 固件下载</p>
       </div>
 
-      <div role="tablist" aria-label="飞行日志与固件" className="flex gap-1 border-b">
+      <div role="tablist" aria-label="飞行日志与固件" data-guide="flightlog-tabs" className="flex gap-1 border-b">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -44,7 +44,9 @@ export default function FlightLogPage() {
       </div>
 
       {/* 只挂载当前 Tab 的组件，避免未激活面板在后台打接口 */}
-      {tab === "diagnosis" ? <DiagnosisPanel /> : <FirmwarePanel />}
+      <div data-guide="flightlog-content">
+        {tab === "diagnosis" ? <DiagnosisPanel /> : <FirmwarePanel />}
+      </div>
     </div>
   );
 }

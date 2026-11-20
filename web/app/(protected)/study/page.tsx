@@ -136,7 +136,7 @@ export default function StudyPage() {
             {total > 0 && <span className="ml-2 text-sky-600 dark:text-sky-400">已学 {done}/{total}（{percent(done, total)}%）</span>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-guide="study-actions">
           {isStaff && (
             <button onClick={() => setShowStats(v => !v)}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${showStats ? "border-sky-400 text-sky-500" : "text-muted hover:text-sky-500 hover:border-sky-400"}`}>
@@ -206,7 +206,9 @@ export default function StudyPage() {
             onSaveContent={activeLesson.canEdit ? saveLessonContent : undefined} />
         </div>
       ) : (
-        <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} highlight={highlight} />
+        <div data-guide="study-path">
+          <StudyPath scope={scope} onOpenLesson={openLesson} onToggle={toggle} highlight={highlight} />
+        </div>
       )}
     </div>
   );
