@@ -37,3 +37,32 @@ describe("组织架构按钮门禁", () => {
     expect(screen.getAllByTitle("编辑").length).toBeGreaterThan(0);
   });
 });
+
+describe("组织架构成员卡", () => {
+  it("有 displayName 时优先显示真名，登录名降为 @用户名 副标题", () => {
+    // 回归：后端 ListUsers 曾漏返回 DisplayName，导致页面永远显示登录名（用户反馈「不显示真名」）
+    const named: OrgUser = {
+      ...member, id: 5, username: "zhangwei", displayName: "张伟", studentId: "20230101",
+    };
+    renderTab(true, null, [dept1], [named]);
+
+    expect(screen.getByText("张伟")).toBeInTheDocument();
+    expect(screen.getByText("@zhangwei")).toBeInTheDocument();
+    expect(screen.getByText(/学号 20230101/)).toBeInTheDocument();
+  });
+
+  it("没有 displayName 时回落登录名，且不会显示空的 @ 副标题", () => {
+    const plain: OrgUser = { ...member, id: 6, username: "newbie", displayName: null };
+    renderTab(true, null, [dept1], [plain]);
+
+    expect(screen.getByText("newbie")).toBeInTheDocument();
+    expect(screen.queryByText("@newbie")).not.toBeInTheDocument();
+  });
+
+  it("已挂失成员显示标记", () => {
+    const disabled: OrgUser = { ...member, id: 7, username: "lost", displayName: "李四", identityDisabled: true };
+    renderTab(true, null, [dept1], [disabled]);
+
+    expect(screen.getByText("已挂失")).toBeInTheDocument();
+  });
+});
