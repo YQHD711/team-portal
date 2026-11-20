@@ -443,6 +443,7 @@ app.MapFileEndpoints();
 app.MapDownloadEndpoints();
 app.MapSystemAgentEndpoints();
 app.MapSettingsEndpoints();
+app.MapContentEndpoints();
 app.MapChatEndpoints();
 app.MapProfileEndpoints();
 app.MapCertificationEndpoints();

@@ -45,6 +45,9 @@ public class AppDbContext : DbContext
     public DbSet<BatteryItem> BatteryItems => Set<BatteryItem>();
     public DbSet<BatteryLoan> BatteryLoans => Set<BatteryLoan>();
     public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
+    public DbSet<SiteText> SiteTexts => Set<SiteText>();
+    public DbSet<GuideContent> GuideContents => Set<GuideContent>();
+    public DbSet<UserTourProgress> UserTourProgresses => Set<UserTourProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -493,6 +496,33 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── 内容管理：界面文案覆盖 + 引导内容覆盖 + 每人的引导进度 ──
+        modelBuilder.Entity<SiteText>(entity =>
+        {
+            entity.HasKey(t => t.Key);
+            entity.Property(t => t.Key).HasMaxLength(120);
+            entity.Property(t => t.Value).IsRequired().HasMaxLength(4000);
+            entity.Property(t => t.Group).HasMaxLength(40);
+            entity.HasIndex(t => t.Group);
+        });
+
+        modelBuilder.Entity<GuideContent>(entity =>
+        {
+            entity.HasKey(g => g.TourKey);
+            entity.Property(g => g.TourKey).HasMaxLength(60);
+            entity.Property(g => g.Title).HasMaxLength(200);
+            entity.Property(g => g.StepsJson).IsRequired();
+        });
+
+        modelBuilder.Entity<UserTourProgress>(entity =>
+        {
+            // 一个人对一条引导只有一条进度；读写都按 (UserId, TourKey) 命中
+            entity.HasIndex(p => new { p.UserId, p.TourKey }).IsUnique();
+            entity.Property(p => p.TourKey).IsRequired().HasMaxLength(60);
+            entity.Property(p => p.Status).IsRequired().HasMaxLength(20);
+            entity.HasOne(p => p.User).WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -701,6 +701,38 @@ namespace TeamPortal.Migrations
                     b.ToTable("FlightDiagnosisRecords");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.GuideContent", b =>
+                {
+                    b.Property<string>("TourKey")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TourKey");
+
+                    b.ToTable("GuideContents");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.IncidentRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -1195,6 +1227,35 @@ namespace TeamPortal.Migrations
                     b.ToTable("SharedFiles");
                 });
 
+            modelBuilder.Entity("TeamPortal.Data.Models.SiteText", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.HasIndex("Group");
+
+                    b.ToTable("SiteTexts");
+                });
+
             modelBuilder.Entity("TeamPortal.Data.Models.SkillCertification", b =>
                 {
                     b.Property<int>("Id")
@@ -1593,6 +1654,42 @@ namespace TeamPortal.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.UserTourProgress", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StepIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TourKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "TourKey")
+                        .IsUnique();
+
+                    b.ToTable("UserTourProgresses");
                 });
 
             modelBuilder.Entity("TeamPortal.Data.Models.WikiDocEdit", b =>
@@ -2025,6 +2122,17 @@ namespace TeamPortal.Migrations
                     b.Navigation("Department");
 
                     b.Navigation("InvitedByUser");
+                });
+
+            modelBuilder.Entity("TeamPortal.Data.Models.UserTourProgress", b =>
+                {
+                    b.HasOne("TeamPortal.Data.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TeamPortal.Data.Models.CheckoutRequest", b =>
