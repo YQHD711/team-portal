@@ -39,7 +39,11 @@ public class InventoryService
     /// <summary>低库存判定：数量 &lt; 阈值（与前端显示口径一致）</summary>
     public static bool IsLowStock(int quantity, int threshold) => quantity < threshold;
 
-    public async Task<List<InventoryItem>> GetAll(string? search, string? category)
+    /// <summary>
+    /// 列表查询。grades 为 null 表示不过滤（内部/管理场景）；
+    /// 传了集合就只返回这些等级的物料——角色能看哪些等级由权限矩阵决定。
+    /// </summary>
+    public async Task<List<InventoryItem>> GetAll(string? search, string? category, IReadOnlyCollection<string>? grades = null)
     {
         var query = _db.InventoryItems.AsQueryable();
 
@@ -53,6 +57,12 @@ public class InventoryService
         }
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(i => i.Category == category);
+
+        if (grades is not null)
+        {
+            var allowed = grades.ToList();
+            query = query.Where(i => allowed.Contains(i.Grade));
+        }
 
         return await query.OrderBy(i => i.Name).ToListAsync();
     }

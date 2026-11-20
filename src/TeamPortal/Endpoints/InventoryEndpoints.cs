@@ -91,9 +91,14 @@ public static class InventoryEndpoints
             ClaimsPrincipal user, PermissionService perms) =>
         {
             // 查看权限可被管理员关掉（角色 × 权限矩阵）；关掉后接口也不能返回数据
-            if (!perms.Has(user.FindFirstValue(ClaimTypes.Role), "material.inventory.view"))
+            var role = user.FindFirstValue(ClaimTypes.Role);
+            if (!perms.Has(role, "material.inventory.view"))
                 return Results.Problem("没有查看库存的权限", statusCode: 403);
-            var items = await svc.GetAll(search, category);
+            // 按等级分级：管理员可以只让某些角色看到 A/B/C 中的某几档
+            var grades = new[] { "A", "B", "C" }
+                .Where(g => perms.Has(role, "material.inventory.view." + g.ToLowerInvariant()))
+                .ToList();
+            var items = await svc.GetAll(search, category, grades);
             return Results.Ok(items);
         });
 
