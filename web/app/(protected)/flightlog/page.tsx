@@ -20,7 +20,7 @@ export default function FlightLogPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">飞行日志 / 固件</h1>
+        <h1 data-guide="page-flightlog" className="text-2xl font-bold">飞行日志 / 固件</h1>
         <p className="text-sm text-muted">飞控日志诊断与 ArduPilot / PX4 固件下载</p>
       </div>
 

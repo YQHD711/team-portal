@@ -67,7 +67,7 @@ export default function IncidentsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div><h1 className="text-2xl font-bold">事故与安全</h1><p className="text-sm text-muted">电池事故记录、飞行事故记录</p></div>
+      <div><h1 data-guide="page-incidents" className="text-2xl font-bold">事故与安全</h1><p className="text-sm text-muted">电池事故记录、飞行事故记录</p></div>
 
       <div className="flex gap-1 rounded-xl bg-surface-subtle p-1">
         {tabs.map(t => (

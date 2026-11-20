@@ -46,7 +46,7 @@ export default function WikiSettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold">Wiki 设置</h1>
+        <h1 data-guide="page-wiki-settings" className="text-2xl font-bold">Wiki 设置</h1>
         <p className="text-sm text-muted mt-1">配置 AI 代码文档生成的参数，并导入要生成文档的仓库</p>
       </div>
 

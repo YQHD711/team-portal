@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { TOURS } from "../lib/tours/registry";
 
 const ROLE_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 
@@ -107,14 +108,11 @@ export const layoutRoom = {
 };
 
 /**
- * 默认把三条引导标记为已完成：否则每个用例进页面 600ms 后都会弹出引导遮罩，
+ * 默认把**全部**引导标记为已完成：否则每个用例进页面 600ms 后都会弹出引导遮罩，
  * 挡住后续点击。要测"首次自动引导"的用例显式传 tours: []。
+ * 从注册表生成，新增引导时这里不用再改（漏加会直接让线上用例超时）。
  */
-const DONE_TOURS = [
-  { tourKey: "welcome", status: "done", stepIndex: 0, version: 1 },
-  { tourKey: "inventory", status: "done", stepIndex: 0, version: 1 },
-  { tourKey: "battery", status: "done", stepIndex: 0, version: 1 },
-];
+const DONE_TOURS = TOURS.map((t) => ({ tourKey: t.key, status: "done", stepIndex: 0, version: t.version }));
 
 /** 统一 mock 所有 /api/* 请求（按路径+方法分发） */
 export async function mockApi(
@@ -265,6 +263,10 @@ export async function mockApi(
     // 列表类接口：页面直接 .map/.length，返回 {} 会渲染崩溃（移动端回归里会跑到这两页）
     if (path === "/api/files") return json([]);
     if (path === "/api/incidents" || path === "/api/batteries") return json([]);
+    // 电池页用的是单数 /api/battery（列表 / 在借 / 逾期 / 流水），漏掉会让页面 .map 崩掉
+    if (path === "/api/battery" && method === "GET") return json([]);
+    if (path === "/api/battery/mine" || path === "/api/battery/overdue" || path === "/api/battery/loans") return json([]);
+    if (path.startsWith("/api/battery/")) return json({});
     // 领用 / 盘点：页面把响应当数组直接 .map，默认的 {} 会让整页掉进错误边界
     if (path.startsWith("/api/material/")) return json([]);
     if (path === "/api/admin/users") {

@@ -24,7 +24,7 @@ export default function ContentAdminPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">内容管理</h1>
+        <h1 data-guide="page-content" className="text-xl font-semibold">内容管理</h1>
         <p className="mt-1 text-sm text-muted">
           界面文案与使用引导的默认值写在代码里，这里保存覆盖值；改坏了可以随时恢复默认，不会影响页面运行。
         </p>

@@ -79,7 +79,7 @@ export default function StorageLayoutPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 pb-24 lg:pb-4">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">物料布局</h1>
+        <h1 data-guide="page-layout" className="text-2xl font-bold">物料布局</h1>
         <p className="text-sm text-muted">
           {layouts.length} 个房间 · {items.length} 种物料 · 尺寸单位统一为 cm
         </p>

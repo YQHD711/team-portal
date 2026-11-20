@@ -14,7 +14,7 @@ export default function WebToolsPage() {
     <div className="flex flex-col h-[calc(100dvh-5rem)]">
       <div className="flex items-center justify-between gap-4 mb-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">飞行日志分析工具集</h1>
+          <h1 data-guide="page-webtools" className="text-2xl font-bold">飞行日志分析工具集</h1>
           <p className="text-sm text-muted">ArduPilot WebTools · 日志分析、图表绘制与飞行数据可视化</p>
         </div>
         <a

@@ -74,7 +74,7 @@ export default function TrashPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">回收站</h1>
+          <h1 data-guide="page-trash" className="text-2xl font-bold">回收站</h1>
           <p className="text-sm text-muted">已删除的数据保留 30 天，过期自动清理</p>
         </div>
         <button onClick={cleanup} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm border border-red-200 text-danger hover:bg-red-50">

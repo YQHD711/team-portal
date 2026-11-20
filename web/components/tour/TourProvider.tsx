@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/hooks";
-import { tourForPath, visibleSteps } from "@/lib/tours/registry";
+import { matchesEntry, tourForPath, visibleSteps } from "@/lib/tours/registry";
 import { useTourDefs } from "@/components/content/ContentProvider";
 import {
   fetchRemote, readCache, resetRemote, saveRemote, writeCache,
@@ -60,8 +60,11 @@ function stepsFor(def: TourDef, role: string | null): TourStep[] {
 export function TourProvider({ children }: { children: React.ReactNode }) {
   const { user, loading } = useCurrentUser();
   const pathname = usePathname();
+  const router = useRouter();
   const tours = useTourDefs();
   const [progress, setProgress] = useState<Record<string, TourProgress>>({});
+  /** 等待跳转完成的引导 key（跨页面启动引导用） */
+  const [pending, setPending] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   /** 服务端进度是否成功加载：拿不到就不自动弹（手动重看不受影响） */
   const [remoteOk, setRemoteOk] = useState(false);
@@ -97,15 +100,30 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     void saveRemote(tour.key, entry);
   }, [user]);
 
+  /** 在当前页面真正把引导拉起来（调用方已确认目标页已渲染） */
+  const activate = useCallback((def: TourDef) => {
+    if (!user) return;
+    const steps = stepsFor(def, user.role);
+    if (steps.length === 0) return;
+    autoStarted.current.add(def.key);
+    setActive({ tour: def, steps, index: 0 });
+    persist(def, "in_progress", 0);
+  }, [user, persist]);
+
+  /**
+   * 手动开始：如果当前不在该引导的目标页面，先跳过去，再等页面渲染后开始。
+   * 否则目标元素不存在，引导会一进就"跳过"，用户看到的是点了没反应。
+   */
   const start = useCallback((key: string) => {
     const def = tours.find((t) => t.key === key);
     if (!def || !user) return;
-    const steps = stepsFor(def, user.role);
-    if (steps.length === 0) return;
-    autoStarted.current.add(key);
-    setActive({ tour: def, steps, index: 0 });
-    persist(def, "in_progress", 0);
-  }, [tours, user, persist]);
+    if (!matchesEntry(def.entry, pathname)) {
+      setPending(key);
+      router.push(def.entry);
+      return;
+    }
+    activate(def);
+  }, [tours, user, pathname, router, activate]);
 
   const stop = useCallback(() => {
     if (active) persist(active.tour, "skipped", active.index);
@@ -148,6 +166,22 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       return map;
     });
   }, [user]);
+
+  // 跨页面启动：路径到达目标页后，等页面渲染再开始
+  useEffect(() => {
+    if (!pending) return;
+    const def = tours.find((t) => t.key === pending);
+    if (!def || !user) {
+      setPending(null);
+      return;
+    }
+    if (!matchesEntry(def.entry, pathname)) return;
+    const timer = setTimeout(() => {
+      activate(def);
+      setPending(null);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [pending, pathname, tours, user, activate]);
 
   // 自动触发：延迟 600ms，给页面数据与骨架屏留出渲染时间
   useEffect(() => {

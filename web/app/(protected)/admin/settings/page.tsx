@@ -159,7 +159,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">系统设置</h1>
+          <h1 data-guide="page-settings" className="text-2xl font-bold">系统设置</h1>
           <p className="text-sm text-muted mt-1">全局配置 — 所有参数均可在线调整，无需修改代码或重启</p>
         </div>
         <button

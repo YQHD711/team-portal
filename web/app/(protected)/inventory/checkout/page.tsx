@@ -146,7 +146,7 @@ export default function CheckoutPage() {
     <div className="space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">领用管理</h1>
+          <h1 data-guide="page-checkout" className="text-2xl font-bold">领用管理</h1>
           <p className="text-sm text-muted">物料领用申请与审批</p>
         </div>
         <Link href="/inventory" className="text-sm text-sky-500 hover:text-sky-600 flex items-center gap-1">

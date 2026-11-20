@@ -152,7 +152,7 @@ export default function StocktakePage() {
       <div className="space-y-4 max-w-5xl mx-auto">
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={() => { setSelected(null); }} className="text-sm text-muted">&larr; 返回</button>
-          <h1 className="text-xl font-bold">{selected.type === "semester" ? "学期大盘" : "周盘点"} — {gradeLabel(selected.grade)}</h1>
+          <h1 data-guide="page-stocktake" className="text-xl font-bold">{selected.type === "semester" ? "学期大盘" : "周盘点"} — {gradeLabel(selected.grade)}</h1>
           <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[selected.status] || "bg-surface-hover"}`}>
             {STATUS_LABEL[selected.status] || selected.status}{editable ? ` ${done}/${total}` : ""}
           </span>

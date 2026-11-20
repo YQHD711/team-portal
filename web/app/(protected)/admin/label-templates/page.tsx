@@ -34,7 +34,7 @@ export default function LabelTemplatesPage() {
         <Link href="/inventory/layout" className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" />物料布局
         </Link>
-        <h1 className="text-xl font-bold">标签模板</h1>
+        <h1 data-guide="page-label-templates" className="text-xl font-bold">标签模板</h1>
         <span className="text-xs text-faint">拖拽移动 · 拖角缩放 · 吸附 0.5mm · 越界自动夹回</span>
         {d.dirty && <span data-testid="dirty-hint" className="text-xs text-amber-600">有未保存改动</span>}
         {d.loading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}

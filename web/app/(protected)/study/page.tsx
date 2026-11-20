@@ -128,7 +128,7 @@ export default function StudyPage() {
     <div className="space-y-6 max-w-6xl mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 data-guide="page-study" className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <GraduationCap className="h-6 w-6 text-sky-500" />学习库
           </h1>
           <p className="text-sm text-muted mt-1">

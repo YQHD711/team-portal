@@ -55,14 +55,42 @@ describe("引导注册表", () => {
   });
 
   it("按路径选出应自动开始的引导，且更长 entry 优先", () => {
-    const specific = fakeTour({ key: "specific", entry: "/inventory/layout" });
+    const specific = fakeTour({ key: "specific", entry: "/inventory/layout/room" });
     const all = [...TOURS, specific];
     expect(tourForPath("/", "member", all)?.key).toBe("welcome");
     expect(tourForPath("/batteries", "member", all)?.key).toBe("battery");
-    expect(tourForPath("/inventory/layout", "member", all)?.key).toBe("specific");
+    // 子页面有专属引导时不能被父级（/inventory）抢走
+    expect(tourForPath("/inventory/layout", "member", all)?.key).toBe("layout");
+    expect(tourForPath("/inventory/layout/room", "member", all)?.key).toBe("specific");
     expect(tourForPath("/inventory", "member", all)?.key).toBe("inventory");
     expect(tourForPath("/nothing-here", "member", all)).toBeUndefined();
     expect(tourForPath("/batteries", null, all)).toBeUndefined();
+  });
+
+  it("覆盖全部功能入口：导航里每个功能都有独立引导", () => {
+    const keys = new Set(TOURS.map((t) => t.key));
+    const expected = [
+      "welcome", "study", "flightlog", "webtools", "wiki",
+      "incidents", "files", "profile",
+      "inventory", "battery", "checkout", "stocktake", "finance", "layout",
+      "knowledge", "organization", "exams", "wiki-settings",
+      "settings", "content", "label-templates", "logs", "trash", "backup", "cloud", "devices", "ai-admin",
+    ];
+    for (const key of expected) expect(keys.has(key), key).toBe(true);
+  });
+
+  it("管理类引导按角色分级：成员看不到 staff/admin 专属", () => {
+    const memberKeys = new Set(visibleTours("member").map((t) => t.key));
+    for (const key of ["knowledge", "organization", "exams", "wiki-settings", "settings", "content", "logs"]) {
+      expect(memberKeys.has(key), key).toBe(false);
+    }
+    const staffKeys = new Set(visibleTours("部长").map((t) => t.key));
+    expect(staffKeys.has("knowledge")).toBe(true);
+    expect(staffKeys.has("settings")).toBe(false);
+    expect(staffKeys.has("content")).toBe(false);
+    const adminKeys = new Set(visibleTours("admin").map((t) => t.key));
+    expect(adminKeys.has("settings")).toBe(true);
+    expect(adminKeys.has("content")).toBe(true);
   });
 
   it("步骤级角色过滤", () => {

@@ -2,12 +2,28 @@ import { type Role, type TourDef, type TourStep, normalizeRole } from "./types";
 import { welcomeTour } from "./tours/welcome";
 import { batteryTour } from "./tours/battery";
 import { inventoryTour } from "./tours/inventory";
+import { learningTours } from "./tours/learning";
+import { teamTours } from "./tours/team";
+import { materialTours } from "./tours/materials";
+import { adminStaffTours } from "./tours/admin-staff";
+import { adminSystemTours } from "./tours/admin-system";
+import { adminToolTours } from "./tours/admin-tools";
 
 /**
  * 引导注册表：新增一条引导 = 在 tours/ 下建文件并在这里注册。
  * 后台（GuideContent）只覆盖已有 key 的内容，不能新增 key——新引导总要有人先写锚点。
  */
-export const TOURS: TourDef[] = [welcomeTour, batteryTour, inventoryTour];
+export const TOURS: TourDef[] = [
+  welcomeTour,
+  ...learningTours,
+  ...teamTours,
+  batteryTour,
+  inventoryTour,
+  ...materialTours,
+  ...adminStaffTours,
+  ...adminSystemTours,
+  ...adminToolTours,
+];
 
 export function getTour(key: string): TourDef | undefined {
   return TOURS.find((t) => t.key === key);

@@ -12,7 +12,7 @@ export default function LogsPage() {
     <div className="space-y-4 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">系统日志</h1>
+          <h1 data-guide="page-logs" className="text-2xl font-bold">系统日志</h1>
           <p className="text-sm text-muted">操作审计与系统运行日志分离查看</p>
         </div>
       </div>
