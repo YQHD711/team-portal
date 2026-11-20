@@ -66,13 +66,20 @@ public partial class AiProxyService
     /// 聊天主入口（task-16 起是"模型自主多轮检索"）：先按原逻辑注入 RAG + 实时块 + 提示词，
     /// 再让模型自己决定要不要继续检索/翻文档（上限见 AgenticChatAsync），最后一轮仍以 SSE 流返回。
     /// </summary>
-    public async Task<Stream?> ChatStream(string question, SearchScope scope, List<(string role, string content)>? history = null)
+    public async Task<Stream?> ChatStream(string question, SearchScope scope,
+        List<(string role, string content)>? history = null, CancellationToken ct = default)
     {
         var opt = await _ai.ResolveAsync();
-        if (!opt.IsConfigured) return null;
+        if (!opt.IsConfigured)
+        {
+            // 未配置时以前静默返回 null，前端只能看到笼统的 503；
+            // 这里记下"是缺 Key 还是缺地址"，排障时不用翻设置页猜。
+            _log.Warn("ai", $"Chat 无法开始：AI 未配置（provider={opt.Provider} model={opt.Model}）");
+            return null;
+        }
 
         var messages = await BuildMessagesAsync(question, scope, history);
-        return await AgenticChatAsync(opt, messages, scope);
+        return await AgenticChatAsync(opt, messages, scope, ct);
     }
 
     public async Task<object?> Search(string query, SearchScope scope)

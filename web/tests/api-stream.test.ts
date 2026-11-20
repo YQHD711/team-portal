@@ -17,7 +17,7 @@ describe("api.stream 超时语义", () => {
     localStorage.clear();
   });
 
-  it("拿到响应头后不再被默认 30s 超时中断（回归：长回答被截断）", async () => {
+  it("拿到响应头后不再被默认 120s 首字节超时中断（回归：长回答被截断）", async () => {
     let signal: AbortSignal | undefined;
     const stream = new ReadableStream<Uint8Array>({ start() { /* 保持打开，模拟 SSE 长连接 */ } });
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
@@ -33,7 +33,7 @@ describe("api.stream 超时语义", () => {
     expect(signal?.aborted).toBe(false); // 旧实现此处已 abort → 流被掐断
   });
 
-  it("响应头迟迟不来时仍然超时中止并给出中文提示", async () => {
+  it("响应头迟迟不来时仍然超时中止并给出中文提示（默认首字节超时 120s）", async () => {
     let aborted = false;
     vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init.signal?.addEventListener("abort", () => {
@@ -44,7 +44,8 @@ describe("api.stream 超时语义", () => {
 
     const pending = api.stream("/api/ai/chat", { question: "hi" });
     const assertion = expect(pending).rejects.toThrow(/请求超时/);
-    vi.advanceTimersByTime(31_000);
+    // 默认首字节超时是 120s（AI 要先跑工具检索轮），不是旧的 30s
+    vi.advanceTimersByTime(121_000);
     await assertion;
     expect(aborted).toBe(true);
   });

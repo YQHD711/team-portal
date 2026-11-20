@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { getToken } from "@/lib/auth";
+import { api } from "@/lib/api";
+import { consumeAiStream, toAiStreamError } from "@/lib/ai-stream";
 import { ChatView, type ChatMessage, type ChatSession } from "./ChatView";
 
 /**
@@ -91,51 +93,34 @@ export function ChatPanel() {
     const assistantMsg: ChatMessage = { role: "assistant", content: "" };
     setMessages(prev => [...prev, assistantMsg]);
 
+    let full = "";
     try {
-      const token = getToken();
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ question: userMsg.content, sessionId }),
+      // 统一走 api.stream：内置 120s 首字节超时（工具检索轮较慢）+ 统一错误分类；
+      // 之后的读取交给 consumeAiStream（逐字渲染、空闲超时、错误帧识别）。
+      const res = await api.stream("/api/ai/chat", { question: userMsg.content, sessionId });
+      await consumeAiStream(res, {
+        onDelta: (chunk) => {
+          full += chunk;
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { ...updated[updated.length - 1], content: full };
+            return updated;
+          });
+        },
       });
-
-      if (!response.ok) throw new Error("Request failed");
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No body");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const parsed = JSON.parse(line.slice(6));
-              if (parsed.choices?.[0]?.delta?.content) {
-                setMessages(prev => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { ...updated[updated.length - 1], content: updated[updated.length - 1].content + parsed.choices[0].delta.content };
-                  return updated;
-                });
-              }
-            } catch { }
-          }
-        }
-      }
       // Refresh session list
-      const token2 = getToken();
-      fetch("/api/chat/sessions", { headers: { Authorization: `Bearer ${token2}` } })
-        .then(r => r.json()).then(d => setSessions(d)).catch(() => {});
-    } catch {
+      api.get<ChatSession[]>("/api/chat/sessions").then(d => setSessions(d)).catch(() => {});
+    } catch (err) {
+      // 区分超时 / 限流 / 未配置 / 网络 / 已取消，而不是一律「服务不可用」
+      const e = toAiStreamError(err);
       setMessages(prev => {
         const updated = [...prev];
-        updated[updated.length - 1] = { ...updated[updated.length - 1], content: "抱歉，AI 服务暂不可用。" };
+        const last = updated[updated.length - 1];
+        // 已经流出一部分时把提示接在答案后面，避免半截回答 + 无提示
+        updated[updated.length - 1] = {
+          ...last,
+          content: full ? `${full}\n\n⚠️ ${e.message}` : `⚠️ ${e.message}`,
+        };
         return updated;
       });
     } finally { setStreaming(false); }

@@ -7,6 +7,9 @@ export type { DownloadOptions, DownloadProgress };
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const UPLOAD_TIMEOUT = 1800000; // 30 minutes — 大文件上传(最高1GB)+ Next.js rewrites 转发
+// AI 流式的「等首字节」超时单独一档：聊天会先跑工具检索轮，用 30s 会把正常请求误杀。
+// 首字节到达后不再限总时长（长回答本来就要几十秒），空闲超时由 ai-stream 的 consumeAiStream 负责。
+const STREAM_FIRST_BYTE_TIMEOUT = 120000;
 
 type RequestOptions = RequestInit & {
   /** Override request timeout in milliseconds */
@@ -99,7 +102,7 @@ export const api = {
    */
   stream: async (endpoint: string, body: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<Response> => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? STREAM_FIRST_BYTE_TIMEOUT);
     const onOuterAbort = () => controller.abort();
     if (signal) {
       if (signal.aborted) controller.abort();
@@ -122,7 +125,13 @@ export const api = {
         window.location.href = "/auth/login";
         throw new Error("登录已过期，请重新登录");
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // 带上 status：调用方用 ai-stream.toAiStreamError 才能区分 401/429/503，
+        // 而不是把所有失败都显示成「AI 服务暂不可用」。
+        const httpErr = new Error(`HTTP ${res.status}`) as Error & { status?: number };
+        httpErr.status = res.status;
+        throw httpErr;
+      }
       return res;
     } catch (err) {
       clearTimeout(timeoutId);

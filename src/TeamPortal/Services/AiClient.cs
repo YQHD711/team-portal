@@ -136,11 +136,18 @@ public class AiClient
         return req;
     }
 
-    /// <summary>发请求（流式时用 ResponseHeadersRead，避免把整段回答先缓冲完）</summary>
+    /// <summary>
+    /// 发请求（流式时用 ResponseHeadersRead，避免把整段回答先缓冲完）。
+    ///
+    /// <paramref name="ct"/> 必须一路传到 HttpClient：浏览器关掉页面后 Kestrel 会取消
+    /// RequestAborted，若这里不接收，上游 DeepSeek 仍会算完整个回答并计费，
+    /// 既浪费额度也让「客户端断开」在日志里完全看不出来。
+    /// </summary>
     public Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage req,
-        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead)
-        => _http.SendAsync(req, completion);
+        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead,
+        CancellationToken ct = default)
+        => _http.SendAsync(req, completion, ct);
 
     /// <summary>把 AI 的流式增量里能显示的部分取出来（丢弃 reasoning_content —— 前端只渲染正文）</summary>
     public static string? ExtractDeltaContent(JsonElement root)

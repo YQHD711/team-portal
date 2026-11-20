@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Loader2, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { consumeAiStream, toAiStreamError } from "@/lib/ai-stream";
 
 interface Session { sessionId: string; title: string; messageCount: number; lastMessage: string; }
 
@@ -84,36 +85,37 @@ export function FloatingChat() {
     setQuestion("");
     setSending(true);
 
+    let full = "";
     try {
       const res = await api.stream("/api/ai/chat", { question: q, sessionId });
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-      const decoder = new TextDecoder();
-      let full = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-            try { const json = JSON.parse(data); full += json.choices?.[0]?.delta?.content || ""; } catch { }
-          }
-        }
-        setMessages(prev => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (last?.role === "assistant") last.content = full;
-          else copy.push({ role: "assistant", content: full });
-          return [...copy];
-        });
-      }
+      // 统一的流消费：逐字追加、空闲超时保护、识别后端的 event: error 错误帧
+      await consumeAiStream(res, {
+        onDelta: (chunk) => {
+          full += chunk;
+          setMessages(prev => {
+            const copy = [...prev];
+            const last = copy[copy.length - 1];
+            if (last?.role === "assistant") copy[copy.length - 1] = { ...last, content: full };
+            else copy.push({ role: "assistant", content: full });
+            return copy;
+          });
+        },
+      });
       // Refresh sessions
       api.get<Session[]>("/api/chat/sessions").then(setSessions).catch(() => {});
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "抱歉，AI 服务暂时不可用" }]);
+    } catch (err) {
+      // 区分超时 / 限流 / 未配置 / 网络 / 已取消，而不是一律「暂时不可用」
+      const e = toAiStreamError(err);
+      setMessages(prev => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        // 已经流出一部分时把提示接在答案后面，避免出现"半截回答 + 另一条错误消息"
+        if (full && last?.role === "assistant") {
+          copy[copy.length - 1] = { ...last, content: `${last.content}\n\n⚠️ ${e.message}` };
+          return copy;
+        }
+        return [...copy, { role: "assistant", content: `⚠️ ${e.message}` }];
+      });
     } finally {
       setSending(false);
     }
