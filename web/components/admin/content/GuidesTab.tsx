@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { TOURS } from "@/lib/tours/registry";
 import type { TourStep } from "@/lib/tours/types";
 import { GuideStepList } from "./GuideStepList";
-import { Loader2, Pencil, RotateCcw, Save, X } from "lucide-react";
+import { useTour } from "@/components/tour/TourProvider";
+import { useContentRefresh } from "@/components/content/ContentProvider";
+import { Loader2, Play, Pencil, RotateCcw, Save, X } from "lucide-react";
 
 interface GuideRow {
   tourKey: string;
@@ -44,6 +46,25 @@ export function GuidesTab() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<"all" | "member" | "部长" | "admin">("all");
+  const { start } = useTour();
+  const refreshContent = useContentRefresh();
+
+  const visible = useMemo(
+    () => TOURS.filter((t) => roleFilter === "all" || t.roles.includes(roleFilter)),
+    [roleFilter],
+  );
+
+  /** 预览：先刷新内容（让刚保存的改动生效），再启动引导；不在目标页时引导引擎会自动跳转 */
+  async function preview(key: string) {
+    await refreshContent();
+    start(key);
+  }
+
+  function rolesLabel(roles: readonly string[]): string {
+    if (roles.length >= 3) return "全部角色";
+    return roles.map((r) => (r === "admin" ? "管理员" : r === "部长" ? "部长" : "成员")).join("、");
+  }
 
   const load = useCallback(async () => {
     try {
@@ -115,10 +136,27 @@ export function GuidesTab() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted">引导的目标元素由代码里的 data-guide 锚点决定；新增一条引导需要先在代码中写定义与锚点，这里只能调整已有引导的内容。</p>
+      <p className="text-xs text-muted">
+        下面是队员第一次进入各功能时看到的分步引导。可以改每一步的标题和说明、调整顺序、暂时停用；
+        高亮到哪个按钮由技术人员在代码里指定（编辑器里会显示成"高亮位置"）。点「预览」会直接播放这条引导。
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {([["all", "全部角色"], ["member", "成员"], ["部长", "部长"], ["admin", "管理员"]] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setRoleFilter(key)}
+            className={
+              "rounded-lg border px-2.5 py-1 text-xs transition-colors " +
+              (roleFilter === key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted hover:text-foreground")
+            }>
+            {label}
+          </button>
+        ))}
+        <span className="text-xs text-muted">共 {visible.length} 条</span>
+      </div>
+
       {msg && <div className="rounded-lg bg-surface px-3 py-2 text-sm text-muted">{msg}</div>}
       <div className="space-y-2">
-        {TOURS.map((tour) => {
+        {visible.map((tour) => {
           const row = saved[tour.key];
           const isEditing = editing === tour.key;
           return (
@@ -127,9 +165,15 @@ export function GuidesTab() {
                 <span className="font-medium text-sm">{tour.title}</span>
                 <span className="font-mono text-[11px] text-faint">{tour.key}</span>
                 <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">{tour.steps.length} 步</span>
+                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-muted">{rolesLabel(tour.roles)}</span>
                 {row && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">已覆盖</span>}
                 {row?.enabled === false && <span className="rounded bg-danger/10 px-1.5 py-0.5 text-[10px] text-danger">已停用</span>}
                 <div className="ml-auto flex items-center gap-1">
+                  <button onClick={() => void preview(tour.key)}
+                    className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted hover:bg-surface-hover hover:text-foreground"
+                    title="在真实页面上播放这条引导（会跳转到目标页）">
+                    <Play className="h-3 w-3" />预览
+                  </button>
                   <button onClick={() => (isEditing ? (setEditing(null), setDraft(null)) : startEdit(tour.key))}
                     className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted hover:bg-surface-hover hover:text-foreground">
                     {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}{isEditing ? "取消" : "编辑"}
@@ -152,7 +196,7 @@ export function GuidesTab() {
                       <input type="checkbox" checked={draft.enabled}
                         onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />启用
                     </label>
-                    <label className="flex items-center gap-1 text-xs text-muted">
+                    <label className="flex items-center gap-1 text-xs text-muted" title="内容改动较大时 +1：队员会看到「引导已更新」，但不会被强制重播">
                       版本
                       <input type="number" min={0} value={draft.version}
                         onChange={(e) => setDraft({ ...draft, version: Number(e.target.value) || 0 })}
