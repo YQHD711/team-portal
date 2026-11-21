@@ -74,12 +74,12 @@ describe("库位标签 · 直连打印入口权限", () => {
     expect(screen.getByTestId("batch-label-count")).toHaveTextContent("共 5 张");
   });
 
-  it("非 staff：房间级直连按钮不渲染，PDF 导出按钮仍在", () => {
+  it("非 staff：房间级入口不渲染任何打印/导出按钮", () => {
     mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
     render(<ExportLocationLabelsButton layout={layout} roomName="6011" template={LOCATION_FALLBACK_TEMPLATE} />);
 
     expect(screen.queryByTestId("direct-print-location-labels")).not.toBeInTheDocument();
-    expect(screen.getByTestId("export-location-labels")).toBeInTheDocument();
+    expect(screen.queryByTestId("export-location-labels")).not.toBeInTheDocument();
   });
 
   it("staff：元素级入口按该元素格位数打开面板", async () => {
@@ -91,11 +91,11 @@ describe("库位标签 · 直连打印入口权限", () => {
     await waitFor(() => expect(screen.getByTestId("batch-label-count")).toHaveTextContent("共 1 张"));
   });
 
-  it("非 staff：元素级直连按钮不渲染，PDF 导出按钮仍在", () => {
+  it("非 staff：元素级入口不渲染任何打印/导出按钮", () => {
     mockedUseCurrentUser.mockReturnValue({ user: memberUser, loading: false, refresh: vi.fn() });
     render(<ElementLocationExportButton element={device} roomName="6011" template={LOCATION_FALLBACK_TEMPLATE} />);
 
     expect(screen.queryByTestId("direct-print-element-loc-labels")).not.toBeInTheDocument();
-    expect(screen.getByTestId("export-element-loc-labels")).toBeInTheDocument();
+    expect(screen.queryByTestId("export-element-loc-labels")).not.toBeInTheDocument();
   });
 });

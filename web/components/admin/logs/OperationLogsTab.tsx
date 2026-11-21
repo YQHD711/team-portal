@@ -52,28 +52,6 @@ export default function OperationLogsTab() {
    * `window.open` 开的新标签页发不出 token（JWT 在 localStorage）→ 接口是 AdminOnly，必 401。
    * api.download 只回 Blob，拿不到 Content-Disposition，所以文件名用与后端一致的客户端默认名。
    */
-  const handleExport = async () => {
-    if (exporting) return;
-    setExporting(true);
-    setMsg("导出中…");
-    try {
-      const params = new URLSearchParams();
-      if (user) params.set("user", user);
-      if (action) params.set("action", action);
-      if (from) params.set("from", from + "T00:00:00Z");
-      if (to) params.set("to", to + "T23:59:59Z");
-      const blob = await api.download(`/api/admin/logs/operations/export?${params}`);
-      saveBlob(blob, datedFilename("operations"));
-      setMsg("");
-    } catch (err) {
-      // 401 由 api.download 接管（清 token + 跳登录）→ 不再提示"导出失败"
-      const message = downloadErrorMessage(err);
-      setMsg(message ? `导出失败：${message}` : "");
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const reset = (fn: (v: string) => void) => (v: string) => { fn(v); setPage(1); };
 
   return (
@@ -83,9 +61,6 @@ export default function OperationLogsTab() {
           <History className="h-4 w-4" />共 {total.toLocaleString()} 条操作记录
         </div>
         <div className="flex gap-2">
-          <button onClick={() => void handleExport()} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
-            <Download className="h-4 w-4" />{exporting ? "导出中…" : "导出"}
-          </button>
           <button onClick={fetchOps} className="p-2 rounded hover:bg-surface-hover">
             <RefreshCw className="h-5 w-5 text-muted" />
           </button>

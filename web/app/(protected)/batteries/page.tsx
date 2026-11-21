@@ -79,18 +79,6 @@ export default function BatteriesPage() {
     } finally { setBusyId(null); }
   };
 
-  // 导出 CSV（期末对账）：台账 / 借还流水
-  const exportCsv = async (kind: "items" | "loans") => {
-    try {
-      const blob = await api.download(kind === "items" ? "/api/battery/export" : "/api/battery/loans/export");
-      const d = new Date();
-      const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      saveBlob(blob, (kind === "items" ? "电池台账-" : "借还流水-") + stamp + ".csv");
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "导出失败");
-    }
-  };
-
   const createBattery = async (form: { code: string; model: string; health: string; notes: string; count: number }) => {
     setActionError(null);
     try {
@@ -125,16 +113,6 @@ export default function BatteriesPage() {
             <ScanLine className="h-4 w-4" />扫码借还
           </Link>
           {isStaff && <BatteryLabelExportButton batteries={items} />}
-          {isStaff && (
-            <div className="flex items-center gap-1">
-              <button onClick={() => void exportCsv("items")} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover" title="导出台账 CSV（Excel 可开）">
-                <Download className="h-4 w-4" />导出台账
-              </button>
-              <button onClick={() => void exportCsv("loans")} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover" title="导出借还流水 CSV">
-                <Download className="h-4 w-4" />导出流水
-              </button>
-            </div>
-          )}
           {isStaff && (
             <button onClick={() => setShowForm(v => !v)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm text-white">
               <Plus className="h-4 w-4" />新增电池

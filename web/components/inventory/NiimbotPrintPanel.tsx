@@ -52,7 +52,7 @@ function storeMode(mode: ConnectionMode): void {
  *
  * 仅用户点击时连接，绝不自动连接（服务未安装时自动连会每 3 秒重试、刷控制台）。
  * 折叠策略：桌面默认展开（右侧操作区常驻），移动端默认折叠成一行标题，避免长面板把按钮挤出屏幕。
- * 连接失败一律给可执行提示 +「改用导出 PDF」的退路（HTTPS 下浏览器可能拦截本机 ws）。
+ * 连接失败一律给可执行提示（检查打印机连接与浏览器本地设备权限）（HTTPS 下浏览器可能拦截本机 ws）。
  */
 export default function NiimbotPrintPanel({ template, dataList }: Props) {
   const [expanded, setExpanded] = useState(true);
@@ -266,7 +266,7 @@ export default function NiimbotPrintPanel({ template, dataList }: Props) {
           <div className="text-[11px] leading-relaxed text-faint">
             <p>
               需在本机（Windows）安装并启动「精臣打印服务」，用 USB 连接 K3W。首次连接时浏览器可能弹出
-              「访问本地设备」权限，请选择允许；打印失败可随时改用「导出 PDF」。
+              「访问本地设备」权限，请选择允许；仍失败请检查打印机电源与连接。
             </p>
             <ul className="mt-1 space-y-0.5">
               <li>· K3W 支持 Wi-Fi（仅 2.4GHz）：首次配网必须先用 USB 连接，在精臣软件/打印服务里完成配网后即可无线打印；同一台电脑仍需安装打印服务。</li>

@@ -61,33 +61,27 @@ describe("物料标签弹窗 · 响应式布局", () => {
     expect(within(actions).getByTestId("label-action-buttons")).toBeInTheDocument();
   });
 
-  it("底部 4 个操作 2×2 排布，触摸高度 ≥ 40px", () => {
+  it("底部 2 个操作（复制/关闭），触摸高度 ≥ 40px", () => {
     renderModal();
     const actions = screen.getByTestId("label-action-buttons");
     expect(actions.className).toContain("grid-cols-2");
 
-    const printBtn = screen.getByRole("button", { name: "打印" });
-    const exportBtn = screen.getByTestId("export-label-pdf");
     const copyBtn = screen.getByRole("button", { name: "复制短链" });
     const closeBtns = screen.getAllByRole("button", { name: "关闭" });
     expect(closeBtns).toHaveLength(2); // 右上角 X + 底部「关闭」
-    for (const button of [printBtn, exportBtn, copyBtn, closeBtns[1]]) {
+    for (const button of [copyBtn, closeBtns[1]]) {
       expect(button.className).toContain("min-h-11");
       expect(button.className).toContain("w-full");
     }
-    // e2e 依赖精确文案「打印」：不能被「直连打印/连接打印机」命中
-    expect(printBtn).toBeInTheDocument();
+    // 系统已移除导出 PDF 与浏览器打印
+    expect(screen.queryByTestId("export-label-pdf")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打印" })).not.toBeInTheDocument();
   });
 
-  it("只有一个主操作：打印主色，直连打印为面板内次强调", () => {
+  it("直连打印是唯一打印入口，复制短链为描边次要按钮", () => {
     renderModal();
-    expect(screen.getByRole("button", { name: "打印" }).className).toContain("bg-primary");
-    expect(screen.getByRole("button", { name: "打印" }).className).toContain("text-white");
-    const niimbotPrint = screen.getByTestId("niimbot-print");
-    expect(niimbotPrint.className).toContain("bg-primary/10");
-    expect(niimbotPrint.className).not.toContain("text-white");
-    // 导出/复制是描边次要按钮
-    expect(screen.getByTestId("export-label-pdf").className).toContain("border");
+    expect(screen.getByTestId("niimbot-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("niimbot-print").className).toContain("bg-primary/10");
     expect(screen.getByRole("button", { name: "复制短链" }).className).toContain("border");
   });
 

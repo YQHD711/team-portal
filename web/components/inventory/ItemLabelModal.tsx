@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
-import { Printer, X, Copy, Check, FileDown } from "lucide-react";
+import { X, Copy, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { DEFAULT_TEMPLATE, normalizeTemplates, type LabelData, type LabelTemplate } from "@/lib/labelTemplate";
 import type { InventoryItem } from "./inventoryTypes";
@@ -15,7 +15,7 @@ interface Props {
   baseUrl: string;
   /** 地址看起来是 localhost/回环 —— 印出去队员扫不开，打印前要提醒 */
   baseLooksLocal?: boolean;
-  /** 直连打印仅部长/管理员可用；PDF/浏览器打印不受影响。缺省 true 便于组件级测试 */
+  /** 直连打印仅部长/管理员可用；缺省 true 便于组件级测试 */
   canDirectPrint?: boolean;
   onClose: () => void;
 }
@@ -23,23 +23,13 @@ interface Props {
 /**
  * 实物标签：二维码 + 可读编码 + 名称 + 库位 + 等级。
  *
- * 二维码内容是**短链** `{baseUrl}/i/{编码}`（规范 §6.3），扫码直接进系统看这件物料；
- * 同时必须印可读编码——扫码枪坏了或标签磨损时靠它手输兜底。
- *
- * baseUrl 由后端下发而不是取 window.location.origin：管理员完全可能用 localhost
- * 打开系统去打印标签，那样印出来的二维码队员手机根本扫不开。
- *
- * 布局：移动端单列（预览 → 操作），lg 起双栏（左预览+模板 / 右打印方式），
- * 弹窗自身滚动，避免低矮屏幕把底部按钮顶出视野。
+ * 只保留**直连打印**（精臣 K3W）：系统不再提供导出 PDF，也不再走浏览器打印。
+ * 二维码内容是短链 {baseUrl}/i/{编码}，同时印可读编码供扫码枪/手输兜底。
  */
 export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirectPrint = true, onClose }: Props) {
   const [copied, setCopied] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportFailed, setExportFailed] = useState(false);
-  /** 模板列表：接口没上线/失败/返回空 → 只剩内置兜底模板，导出照旧可用 */
   const [templates, setTemplates] = useState<LabelTemplate[]>([DEFAULT_TEMPLATE]);
   const [templateId, setTemplateId] = useState<number>(DEFAULT_TEMPLATE.id);
-  /** 直连打印与导出 PDF 用同一份物料数据，避免两条路径印出不同内容 */
   const labelData: LabelData = toMaterialLabelData(item, baseUrl);
   const code = labelData.code;
   const url = labelData.url;
@@ -51,11 +41,11 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirec
       .then(raw => {
         if (cancelled) return;
         const list = normalizeTemplates(raw);
-        if (list.length === 0) return;   // 空列表 → 保持内置兜底
+        if (list.length === 0) return;
         setTemplates(list);
         setTemplateId((list.find(t => t.isDefault) ?? list[0]).id);
       })
-      .catch(() => { /* 接口不可用：用内置模板导出，不弹错、不禁用按钮 */ });
+      .catch(() => { /* 接口不可用：用内置模板打印 */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -65,40 +55,16 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirec
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // 非安全上下文/未授权时剪贴板不可用，界面上仍能看到完整短链可手动选
       setCopied(false);
     }
   };
 
-  /**
-   * 导出标签 PDF（按当前模板尺寸，默认 80×50），拿 PDF 去打印。
-   * 与「打印」是两条独立路径：这个按钮不打开打印对话框。
-   * labelPdf / jsPDF 都在点击时才下载，不进主包。
-   */
-  const exportPdf = async () => {
-    if (!code || exporting) return;
-    setExporting(true);
-    setExportFailed(false);
-    try {
-      const { exportLabelPdf } = await import("@/lib/labelPdf");
-      await exportLabelPdf({
-        code, url, name: item.name,
-        grade: item.grade, locationCode: item.locationCode, category: item.category,
-      }, selectedTemplate);
-    } catch {
-      setExportFailed(true);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm print:static print:bg-white print:p-0" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div data-testid="item-label-modal"
-        className="flex max-h-[90dvh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl md:max-w-2xl lg:max-w-3xl print:max-h-none print:w-auto print:overflow-visible print:border-0 print:shadow-none"
+        className="flex max-h-[90dvh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl md:max-w-2xl lg:max-w-3xl"
         onClick={e => e.stopPropagation()}>
-        {/* 固定头部：关闭按钮永远在右上角，不随内容滚动 */}
-        <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 sm:px-6 print:hidden">
+        <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 sm:px-6">
           <h2 className="text-lg font-bold">物料标签</h2>
           <button type="button" onClick={onClose} aria-label="关闭"
             className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg hover:bg-surface-hover">
@@ -106,15 +72,14 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirec
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 print:overflow-visible">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
           {baseLooksLocal && (
-            <p data-testid="local-base-warning" className="mb-3 rounded-lg border-l-4 border-warning bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 print:hidden">
+            <p data-testid="local-base-warning" className="mb-3 rounded-lg border-l-4 border-warning bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
               ⚠️ 短链用的是本机地址（{baseUrl}），<strong>队员手机扫不开</strong>。请到「系统设置」把「对外访问地址」设成大家实际访问的地址后重印。
             </p>
           )}
 
           <div data-testid="label-layout-grid" className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-start lg:gap-6">
-            {/* 左栏：标签预览 + 模板选择 */}
             <section data-testid="label-preview-column" className="flex min-w-0 flex-col items-center gap-3 text-center">
               <div className="rounded-lg bg-white p-2">
                 <QRCode value={url} size={148} level="M" />
@@ -126,7 +91,7 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirec
               </div>
               <div className="w-full break-all text-[10px] text-faint">{url}</div>
 
-              <label className="mt-1 flex w-full flex-col gap-1 text-left text-xs text-muted print:hidden">
+              <label className="mt-1 flex w-full flex-col gap-1 text-left text-xs text-muted">
                 标签模板
                 <select data-testid="label-template-select" value={selectedTemplate.id}
                   onChange={e => setTemplateId(Number(e.target.value))}
@@ -138,28 +103,16 @@ export default function ItemLabelModal({ item, baseUrl, baseLooksLocal, canDirec
               </label>
             </section>
 
-            {/* 右栏：打印方式（直连打印 + 原有 4 个操作） */}
             <section data-testid="label-actions-column" className="flex min-w-0 flex-col gap-3 lg:border-l lg:border-border lg:pl-6">
-              {exportFailed && (
-                <p data-testid="export-pdf-error" className="rounded-lg border-l-4 border-danger bg-red-50 px-3 py-2 text-xs text-red-700 print:hidden">
-                  导出失败：浏览器可能不支持画布导出，请改用「打印」或换个浏览器（Chrome / Edge）。
+              {canDirectPrint ? (
+                <NiimbotPrintPanel template={selectedTemplate} dataList={[labelData]} />
+              ) : (
+                <p className="rounded-lg border border-border bg-surface-subtle px-3 py-2 text-xs text-muted">
+                  直连打印仅部长/管理员可用。
                 </p>
               )}
 
-              {/* 直连打印（精臣 K3W）：仅部长/管理员可见；PDF/浏览器打印保持原权限 */}
-              {canDirectPrint && <NiimbotPrintPanel template={selectedTemplate} dataList={[labelData]} />}
-
-              <div data-testid="label-action-buttons" className="grid grid-cols-2 gap-2 print:hidden">
-                <button type="button" onClick={() => window.print()}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover">
-                  <Printer className="h-4 w-4" />打印
-                </button>
-                <button type="button" onClick={() => void exportPdf()} disabled={!code || exporting}
-                  data-testid="export-label-pdf"
-                  title={code ? "导出当前模板尺寸的标签 PDF，可用精臣软件或其他打印流程出纸" : "该物料没有编码，无法导出标签"}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50">
-                  <FileDown className="h-4 w-4" />{exporting ? "导出中…" : "导出 PDF"}
-                </button>
+              <div data-testid="label-action-buttons" className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => void copy()} aria-label="复制短链"
                   className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-hover">
                   {copied ? <><Check className="h-4 w-4 text-success" />已复制</> : <><Copy className="h-4 w-4" />复制短链</>}

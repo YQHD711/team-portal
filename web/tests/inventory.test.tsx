@@ -348,9 +348,9 @@ describe("零件库存页", () => {
     fireEvent.click(screen.getAllByTitle("物料标签（二维码）")[0]);
     expect(await screen.findByText("物料标签")).toBeInTheDocument();
     expect(screen.queryByTestId("niimbot-panel")).not.toBeInTheDocument();
-    // PDF/浏览器打印权限不变
-    expect(screen.getByTestId("export-label-pdf")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打印" })).toBeInTheDocument();
+    // 系统已移除导出 PDF 与浏览器打印：非 staff 没有任何打印/导出入口
+    expect(screen.queryByTestId("export-label-pdf")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打印" })).not.toBeInTheDocument();
   });
 
   it("staff：单个物料标签弹窗渲染直连打印面板", async () => {
