@@ -1,7 +1,7 @@
 "use client";
 
 /** 平面图编辑器顶部工具栏：房间信息、画布尺寸、连线开关、撤销重做、删除清空、保存 */
-import { ChevronLeft, Eraser, Network, Redo2, Save, Trash2, Undo2 } from "lucide-react";
+import { ChevronLeft, Eraser, LayoutGrid, Network, Redo2, Save, Trash2, Undo2 } from "lucide-react";
 
 interface PlannerToolbarProps {
   roomCode: string;
@@ -19,6 +19,7 @@ interface PlannerToolbarProps {
   canDelete: boolean;
   onDelete: () => void;
   onClear: () => void;
+  onBatch: () => void;
   msg: string;
   saving: boolean;
   onSave: () => void;
@@ -30,7 +31,7 @@ const inputCls = "rounded-lg border border-border bg-surface px-2 py-1.5 text-sm
 
 export function PlannerToolbar(props: PlannerToolbarProps) {
   const { roomCode, roomName, onRoomName, width, height, onSize, showLines, onToggleLines, canUndo, canRedo, onUndo, onRedo,
-    canDelete, onDelete, onClear, msg, saving, onSave, onBack } = props;
+    canDelete, onDelete, onClear, onBatch, msg, saving, onSave, onBack } = props;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2">
       <button onClick={onBack}
@@ -53,6 +54,10 @@ export function PlannerToolbar(props: PlannerToolbarProps) {
       <button onClick={onToggleLines} title="显示/隐藏物料连线"
         className={`rounded-lg p-1.5 ${showLines ? "bg-sky-100 dark:bg-sky-950 text-sky-600" : "text-muted hover:bg-surface-hover"}`}>
         <Network className="h-4 w-4" />
+      </button>
+      <button onClick={onBatch} title="批量添加（按行×列一次生成多个）"
+        className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs text-muted hover:bg-surface-hover hover:text-foreground">
+        <LayoutGrid className="h-3.5 w-3.5" />批量添加
       </button>
       <div className="mx-1 h-6 w-px bg-surface-hover" />
       <button onClick={onUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)" className={iconBtn}><Undo2 className="h-4 w-4" /></button>

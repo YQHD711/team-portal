@@ -12,6 +12,7 @@ import { ElementDetail } from "./ElementDetail";
 import { ElementPanel } from "./ElementPanel";
 import { PlannerCanvas } from "./PlannerCanvas";
 import { PlannerToolbar } from "./PlannerToolbar";
+import { BatchAddDialog } from "./BatchAddDialog";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { MobileDrawer } from "./MobileDrawer";
 import { MountStatusBar } from "./MountStatusBar";
@@ -47,6 +48,7 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [showLines, setShowLines] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const workRef = useRef<HTMLDivElement>(null);
   const { items, loadError, applyLocation, setItemAnchors, setCellCenters, hoverKey, setHoverKey, lines } =
     useMountingState(row.roomCode, layout.items);
@@ -66,6 +68,21 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
           : { ...cur, windows: [...cur.windows, el as PosElement] };
     commit(next);
     setSelected(el.id);
+  };
+  /** 批量添加：只追加新元素，不动已有元素与子元素关系 */
+  const addElements = (els: (PosElement | ItemElement)[]) => {
+    const cur = hist.layout;
+    const items = [...cur.items];
+    const walls = [...cur.walls];
+    const doors = [...cur.doors];
+    const windows = [...cur.windows];
+    for (const el of els) {
+      if ("type" in el) items.push(el as ItemElement);
+      else if (el.id.startsWith("wall-")) walls.push(el);
+      else if (el.id.startsWith("door-")) doors.push(el);
+      else windows.push(el);
+    }
+    commit({ ...cur, items, walls, doors, windows });
   };
   // 删除**唯一入口**（工具栏、Delete 键、属性面板删除按钮都走这里）：有子元素时不静默
   const deleteById = (id: string) => {
@@ -163,8 +180,11 @@ export function RoomPlanner({ layout: row, onSaved, onBack }: RoomPlannerProps) 
         showLines={showLines} onToggleLines={() => setShowLines(v => !v)}
         canUndo={hist.past.length > 0} canRedo={hist.future.length > 0} onUndo={undo} onRedo={redo}
         canDelete={selected !== null} onDelete={deleteSelected} onClear={clearAll}
+        onBatch={() => setBatchOpen(true)}
         msg={msg} saving={saving} onSave={handleSave} onBack={onBack}
       />
+      <BatchAddDialog open={batchOpen} roomCode={row.roomCode} layout={layout}
+        onClose={() => setBatchOpen(false)} onAdd={addElements} />
       <ElementPanel onAdd={addElement} variant="strip" />
       <MountStatusBar pending={pending} loadError={loadError} onCancel={() => setPending(null)} />
       <div ref={workRef} className="relative flex flex-col gap-3 lg:h-[calc(100dvh-260px)] lg:min-h-[460px] lg:flex-row">
