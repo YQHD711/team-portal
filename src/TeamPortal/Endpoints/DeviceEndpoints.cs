@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace TeamPortal.Endpoints;
@@ -170,13 +171,23 @@ public static class DeviceEndpoints
 
         // 设备扫码/读卡后按编码查物料
         group.MapGet("/materials/{code}", async (string code, HttpContext ctx,
-            DeviceAuthService auth, InventoryService items) =>
+            DeviceAuthService auth, InventoryService items, AppDbContext db, PermissionService perms) =>
         {
             var device = await auth.AuthenticateAsync(ctx);
             if (device is null) return Unauthorized();
+            // 物料位置属于敏感信息：设备必须已登录队员身份，且按该队员的权限与等级过滤。
+            // 只有设备凭据（无人身份）不再能读库位。
+            var session = await auth.AuthenticateSessionAsync(ctx, device);
+            if (session is null) return Results.Problem("请先在设备上登录队员身份", statusCode: 401);
 
             var item = await items.GetByCode(code);
             if (item is null) return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == session.UserId);
+            var canRead = user is not null
+                && perms.Has(user.Role, "material.inventory.view")
+                && perms.Has(user.Role, "material.inventory.view." + item.Grade.ToLowerInvariant());
+            if (!canRead) return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
+
             return Results.Ok(new
             {
                 item.Id, item.Name, item.Category, item.Code,
@@ -192,8 +203,9 @@ public static class DeviceEndpoints
             if (device is null) return Unauthorized();
             if (req.Delta == 0) return Results.Problem("Delta 不能为 0", statusCode: 400);
             // clamp：防 int.MinValue 时 Math.Abs 溢出（500），也防异常大的单次上报
-            if (req.Delta > 1_000_000 || req.Delta < -1_000_000)
-                return Results.Problem("Delta 超出允许范围（±1000000）", statusCode: 400);
+            // 单次变更限幅：原来 ±100 万足以一次把库存改没/改爆，收紧到 ±1000
+            if (req.Delta > 1_000 || req.Delta < -1_000)
+                return Results.Problem("Delta 超出允许范围（±1000）", statusCode: 400);
 
             var found = await db.InventoryItems
                 .FirstOrDefaultAsync(i => i.Code != null && i.Code == code.ToUpperInvariant());

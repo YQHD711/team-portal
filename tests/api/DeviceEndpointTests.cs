@@ -234,6 +234,17 @@ public class DeviceEndpointTests : IClassFixture<WebApplicationFactory<Program>>
             }
 
             UseDevice(client, created.DeviceKey, created.Secret);
+
+            // 只有设备凭据、没有队员身份时，不能读物料位置（安全审查 P1）
+            var noSession = await client.GetAsync("/api/device/materials/BAT-TEST-2026-0001");
+            Assert.Equal(HttpStatusCode.Unauthorized, noSession.StatusCode);
+
+            // 设备上以管理员身份登录会话后，才允许按编码查物料
+            var login = await client.PostAsJsonAsync("/api/device/login-by-id", new { identifier = "admin" });
+            Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+            var loginPayload = await login.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+            client.DefaultRequestHeaders.Add("X-Device-Session", loginPayload!["sessionToken"].ToString());
+
             var get = await client.GetAsync("/api/device/materials/BAT-TEST-2026-0001");
             Assert.Equal(HttpStatusCode.OK, get.StatusCode);
 

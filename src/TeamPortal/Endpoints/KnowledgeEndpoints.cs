@@ -28,7 +28,7 @@ public static class KnowledgeEndpoints
             var userId = idClaim is not null ? int.Parse(idClaim) : 0;
             var tree = svc.GetTree(role, dept, userId);
             return Results.Ok(tree);
-        }).RequireAuthorization();
+        }).RequireAuthorization("perm:content.knowledge.view");
 
         app.MapGet("/api/knowledge/content", async (string path, ClaimsPrincipal user, KnowledgeService svc, KnowledgeSearchService search, AppDbContext db) =>
         {
@@ -41,7 +41,7 @@ public static class KnowledgeEndpoints
                 return Results.Problem("Access denied", statusCode: 403);
             var content = svc.GetContent(path);
             return content is not null ? Results.Ok(new { path, content }) : Results.Problem("Not found", statusCode: 404);
-        }).RequireAuthorization();
+        }).RequireAuthorization("perm:content.knowledge.view");
 
         // Download original binary file (PDF, DOCX, images, etc.)
         app.MapGet("/api/knowledge/download", async (string path, ClaimsPrincipal user, KnowledgeService svc, KnowledgeSearchService search, AppDbContext db, HttpContext ctx) =>
@@ -73,7 +73,7 @@ public static class KnowledgeEndpoints
                 _ => "application/octet-stream",
             };
             return Results.File(data, ct, Path.GetFileName(path));
-        }).RequireAuthorization();
+        }).RequireAuthorization("perm:content.knowledge.view");
 
         // Write/delete — staff only
         var kbWrite = app.MapGroup("/api/knowledge").RequireAuthorization("perm:content.knowledge.edit");
