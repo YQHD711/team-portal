@@ -193,7 +193,7 @@ public static class AdminEndpoints
             if (!svc.CanAccess(req.Path, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.WriteFile(req.Path, req.Content ?? ""); log.Info("knowledge", $"File written: {req.Path} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = true }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库更新", $"{actor} 编辑了 {req.Path}", $"/knowledge/{req.Path.Replace(".md","")}", targetRole: "staff"); return Results.Ok(new { success = true }); }
             catch (Exception e) { log.Error("knowledge", $"Write failed: {req.Path}", e.Message); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(WriteErrorHint(e), statusCode: 400); }
-        });
+        }).RequireAuthorization("perm:content.knowledge.edit");
 
         admin.MapDelete("/knowledge/delete", async (string path, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, TrashService trash, HttpContext ctx) =>
         {
@@ -221,7 +221,7 @@ public static class AdminEndpoints
                 return Results.Ok(new { success = true });
             }
             catch (Exception e) { log.Error("knowledge", $"Delete failed: {path}", e.Message); log.Audit("delete", actor, targetType: "knowledge", targetId: path, data: new { success = false, error = e.Message }, ipAddress: LogService.ClientIp(ctx)); return Results.Problem(e.Message, statusCode: 400); }
-        });
+        }).RequireAuthorization("perm:content.knowledge.delete");
 
         admin.MapPost("/knowledge/rename", async (RenameKnowledgeReq req, ClaimsPrincipal user, KnowledgeService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {
@@ -233,7 +233,7 @@ public static class AdminEndpoints
             if (!svc.CanAccess(req.NewPath, role, dept)) return Results.Problem("Access denied", statusCode: 403);
             try { svc.Rename(req.Path, req.NewPath); log.Info("knowledge", $"Renamed: {req.Path} → {req.NewPath} by {actor}"); log.Audit("update", actor, targetType: "knowledge", targetId: req.Path, data: new { newPath = req.NewPath }, ipAddress: LogService.ClientIp(ctx)); notify.Notify("知识库重命名", $"{actor} 将 {req.Path} 重命名为 {req.NewPath}", targetRole: "staff"); return Results.Ok(new { success = true }); }
             catch (Exception e) { log.Error("knowledge", $"Rename failed: {req.Path}", e.Message); return Results.Problem(e.Message, statusCode: 400); }
-        });
+        }).RequireAuthorization("perm:content.knowledge.edit");
 
         // ── Document upload ──
         admin.MapPost("/documents/upload", async (IFormFile file, string? folder, ClaimsPrincipal user, DocumentService docSvc, AppDbContext db, BaiduNetdiskService baidu, LogService log, NotificationService notify, HttpContext ctx) =>

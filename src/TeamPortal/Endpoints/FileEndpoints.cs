@@ -145,13 +145,16 @@ public static class FileEndpoints
             var actor = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";
             log.Info("files", $"File downloaded: {f.OriginalName} by {actor}");
             return Results.File(path, f.ContentType, f.OriginalName);
-        });
+        }).RequireAuthorization("perm:content.files.view");
 
         // Delete (staff only)
-        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log, HttpContext ctx) =>
+        g.MapDelete("/{id:int}", async (int id, ClaimsPrincipal user, AppDbContext db, LogService log,
+            PermissionService perms, HttpContext ctx) =>
         {
             var (role, _, _) = await GetCtx(user, db);
-            if (role != "admin" && role != "部长") return Results.Problem("仅管理员和部长可删除", statusCode: 403);
+            // 删除权限可配置（content.files.delete，默认部长+管理员）；角色兜底避免误放行
+            if (!perms.Has(role, "content.files.delete"))
+                return Results.Problem("没有删除共享文件的权限", statusCode: 403);
             var f = await db.SharedFiles.FindAsync(id);
             if (f is null) return Results.Problem("Not found", statusCode: 404);
             var actor = user.FindFirstValue(ClaimTypes.Name) ?? "unknown";

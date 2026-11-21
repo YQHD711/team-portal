@@ -39,6 +39,11 @@ export function TourOverlay({ active, onNext, onPrev, onClose }: Props) {
   }, []);
 
   const measure = useCallback((): boolean => {
+    // 空 target = 纯说明步骤：居中显示，不找元素、不自动跳过
+    if (!step.target) {
+      setRect(null);
+      return true;
+    }
     const el = document.querySelector<HTMLElement>(`[data-guide="${step.target}"]`);
     if (!el) return false;
     const r = el.getBoundingClientRect();
@@ -99,9 +104,12 @@ export function TourOverlay({ active, onNext, onPrev, onClose }: Props) {
   if (!mounted) return null;
 
   const mobile = viewport.w < 640;
-  const style: CSSProperties = mobile
-    ? { left: MARGIN, right: MARGIN, bottom: MARGIN, width: "auto" }
-    : bubbleStyle(rect, viewport);
+  const centered = !step.target;
+  const style: CSSProperties = centered
+    ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: mobile ? "min(92vw, 360px)" : 360 }
+    : mobile
+      ? { left: MARGIN, right: MARGIN, bottom: MARGIN, width: "auto" }
+      : bubbleStyle(rect, viewport);
 
   return createPortal(
     <div className="fixed inset-0 z-[60]">

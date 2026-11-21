@@ -1,7 +1,7 @@
 "use client";
 /** 平面图画布：cm 网格、元素渲染、Transformer、缩放/平移/选择；支持物料拖拽挂载、点选挂载与格位命中 */
 import { useEffect, useRef, useState } from "react";
-import { Layer, Stage, Transformer } from "react-konva";
+import { Label, Tag, Text, Layer, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { Box } from "konva/lib/shapes/Transformer";
 import { Hand } from "lucide-react";
@@ -47,6 +47,8 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
   const shapeRefs = useRef<Record<string, Konva.Group>>({});
   const [size, setSize] = useState({ w: 800, h: 520 });
   const [hoverCell, setHoverCell] = useState<HoverCell | null>(null);
+  /** 鼠标在画布里的 cm 坐标（让"控件在哪"随时可见） */
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [panMode, setPanMode] = useState(false);
   const { view, fit, zoomBy, onWheel, onTouchStart, onTouchMove, onTouchEnd, consumeStageDrag } =
     useStageView({ stageRef, width: size.w, height: size.h, contentW: layout.width, contentH: layout.height });
@@ -125,6 +127,11 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     onSelect(el.id);
     onCellSelect?.(el, cell);
   };
+  /** 拖动时吸附到 5cm 网格：不用再手算坐标 */
+  const snap = (v: number) => Math.round(v / 5) * 5;
+  /** 限制在房间范围内：线上已有 11 个元素被拖出画布，越界后既看不见也选不中 */
+  const clampX = (v: number, w: number) => Math.min(Math.max(0, v), Math.max(0, layout.width - w));
+  const clampY = (v: number, h: number) => Math.min(Math.max(0, v), Math.max(0, layout.height - h));
   const shapeProps = (id: string) => ({
     selected: selected === id,
     draggable: !panMode,
@@ -134,9 +141,22 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
     },
     onClick: () => onSelect(id),
     onDblClick: () => onDblEdit(id),
-    onDragEnd,
-    onTransformEnd,
+    onDragEnd: (el: PosElement | ItemElement) => onDragEnd({
+      ...el,
+      x: clampX(snap(el.x), el.w),
+      y: clampY(snap(el.y), el.h),
+    }),
+    onTransformEnd: (el: PosElement | ItemElement) => onTransformEnd({
+      ...el,
+      w: Math.min(el.w, layout.width),
+      h: Math.min(el.h, layout.height),
+      x: clampX(el.x, Math.min(el.w, layout.width)),
+      y: clampY(el.y, Math.min(el.h, layout.height)),
+    }),
   });
+
+  const selectedEl = [...layout.items, ...layout.walls, ...layout.doors, ...layout.windows]
+    .find((e) => e.id === selected) ?? null;
   // ⚠️ 发布**真实变换**给 e2e（权威值，不是为测试造的标记）：Konva stage 的实际 x/y/scale。
   // 背景：e2e 曾三次因"按 canvas 宽推导缩放/按居中假设偏移"得出错误坐标（纵向/横向/缩放各一次），
   // 而"角标反解偏移"是**循环论证**（角标由同一份 view 算出，会把同一个错误再确认一遍）。
@@ -158,6 +178,11 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
         ref={stageRef} width={size.w} height={size.h}
         draggable onWheel={onWheel} onDragEnd={consumeStageDrag}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        onMouseMove={(e) => {
+          const p = e.target.getStage()?.getPointerPosition();
+          if (p) setCursor(toWorld(p));
+        }}
+        onMouseLeave={() => setCursor(null)}
         onClick={e => { if (e.target === e.target.getStage()) onSelect(null); }}
       >
         <Layer x={view.x} y={view.y} scaleX={view.scale} scaleY={view.scale}>
@@ -176,6 +201,16 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
               onCellClick={(_code, cell) => handleCellClick(el, cell)} {...shapeProps(el.id)} />
           ))}
           {hoverCell && <DropHighlight el={hoverCell.el} row={hoverCell.cell?.row} col={hoverCell.cell?.col} />}
+          {/* 选中元素左上角常驻坐标：x/y 与宽高，拖动后立即更新（不用点开属性面板） */}
+          {selectedEl && (
+            <Label x={selectedEl.x} y={selectedEl.y - 16 / view.scale}
+              scaleX={1 / view.scale} scaleY={1 / view.scale} listening={false}>
+              <Tag fill="#0f172a" opacity={0.88} cornerRadius={3} />
+              <Text
+                text={`x ${Math.round(selectedEl.x)} · y ${Math.round(selectedEl.y)} · ${Math.round(selectedEl.w)}×${Math.round(selectedEl.h)} cm`}
+                fill="#ffffff" fontSize={11} padding={4} />
+            </Label>
+          )}
           <Transformer ref={trRef} rotateEnabled boundBoxFunc={boundBox} />
         </Layer>
       </Stage>
@@ -186,9 +221,14 @@ export function PlannerCanvas({ layout, items, selected, onSelect, onDblEdit, on
           <Hand className="h-4 w-4" />
         </button>
       </ZoomControls>
-      <div className="pointer-events-none absolute bottom-2 left-2 hidden rounded-lg bg-zinc-900/70 px-2 py-1 text-[11px] text-white sm:block">
-        滚轮/双指缩放 · 拖空白平移 · 选中后拖动/缩放/旋转 · 双击改属性 · 拖拽或点选物料挂载
+      <div className="pointer-events-none absolute bottom-2 left-2 hidden max-w-[70%] rounded-lg bg-zinc-900/70 px-2 py-1 text-[11px] text-white sm:block">
+        滚轮/双指缩放 · 拖空白平移 · 拖动吸附 5cm · 双击改属性 · 拖拽或点选物料挂载
       </div>
+      {cursor && (
+        <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg bg-zinc-900/70 px-2 py-1 font-mono text-[11px] text-white">
+          X {Math.round(cursor.x)} · Y {Math.round(cursor.y)} cm
+        </div>
+      )}
     </div>
   );
 }

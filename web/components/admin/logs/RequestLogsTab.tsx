@@ -73,28 +73,6 @@ export default function RequestLogsTab() {
     return () => clearInterval(t);
   }, [fetchLogs, fetchStats]);
 
-  const handleExport = async () => {
-    if (exporting) return;
-    setExporting(true);
-    setMsg("导出中…");
-    try {
-      const params = new URLSearchParams();
-      if (level) params.set("level", level);
-      if (from) params.set("from", from + "T00:00:00Z");
-      if (to) params.set("to", to + "T23:59:59Z");
-      // 必须走 api.download（带 Authorization）：window.open 的新标签页发不出 token → AdminOnly 接口必 401
-      const blob = await api.download(`/api/admin/logs/export?${params}`);
-      saveBlob(blob, datedFilename("logs"));
-      setMsg("");
-    } catch (err) {
-      // 401 由 api.download 接管（清 token + 跳登录）→ 不再提示"导出失败"
-      const message = downloadErrorMessage(err);
-      setMsg(message ? `导出失败：${message}` : "");
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const handleCleanup = async () => {
     if (!confirm("删除超过保留期的旧日志？\n\n（90天前的日志）")) return;
     try {
@@ -125,9 +103,6 @@ export default function RequestLogsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          <button onClick={() => void handleExport()} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50">
-            <Download className="h-4 w-4" />{exporting ? "导出中…" : "导出"}
-          </button>
           <button onClick={handleCleanup} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-hover">
             <Trash2 className="h-4 w-4" />清理旧日志
           </button>

@@ -26,7 +26,8 @@ describe("引导注册表", () => {
       const ids = tour.steps.map((s) => s.id);
       expect(new Set(ids).size, tour.key).toBe(ids.length);
       for (const s of tour.steps) {
-        expect(s.target, tour.key + "/" + s.id).toMatch(/^[a-z][a-z0-9-]*$/);
+        // 空 target = 纯说明步骤（后台可自由添加），非空时必须是合法的 data-guide 值
+        expect(s.target, tour.key + "/" + s.id).toMatch(/^([a-z][a-z0-9-]*)?$/);
         expect(s.title.trim(), tour.key + "/" + s.id).not.toBe("");
       }
     }
