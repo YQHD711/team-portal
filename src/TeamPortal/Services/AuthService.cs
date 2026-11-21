@@ -46,12 +46,6 @@ public class AuthService
         displayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
         if (displayName is { Length: > 50 })
             throw new InvalidOperationException("显示姓名不超过 50 字符");
-        if (await _db.Users.AnyAsync(u => u.Username == username))
-        {
-            _log.Warn("auth", $"注册失败，用户名已存在: {username}", null, username);
-            return null;
-        }
-
         // B-1 fix: registration requires invite code unless system explicitly allows open registration
         var openRegistrationStr = await _settings.Get("Auth:OpenRegistration", "false");
         var openRegistration = bool.TryParse(openRegistrationStr, out var open) && open;
@@ -62,6 +56,13 @@ public class AuthService
         var minLen = await _settings.GetInt("Auth:PasswordMinLength", 6);
         if (password.Length < minLen)
             throw new InvalidOperationException($"密码长度不能少于 {minLen} 位");
+
+        // 查重要放在邀请码/密码校验之后：否则匿名请求不拿邀请码就能用"用户名已存在"枚举账号
+        if (await _db.Users.AnyAsync(u => u.Username == username))
+        {
+            _log.Warn("auth", $"注册失败，用户名已存在: {username}", null, username);
+            return null;
+        }
 
         // Validate invite code if provided (or if system requires it)
         int? deptId = null;

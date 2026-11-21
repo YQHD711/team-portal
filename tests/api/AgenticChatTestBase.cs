@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace api;
@@ -56,7 +57,10 @@ public abstract class AgenticChatTestBase : IDisposable
         var ai = new AiClient(new HttpClient(Handler), config, Settings);
         var search = new KnowledgeSearchService(config, NullLogger<KnowledgeSearchService>.Instance, _scopes, Log);
         var knowledge = new KnowledgeService(config, Log, _scopes);
-        Proxy = new AiProxyService(ai, Settings, search, knowledge, Log, Db);
+        // 权限矩阵：测试库为空 → 走默认矩阵（admin 全量）
+        var perms = new PermissionService(_scopes, NullLogger<PermissionService>.Instance);
+        perms.ReloadAsync().GetAwaiter().GetResult();
+        Proxy = new AiProxyService(ai, Settings, search, knowledge, Log, Db, perms);
     }
 
     public void Dispose()

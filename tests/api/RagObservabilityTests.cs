@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 using TeamPortal.Services;
 
 namespace api;
@@ -64,7 +65,9 @@ public class RagObservabilityTests : IDisposable
         var knowledge = new KnowledgeService(config, log, _scopes);
         var ai = new AiClient(new HttpClient(new StubHttpHandler(_ => ChatReply())), config, settings);
         using var db = new AppDbContext(Options());
-        var proxy = new AiProxyService(ai, settings, search, knowledge, log, db);
+        var perms = new PermissionService(_scopes, NullLogger<PermissionService>.Instance);
+        await perms.ReloadAsync();
+        var proxy = new AiProxyService(ai, settings, search, knowledge, log, db, perms);
 
         var stream = await proxy.ChatStream("盘旋半径由什么决定", new AiProxyService.SearchScope("admin", null, 0));
         Assert.NotNull(stream);   // RAG 链路真的跑完了（假 AI 返回 200）

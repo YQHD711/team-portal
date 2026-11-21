@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TeamPortal.Data;
 using TeamPortal.Data.Models;
+using TeamPortal.Services.Permissions;
 
 namespace TeamPortal.Services;
 
@@ -33,19 +34,26 @@ public static class LiveInventoryContext
     private static readonly string[] InventoryKeywords =
         ["库存", "物料", "零件", "还剩", "剩余", "多少", "数量", "库位", "存放", "在哪", "领用", "库房", "货架"];
 
-    public static async Task<string?> BuildAsync(string question, AppDbContext db, CancellationToken ct = default)
+    public static async Task<string?> BuildAsync(string question, AppDbContext db, string? role,
+        Func<string, bool> can, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(question)) return null;
 
+        // 与 /api/inventory 同一套等级过滤：聊天里问"A 级件在哪"也不能绕过权限
+        var grades = new[] { "A", "B", "C" }
+            .Where(g => can("material.inventory.view." + g.ToLowerInvariant()))
+            .ToList();
         var parts = new List<string>();
-        if (await RoomBlockAsync(question, db, ct) is { } room) parts.Add(room);
-        if (await ItemBlockAsync(question, db, ct) is { } items) parts.Add(items);
+        // 房间平面图属于布局信息：没有布局查看权限就不注入房间块
+        if (can("material.layout.view")
+            && await RoomBlockAsync(question, db, grades, ct) is { } room) parts.Add(room);
+        if (await ItemBlockAsync(question, db, grades, ct) is { } items) parts.Add(items);
         return parts.Count == 0 ? null : Header + "\n" + string.Join("\n\n", parts);
     }
 
     // ── 房间块 ──
 
-    private static async Task<string?> RoomBlockAsync(string question, AppDbContext db, CancellationToken ct)
+    private static async Task<string?> RoomBlockAsync(string question, AppDbContext db, List<string> grades, CancellationToken ct)
     {
         var layouts = await db.StorageLayouts.AsNoTracking().OrderBy(l => l.RoomCode).ToListAsync(ct);
         var hit = layouts.FirstOrDefault(l =>
@@ -61,6 +69,7 @@ public static class LiveInventoryContext
         if (elements.Count > 0) sb.AppendLine($"平面图里的货架/位置元素：{string.Join("；", elements)}");
 
         var count = await db.InventoryItems.AsNoTracking()
+            .Where(i => grades.Contains(i.Grade))
             .CountAsync(i => i.LocationCode != null && i.LocationCode.StartsWith(hit.RoomCode), ct);
         sb.Append($"该房间当前挂的物料：{count} 件");
         return sb.ToString();
@@ -98,12 +107,14 @@ public static class LiveInventoryContext
 
     // ── 物料块 ──
 
-    private static async Task<string?> ItemBlockAsync(string question, AppDbContext db, CancellationToken ct)
+    private static async Task<string?> ItemBlockAsync(string question, AppDbContext db, List<string> grades, CancellationToken ct)
     {
         var tokens = CodeTokens(question);
         if (!LooksInventoryRelated(question, tokens)) return null;
 
-        var items = await db.InventoryItems.AsNoTracking().Take(MaxScanItems).ToListAsync(ct);
+        var items = await db.InventoryItems.AsNoTracking()
+            .Where(i => grades.Contains(i.Grade))
+            .Take(MaxScanItems).ToListAsync(ct);
         var matched = items
             .Where(i => Matches(question, tokens, i))
             .OrderByDescending(i => i.Quantity)

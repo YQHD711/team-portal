@@ -83,7 +83,7 @@ public static class AdminEndpoints
                     notify.Notify("队员信息已更新", $"{actor} 修改了「{targetName}」的档案", "/admin/organization", targetRole: "staff");
             }
             return ok ? Results.Ok(new { success = true }) : Results.Problem("权限不足或用户不存在", statusCode: 404);
-        });
+        }).RequireAuthorization("perm:admin.users.manage");
 
         admin.MapDelete("/users/{id:int}", async (int id, ClaimsPrincipal user, AdminService svc, AppDbContext db, LogService log, NotificationService notify, HttpContext ctx) =>
         {

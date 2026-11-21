@@ -65,6 +65,17 @@ public static class InventoryEndpoints
     private static bool HasUnsafeName(string name) =>
         UnsafeNameFragments.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// 读一条物料需要的权限：基础查看 + 该等级（A/B/C）。
+    /// 不满足时调用方统一返回 404——403 会成为"这个 id/编码存在"的预言机。
+    /// </summary>
+    private static bool CanReadItem(InventoryItem? item, string? role, PermissionService perms)
+    {
+        if (item is null) return false;
+        if (!perms.Has(role, "material.inventory.view")) return false;
+        return perms.Has(role, "material.inventory.view." + item.Grade.ToLowerInvariant());
+    }
+
     public static void MapInventoryEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/inventory").RequireAuthorization();
@@ -102,10 +113,13 @@ public static class InventoryEndpoints
             return Results.Ok(items);
         });
 
-        group.MapGet("/{id:int}", async (int id, InventoryService svc) =>
+        group.MapGet("/{id:int}", async (int id, InventoryService svc, ClaimsPrincipal user, PermissionService perms) =>
         {
             var item = await svc.GetById(id);
-            return item is not null ? Results.Ok(item) : Results.Problem("Not found", statusCode: 404);
+            // 列表能看≠按 id 能看：A 级物料对无权限角色要连存在性都不暴露
+            if (!CanReadItem(item, user.FindFirstValue(ClaimTypes.Role), perms))
+                return Results.Problem("Not found", statusCode: 404);
+            return Results.Ok(item);
         });
 
         // 按物料编码查（贴在实物上的二维码短链 /i/<编码> 与手输兜底都走这里；大小写不敏感）
@@ -113,7 +127,8 @@ public static class InventoryEndpoints
         // 查询也要留痕：扫码/手输编码要能回答"谁、什么时候、查了哪个编码、查到没有、从哪个 IP"。
         // **未命中的一条同样要落** —— 反复查不到正是有人在拿编码探测库里有什么的信号，
         // 只记命中反而会把这类行为漏掉。
-        group.MapGet("/by-code/{code}", async (string code, InventoryService svc, LogService log, ClaimsPrincipal user, HttpContext ctx) =>
+        group.MapGet("/by-code/{code}", async (string code, InventoryService svc, LogService log, ClaimsPrincipal user,
+            PermissionService perms, HttpContext ctx) =>
         {
             var item = await svc.GetByCode(code);
             var actor = user.Identity?.Name ?? "unknown";
@@ -125,6 +140,9 @@ public static class InventoryEndpoints
                     data: new { result = "miss", code, message = "未找到编码对应的物料" }, ipAddress: ip);
                 return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
             }
+            // 无权限等级时同样按"未找到"处理（不写 hit 审计，避免把受限物料的 id/名称落进审计）
+            if (!CanReadItem(item, user.FindFirstValue(ClaimTypes.Role), perms))
+                return Results.Problem("没有找到这个编码对应的物料", statusCode: 404);
             // 只放必要的定位字段，不把整个物料对象塞进 data（审计表不是数据备份）
             log.Audit("query", actor, targetType: "item", targetId: item.Id.ToString(),
                 data: new { result = "hit", code, itemId = item.Id, name = item.Name, locationCode = item.LocationCode },
@@ -420,8 +438,13 @@ public static class InventoryEndpoints
         });
 
         // Get transaction history for an item
-        group.MapGet("/{id:int}/transactions", async (int id, AppDbContext db) =>
+        group.MapGet("/{id:int}/transactions", async (int id, AppDbContext db, InventoryService svc,
+            ClaimsPrincipal user, PermissionService perms) =>
         {
+            // 流水里有领用人姓名，读之前先过与详情同一套授权
+            var item = await svc.GetById(id);
+            if (!CanReadItem(item, user.FindFirstValue(ClaimTypes.Role), perms))
+                return Results.Problem("Not found", statusCode: 404);
             var txns = await Task.Run(() => db.InventoryTransactions
                 .Where(t => t.InventoryItemId == id)
                 .OrderByDescending(t => t.CreatedAt)
